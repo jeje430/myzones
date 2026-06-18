@@ -1,0 +1,72 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'package:provider/provider.dart';
+import 'core/routes/app_routes.dart';
+import 'core/theme/app_theme.dart';
+import 'providers/app_state_provider.dart';
+import 'providers/lounge_ratings_provider.dart';
+import 'providers/theme_provider.dart';
+import 'providers/tournament_provider.dart';
+import 'providers/zones_data_provider.dart';
+import 'screens/auth/forgot_password_screen.dart';
+import 'screens/auth/login_screen.dart';
+import 'screens/auth/otp_verification_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
+import 'screens/home/home_screen.dart';
+import 'screens/profile/profile_screen.dart';
+import 'screens/splash_screen.dart';
+
+void main() {
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ThemeProvider()),
+        ChangeNotifierProvider(create: (_) => AppStateProvider()),
+        ChangeNotifierProvider(create: (_) => ZonesDataProvider()),
+        ChangeNotifierProvider(create: (_) => LoungeRatingsProvider()),
+        ChangeNotifierProvider(create: (_) => TournamentProvider()),
+      ],
+      child: const ZonezApp(),
+    ),
+  );
+}
+
+class ZonezApp extends StatelessWidget {
+  const ZonezApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final themeProvider = context.watch<ThemeProvider>();
+
+    return MaterialApp(
+      title: 'Zonez',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: themeProvider.themeMode,
+      locale: const Locale('ar'),
+      supportedLocales: const [Locale('ar'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      builder: (context, child) {
+        return Directionality(
+          textDirection: TextDirection.rtl,
+          child: child!,
+        );
+      },
+      initialRoute: AppRoutes.splash,
+      routes: {
+        AppRoutes.splash: (_) => const SplashScreen(),
+        AppRoutes.login: (_) => const LoginScreen(),
+        AppRoutes.forgotPassword: (_) => const ForgotPasswordScreen(),
+        AppRoutes.otpVerification: (_) => const OtpVerificationScreen(),
+        AppRoutes.resetPassword: (_) => const ResetPasswordScreen(),
+        AppRoutes.home: (_) => const HomeScreen(),
+        AppRoutes.profile: (_) => const ProfileScreen(),
+      },
+    );
+  }
+}
