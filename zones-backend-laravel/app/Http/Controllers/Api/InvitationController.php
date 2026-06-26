@@ -8,6 +8,7 @@ use App\Mail\EmployeeInvitationMail;
 use App\Models\Invitation;
 use App\Models\Station;
 use App\Models\User;
+use App\Support\WorkShiftSchedule;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -17,11 +18,6 @@ use Illuminate\Support\Str;
 
 class InvitationController extends Controller
 {
-    private const SHIFT_LABELS = [
-        'morning' => 'من 2 مساءً إلى 8 مساءً',
-        'evening' => 'من 8 مساءً إلى 2 صباحاً',
-    ];
-
     private const ROLE_LABELS = [
         'reception' => 'موظف استقبال',
         'maintenance' => 'موظف صيانة',
@@ -121,7 +117,7 @@ class InvitationController extends Controller
                     employeeName: $invitation->name,
                     roleLabel: self::ROLE_LABELS[$invitation->role] ?? $invitation->role,
                     hallName: $invitation->station_name ?? 'Zones',
-                    shiftLabel: self::SHIFT_LABELS[$invitation->shift] ?? '—',
+                    shiftLabel: WorkShiftSchedule::workingHours($invitation->shift) ?? '—',
                     registrationUrl: $registrationUrl,
                 ));
             } catch (\Throwable $e) {
@@ -162,7 +158,8 @@ class InvitationController extends Controller
                 'role' => $invitation->role,
                 'role_label' => self::ROLE_LABELS[$invitation->role] ?? $invitation->role,
                 'shift' => $invitation->shift,
-                'shift_label' => self::SHIFT_LABELS[$invitation->shift] ?? null,
+                'shift_label' => WorkShiftSchedule::workingHours($invitation->shift),
+                'working_hours' => WorkShiftSchedule::workingHours($invitation->shift),
                 'expired' => $invitation->expires_at < now(),
                 'already_used' => $invitation->used_at !== null,
                 'expires_at' => $invitation->expires_at,

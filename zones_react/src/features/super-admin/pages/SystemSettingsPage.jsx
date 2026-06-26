@@ -22,7 +22,12 @@ import {
   countActiveBookingsToday,
   deactivateMaintenanceMode,
 } from "../data/maintenanceModeData";
-import { ZONES_LOGO_SRC } from "../data/superAdminDashboardData";
+import { useBranding } from "../../../shared/context/BrandingContext";
+import {
+  updateBrandingSettings,
+  uploadPlatformLogo,
+} from "../data/brandingApi";
+import { DEFAULT_PLATFORM_NAME } from "../../../shared/branding/brandingConstants";
 import { Input } from "../../../components/ui/input";
 import {
   DEFAULT_MINIMUM_POINTS_REQUIRED,
@@ -60,10 +65,13 @@ function syncLoyaltyToLocalStorage({ pointsPerCompletedSession, minimumPointsReq
 }
 
 export default function SystemSettingsPage() {
+  const { logoSrc, platformName, applyBranding } = useBranding();
   const [form, setForm] = useState(getSuperAdminState().systemSettings);
   const [backingUp, setBackingUp] = useState(false);
   const [loyaltyLoading, setLoyaltyLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [pendingLogoFile, setPendingLogoFile] = useState(null);
+  const [logoPreview, setLogoPreview] = useState(null);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -99,16 +107,29 @@ export default function SystemSettingsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    setForm((current) => ({
+      ...current,
+      platformName: platformName || current.platformName || DEFAULT_PLATFORM_NAME,
+    }));
+  }, [platformName]);
+
+  useEffect(() => {
+    return () => {
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+    };
+  }, [logoPreview]);
+
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const onLogoPick = (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") set("platformLogo", reader.result);
-    };
-    reader.readAsDataURL(file);
+
+    if (logoPreview) URL.revokeObjectURL(logoPreview);
+    setPendingLogoFile(file);
+    setLogoPreview(URL.createObjectURL(file));
+    e.target.value = "";
   };
 
   const onMaintenanceToggle = async (next) => {
@@ -179,6 +200,11 @@ export default function SystemSettingsPage() {
   );
 
   const save = async () => {
+    const trimmedName = String(form.platformName || "").trim();
+    if (trimmedName.length < 2) {
+      zonesToastError("اسم المنصة يجب أن يكون حرفين على الأقل.");
+      return;
+    }
     if (!pointsPerSession || pointsPerSession < 1) {
       zonesToastError("نقاط كل جلسة يجب أن تكون 1 على الأقل.");
       return;
@@ -189,6 +215,33 @@ export default function SystemSettingsPage() {
     }
 
     setSaving(true);
+
+    const brandingResult = await updateBrandingSettings({ platformName: trimmedName });
+    if (!brandingResult.ok) {
+      setSaving(false);
+      zonesToastError(brandingResult.error || "تعذّر حفظ إعدادات العلامة التجارية.");
+      return;
+    }
+
+    let latestBranding = brandingResult.branding;
+
+    if (pendingLogoFile) {
+      const logoResult = await uploadPlatformLogo(pendingLogoFile);
+      if (!logoResult.ok) {
+        setSaving(false);
+        zonesToastError(logoResult.error || "تعذّر رفع شعار المنصة.");
+        return;
+      }
+      latestBranding = logoResult.branding;
+      if (logoPreview) URL.revokeObjectURL(logoPreview);
+      setLogoPreview(null);
+      setPendingLogoFile(null);
+    }
+
+    applyBranding({
+      platform_name: latestBranding.platformName,
+      logo_url: latestBranding.logoUrl,
+    });
 
     const loyaltyResult = await updateLoyaltySettings({
       pointsPerCompletedSession: pointsPerSession,
@@ -206,10 +259,12 @@ export default function SystemSettingsPage() {
       minimumPointsRequired: loyaltyResult.settings.minimumPointsRequired,
     });
 
-    const { loyaltyPointsPerSession, loyaltyMinimumPointsRequired, loyaltyRedemptionThreshold, ...rest } =
+    const { loyaltyPointsPerSession, loyaltyMinimumPointsRequired, loyaltyRedemptionThreshold, platformLogo, ...rest } =
       form;
     updateSystemSettings({
       ...rest,
+      platformName: latestBranding.platformName,
+      platformLogo: "",
       loyaltyPointsPerSession: loyaltyResult.settings.pointsPerCompletedSession,
       loyaltyMinimumPointsRequired: loyaltyResult.settings.minimumPointsRequired,
       loyaltyRedemptionThreshold: loyaltyResult.settings.minimumPointsRequired,
@@ -232,7 +287,7 @@ export default function SystemSettingsPage() {
     });
   };
 
-  const logoSrc = form.platformLogo || ZONES_LOGO_SRC;
+  const logoSrcPreview = logoPreview || logoSrc;
 
   return (
     <div className="text-right" style={{ fontFamily: "Cairo, Tajawal, sans-serif" }}>
@@ -287,7 +342,7 @@ export default function SystemSettingsPage() {
             <div className="flex flex-col items-center justify-center rounded-2xl border border-gray-200 bg-gray-50/90 p-5 dark:border-gray-700 dark:bg-gray-800/50 lg:col-span-3">
               <p className={labelClass}>شعار المنصة</p>
               <div className="flex h-28 w-28 items-center justify-center overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-700 dark:bg-gray-900">
-                <img src={logoSrc} alt="شعار المنصة" className="h-full w-full object-contain p-2" />
+                <img src={logoSrcPreview} alt="شعار المنصة" className="h-full w-full object-contain p-2" />
               </div>
               <input
                 ref={fileRef}

@@ -17,9 +17,18 @@ class AuthHeader extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const ZonezLogo(size: 40),
+          Flexible(
+            child: Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: ZonezLogo(
+                size: 40,
+                compact: true,
+                showText: true,
+              ),
+            ),
+          ),
+          const SizedBox(width: 12),
           if (trailing != null)
             trailing!
           else if (showLanguage)

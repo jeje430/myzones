@@ -13,10 +13,8 @@ class StationCommentController extends Controller
 {
     public function index(Request $request, Station $station): JsonResponse
     {
-        abort_unless(
-            $station->is_published && $station->is_active && $station->manager_id !== null,
-            404
-        );
+        $station->loadMissing('manager');
+        abort_unless($station->isCustomerVisible(), 404, 'Hall unavailable');
 
         $perPage = min(max((int) $request->query('per_page', 10), 1), 50);
         $page = max((int) $request->query('page', 1), 1);
@@ -43,10 +41,8 @@ class StationCommentController extends Controller
 
     public function store(Request $request, Station $station): JsonResponse
     {
-        abort_unless(
-            $station->is_published && $station->is_active && $station->manager_id !== null,
-            404
-        );
+        $station->loadMissing('manager');
+        abort_unless($station->isCustomerVisible(), 404, 'Hall unavailable');
 
         $user = $request->user();
         abort_unless($user !== null, 401);
@@ -72,10 +68,8 @@ class StationCommentController extends Controller
 
     public function update(Request $request, Station $station, StationComment $comment): JsonResponse
     {
-        abort_unless(
-            $station->is_published && $station->is_active && $station->manager_id !== null,
-            404
-        );
+        $station->loadMissing('manager');
+        abort_unless($station->isCustomerVisible(), 404, 'Hall unavailable');
 
         abort_unless((int) $comment->station_id === (int) $station->id, 404);
         abort_unless($comment->parent_id === null, 422);

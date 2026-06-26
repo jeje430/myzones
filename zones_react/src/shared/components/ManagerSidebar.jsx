@@ -19,7 +19,8 @@ import { getManagerMenu } from "../config/managerNavigation";
 import { clearAuthSession } from "../../features/auth/data/mockUsersStorage";
 import { useManagerPaths } from "../tenant/ManagerWorkspaceProvider";
 
-const ZONES_LOGO_SRC = "/zones-logo.png";
+import PlatformLogo from "./PlatformLogo";
+import { useBranding } from "../context/BrandingContext";
 
 function buildExactPaths(routes) {
   return [
@@ -246,6 +247,7 @@ function MenuGroup({ group, icon: Icon, open, toggle, onNavigate, pathname, sear
 }
 
 export default function ManagerSidebar({ onNavigate }) {
+  const { platformName } = useBranding();
   const location = useLocation();
   const navigate = useNavigate();
   const pathname = location.pathname;
@@ -310,11 +312,11 @@ export default function ManagerSidebar({ onNavigate }) {
       dir="rtl"
     >
       <div className="flex items-center gap-3 bg-gradient-to-l from-[#6B5478] to-[#836a90] px-5 py-5">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
-          <img src={ZONES_LOGO_SRC} alt="GameZones" className="h-full w-full object-cover" />
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
+          <PlatformLogo variant="avatar" />
         </span>
         <div className="text-white">
-          <p className="text-sm font-extrabold leading-tight">منصة إدارة الصالات</p>
+          <p className="text-sm font-extrabold leading-tight">{platformName}</p>
           <p className="text-[11px] font-semibold text-white/75">لوحة تحكم المدير</p>
         </div>
       </div>

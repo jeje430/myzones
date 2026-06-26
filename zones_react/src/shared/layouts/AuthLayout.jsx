@@ -1,6 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import ThemePill from "../components/ThemePill";
 import Logo from "../components/Logo";
+import PlatformLogo from "../components/PlatformLogo";
 
 export default function AuthLayout({ title, subtitle, children, backLink, centered = false }) {
   if (centered) {
@@ -21,8 +22,8 @@ export default function AuthLayout({ title, subtitle, children, backLink, center
 
         <Card className="relative z-[1] w-full max-w-[420px] border-gray-200/90 shadow-xl shadow-[#6B5478]/10 backdrop-blur-sm dark:border-gray-800 dark:shadow-black/40">
           <CardHeader className="items-center space-y-4 pb-2 text-center">
-            <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-[#6B5478]/10 ring-1 ring-[#6B5478]/25 dark:bg-[#6B5478]/20 dark:ring-[#6B5478]/35">
-              <img src="/zones-logo.png" alt="ZONES" className="h-full w-full object-cover" />
+            <span className="flex h-14 w-14 items-center justify-center overflow-hidden rounded-2xl bg-[#6B5478]/10 p-2 ring-1 ring-[#6B5478]/25 dark:bg-[#6B5478]/20 dark:ring-[#6B5478]/35">
+              <PlatformLogo className="h-full w-full object-contain" />
             </span>
             <div className="space-y-1">
               <CardTitle className="text-xl">{title}</CardTitle>

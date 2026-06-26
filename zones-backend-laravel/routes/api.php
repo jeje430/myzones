@@ -2,6 +2,8 @@
 
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\BrandingLogoController;
+use App\Http\Controllers\Api\BrandingSettingsController;
 use App\Http\Controllers\Api\ProfileAvatarController;
 use App\Http\Controllers\Api\DeviceRatingController;
 use App\Http\Controllers\Api\ManagerCommentController;
@@ -79,6 +81,8 @@ Route::get('/tournaments', [TournamentController::class, 'index']);
 Route::get('/tournaments/{tournament}', [TournamentController::class, 'show']);
 
 Route::get('/loyalty/settings', [LoyaltySettingsController::class, 'show']);
+
+Route::get('/public/branding-settings', [BrandingSettingsController::class, 'show']);
 
 Route::get('/lounges/{station}/comments', [StationCommentController::class, 'index'])
     ->middleware('auth.optional');
@@ -289,8 +293,18 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:super_admin');
     Route::put('/super-admin/settings/commission', [PlatformCommissionController::class, 'update'])
         ->middleware('role:super_admin');
+    Route::post('/super-admin/branding/logo', [BrandingLogoController::class, 'store'])
+        ->middleware('role:super_admin');
+    Route::patch('/super-admin/branding/settings', [BrandingSettingsController::class, 'update'])
+        ->middleware('role:super_admin');
     Route::get('/super-admin/finance/commissions', [PlatformCommissionController::class, 'summary'])
         ->middleware('role:super_admin');
     Route::get('/super-admin/staff', [SuperAdminStaffController::class, 'index'])
+        ->middleware('role:super_admin');
+    Route::patch('/super-admin/staff/{user}', [SuperAdminStaffController::class, 'update'])
+        ->middleware('role:super_admin');
+    Route::delete('/super-admin/staff/{user}', [SuperAdminStaffController::class, 'destroy'])
+        ->middleware('role:super_admin');
+    Route::post('/super-admin/staff/{user}/restore', [SuperAdminStaffController::class, 'restore'])
         ->middleware('role:super_admin');
 });

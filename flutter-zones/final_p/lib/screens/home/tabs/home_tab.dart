@@ -5,6 +5,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../../core/theme/zonez_colors.dart';
+import '../../../providers/branding_provider.dart';
 import '../../../providers/app_state_provider.dart';
 import '../../../providers/lounge_ratings_provider.dart';
 import '../../../providers/zones_data_provider.dart';
@@ -152,6 +153,8 @@ class _HomeTabState extends State<HomeTab> {
   }
 
   Widget _buildHeader(VoidCallback onOpenDrawer, Color onSurface, Color muted) {
+    final branding = context.watch<BrandingProvider>();
+
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
       child: Column(
@@ -182,7 +185,10 @@ class _HomeTabState extends State<HomeTab> {
           const ZonezLogo(size: 96, imageOnly: true, showText: false),
           const SizedBox(height: 6),
           Text(
-            'ZONEZ',
+            branding.platformName,
+            textAlign: TextAlign.center,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
             style: GoogleFonts.orbitron(
               fontSize: 28,
               fontWeight: FontWeight.bold,

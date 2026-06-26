@@ -64,8 +64,8 @@ export async function loginEmployee({ email, password, stationId, role }) {
     if (message.includes("role does not match")) {
       return { ok: false, error: "الصلاحية المختارة لا تطابق حسابك." };
     }
-    if (message.includes("inactive")) {
-      return { ok: false, error: "تم تعطيل هذا الحساب." };
+    if (message.includes("disabled") || message.includes("inactive")) {
+      return { ok: false, error: "Your account has been disabled." };
     }
     return { ok: false, error: message };
   }

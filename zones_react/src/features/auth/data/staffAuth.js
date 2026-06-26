@@ -93,8 +93,8 @@ export async function loginStaff({ email, password }) {
     if (message.includes("not linked to a station")) {
       return { ok: false, error: "الحساب غير مرتبط بصالة. تواصل مع الإدارة." };
     }
-    if (message.includes("inactive")) {
-      return { ok: false, error: "تم تعطيل هذا الحساب." };
+    if (message.includes("disabled") || message.includes("inactive")) {
+      return { ok: false, error: "Your account has been disabled." };
     }
     return { ok: false, error: message };
   }

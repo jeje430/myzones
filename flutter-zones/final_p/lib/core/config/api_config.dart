@@ -87,6 +87,8 @@ class ApiConfig {
 
   static const String loyaltyStatus = '/loyalty/status';
 
+  static const String publicBrandingSettings = '/public/branding-settings';
+
   static String loyaltyNotificationRead(int id) => '/loyalty/notifications/$id/read';
 
   static String tournamentRegister(int id) => '/tournaments/$id/register';

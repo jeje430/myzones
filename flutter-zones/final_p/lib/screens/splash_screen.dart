@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:provider/provider.dart';
 
 import '../core/routes/app_routes.dart';
 import '../core/theme/zonez_colors.dart';
+import '../providers/branding_provider.dart';
+import '../widgets/branding_logo_image.dart';
 import '../widgets/circuit_background.dart';
 
 class SplashScreen extends StatelessWidget {
@@ -111,25 +114,28 @@ class _LogoSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final branding = context.watch<BrandingProvider>();
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Image.asset(
-          'assets/images/logo.png',
+        BrandingLogoImage(
           width: 220,
           height: 190,
           fit: BoxFit.contain,
-          filterQuality: FilterQuality.high,
-          gaplessPlayback: true,
+          showDarkGlow: true,
         ),
         const SizedBox(height: 14),
         Text(
-          'ZONEZ',
+          branding.platformName,
+          textAlign: TextAlign.center,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
           style: GoogleFonts.orbitron(
-            fontSize: 34,
+            fontSize: 30,
             fontWeight: FontWeight.bold,
             color: Colors.white,
-            letterSpacing: 12,
+            letterSpacing: 6,
             shadows: [
               Shadow(
                 color: ZonezColors.neonCyan.withValues(alpha: 0.7),

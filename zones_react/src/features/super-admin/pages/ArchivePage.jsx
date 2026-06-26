@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RotateCcw } from "lucide-react";
-import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
+import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import {
   TableBulkActionBar,
   TableSelectHeaderCell,
@@ -13,7 +13,8 @@ import {
   useTableSelection,
 } from "../../../shared/hooks/useTableSelection";
 import PageHeader from "../components/ui/PageHeader";
-import { getSuperAdminState, restoreArchivedUser, restoreHall } from "../data/superAdminStorage";
+import { getSuperAdminState, restoreHall } from "../data/superAdminStorage";
+import { fetchArchivedStaff, restoreStaffMember } from "../data/staffManagementApi";
 
 const TITLES = {
   halls: { title: "أرشيف الصالات" },
@@ -27,23 +28,52 @@ function initials(name = "") {
 
 export default function ArchivePage({ type = "halls" }) {
   const [state, setState] = useState(getSuperAdminState());
-
-  useEffect(() => {
-    const refresh = () => setState(getSuperAdminState());
-    refresh();
-    window.addEventListener("super-admin-data-updated", refresh);
-    return () => window.removeEventListener("super-admin-data-updated", refresh);
-  }, []);
+  const [archivedUsers, setArchivedUsers] = useState([]);
+  const [loadingUsers, setLoadingUsers] = useState(false);
+  const [usersError, setUsersError] = useState("");
 
   const isHalls = type === "halls";
 
+  const loadArchivedUsers = useCallback(async () => {
+    if (isHalls) return;
+
+    setLoadingUsers(true);
+    setUsersError("");
+
+    const role = type === "managers" ? "manager" : "employee";
+    const result = await fetchArchivedStaff({ role });
+
+    if (!result.ok) {
+      setArchivedUsers([]);
+      setUsersError(result.error || "تعذّر تحميل الأرشيف.");
+      setLoadingUsers(false);
+      return;
+    }
+
+    setArchivedUsers(
+      result.users.map((user) => ({
+        ...user,
+        archiveReason: "أرشفة إدارية",
+      })),
+    );
+    setLoadingUsers(false);
+  }, [isHalls, type]);
+
+  useEffect(() => {
+    const refreshHalls = () => setState(getSuperAdminState());
+    refreshHalls();
+    window.addEventListener("super-admin-data-updated", refreshHalls);
+    return () => window.removeEventListener("super-admin-data-updated", refreshHalls);
+  }, []);
+
+  useEffect(() => {
+    loadArchivedUsers();
+  }, [loadArchivedUsers]);
+
   const items = useMemo(() => {
     if (isHalls) return state.archivedHalls;
-    const role = type === "managers" ? "manager" : ["reception", "maintenance"];
-    return state.archivedUsers.filter((u) =>
-      Array.isArray(role) ? role.includes(u.role) : u.role === role,
-    );
-  }, [state, type, isHalls]);
+    return archivedUsers;
+  }, [state, isHalls, archivedUsers]);
 
   const pageIds = useMemo(() => items.map((item) => item.id), [items]);
   const selection = useTableSelection({ items, pageIds });
@@ -61,8 +91,19 @@ export default function ArchivePage({ type = "halls" }) {
     if (!ok) return;
 
     for (const target of targets) {
-      if (isHalls) restoreHall(target.id);
-      else restoreArchivedUser(target.id);
+      if (isHalls) {
+        restoreHall(target.id);
+      } else {
+        const result = await restoreStaffMember(target.id);
+        if (!result.ok) {
+          zonesToastError(result.error || "تعذّر استرجاع الحساب.");
+          return;
+        }
+      }
+    }
+
+    if (!isHalls) {
+      await loadArchivedUsers();
     }
 
     selection.clearSelection();
@@ -96,6 +137,12 @@ export default function ArchivePage({ type = "halls" }) {
   return (
     <div>
       <PageHeader title={TITLES[type].title} />
+
+      {!isHalls && usersError ? (
+        <div className="mb-4 rounded-2xl border border-red-500/25 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-600 dark:text-red-400">
+          {usersError}
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <TableBulkActionBar
@@ -135,6 +182,13 @@ export default function ArchivePage({ type = "halls" }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+              {!isHalls && loadingUsers ? (
+                <tr>
+                  <td colSpan={colCount} className="px-3 py-10 text-center text-gray-400">
+                    جاري تحميل الأرشيف...
+                  </td>
+                </tr>
+              ) : null}
               {isHalls
                 ? items.map((h) => (
                     <tr key={h.id} className={selectableRowClass(selection.isSelected(h.id))}>
@@ -199,7 +253,7 @@ export default function ArchivePage({ type = "halls" }) {
                       </td>
                     </tr>
                   ))}
-              {items.length === 0 ? (
+              {!loadingUsers && items.length === 0 ? (
                 <tr>
                   <td colSpan={colCount} className="px-3 py-10 text-center text-gray-400">
                     لا توجد عناصر مؤرشفة.

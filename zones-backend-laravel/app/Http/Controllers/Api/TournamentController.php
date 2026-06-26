@@ -18,6 +18,7 @@ class TournamentController extends Controller
             ->where('is_active', true)
             ->whereNotNull('registration_deadline')
             ->whereNotIn('status', ['cancelled'])
+            ->whereHas('station', fn ($stationQuery) => $stationQuery->customerVisible())
             ->with(['station', 'participants', 'matches.player1', 'matches.player2'])
             ->orderByDesc('start_date');
 
@@ -38,6 +39,7 @@ class TournamentController extends Controller
     {
         abort_unless($tournament->is_active, 404);
         abort_unless($tournament->registration_deadline !== null, 404);
+        abort_unless($this->tournamentStationIsVisible($tournament), 404);
 
         $tournament->load(['station', 'participants', 'matches.player1', 'matches.player2']);
 
@@ -84,6 +86,7 @@ class TournamentController extends Controller
                 ->whereHas(
                     'tournament',
                     fn ($q) => $q->whereNotIn('status', ['completed', 'cancelled'])
+                        ->whereHas('station', fn ($stationQuery) => $stationQuery->customerVisible())
                 );
         } elseif ($scope === 'completed') {
             $query->where('status', 'registered')
@@ -102,6 +105,7 @@ class TournamentController extends Controller
     public function bracket(Request $request, Tournament $tournament): JsonResponse
     {
         abort_unless($tournament->is_active, 404);
+        abort_unless($this->tournamentStationIsVisible($tournament), 404);
 
         $user = $request->user();
         $participated = $tournament->participants()
@@ -121,6 +125,7 @@ class TournamentController extends Controller
     public function register(Request $request, Tournament $tournament): JsonResponse
     {
         abort_unless($tournament->is_active, 404);
+        abort_unless($this->tournamentStationIsVisible($tournament), 404);
         abort_if(in_array($tournament->status, ['completed', 'cancelled'], true), 422);
 
         if (! $tournament->isRegistrationOpen()) {
@@ -221,5 +226,17 @@ class TournamentController extends Controller
             'message' => 'تم الانسحاب من البطولة',
             'tournament' => (new TournamentResource($tournament))->resolve(),
         ]);
+    }
+
+    private function tournamentStationIsVisible(Tournament $tournament): bool
+    {
+        $station = $tournament->station;
+        if (! $station) {
+            return false;
+        }
+
+        $station->loadMissing('manager');
+
+        return $station->isCustomerVisible();
     }
 }

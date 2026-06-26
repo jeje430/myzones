@@ -5,6 +5,8 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import SearchBar from "./ui/SearchBar";
+import AssociatedHallBadge from "./AssociatedHallBadge";
+import WorkingHoursBadge from "./WorkingHoursBadge";
 
 const ROLE_BADGE = {
   manager: "bg-violet-500/15 text-violet-700 dark:bg-violet-500/20 dark:text-violet-300",
@@ -44,7 +46,9 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
         member.name.toLowerCase().includes(query) ||
         member.email.toLowerCase().includes(query) ||
         member.roleLabel.toLowerCase().includes(query) ||
-        member.hallName.toLowerCase().includes(query),
+        member.hallName.toLowerCase().includes(query) ||
+        (member.hallLabel || "").toLowerCase().includes(query) ||
+        (member.workingHours || "").toLowerCase().includes(query),
     );
   }, [search, staff]);
 
@@ -56,12 +60,14 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[960px] text-right" dir="rtl">
+          <table className="w-full min-w-[1180px] text-right" dir="rtl">
             <thead>
               <tr className="border-b border-gray-200 bg-gray-50 text-gray-500 dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400">
                 <th className="px-6 py-4 text-sm font-bold">معرف/اسم الموظف</th>
                 <th className="px-6 py-4 text-sm font-bold">البريد الإلكتروني</th>
                 <th className="px-6 py-4 text-sm font-bold">الدور / الوظيفة</th>
+                <th className="px-6 py-4 text-sm font-bold">الصالة المرتبطة</th>
+                <th className="px-6 py-4 text-sm font-bold">ساعات الدوام</th>
                 <th className="px-6 py-4 text-sm font-bold">تاريخ التسجيل</th>
                 <th className="px-6 py-4 text-sm font-bold">حالة الحساب</th>
                 <th className={cn(TABLE_ACTIONS_TH, "px-6 py-4 text-sm font-bold")}>الإجراءات</th>
@@ -71,7 +77,7 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-14 text-center text-sm text-gray-400 dark:text-gray-500">
+                  <td colSpan={8} className="px-6 py-14 text-center text-sm text-gray-400 dark:text-gray-500">
                     جاري تحميل بيانات الموظفين والإدارة...
                   </td>
                 </tr>
@@ -95,11 +101,6 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
                               <p className="truncate text-sm font-bold text-gray-900 dark:text-gray-100">
                                 {member.name}
                               </p>
-                              {member.hallName ? (
-                                <p className="mt-0.5 truncate text-xs text-gray-500 dark:text-gray-400">
-                                  {member.hallName}
-                                </p>
-                              ) : null}
                             </div>
                           </div>
                         </td>
@@ -119,19 +120,42 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
                           </span>
                         </td>
 
+                        <td className="px-6 py-4">
+                          <AssociatedHallBadge
+                            hallName={member.hallName}
+                            hallScope={member.hallScope}
+                            hallLabel={member.hallLabel}
+                          />
+                        </td>
+
+                        <td className="px-6 py-4">
+                          {member.role === "manager" ? (
+                            <span className="text-xs text-gray-400 dark:text-gray-500">—</span>
+                          ) : (
+                            <WorkingHoursBadge hours={member.workingHours} />
+                          )}
+                        </td>
+
                         <td className="px-6 py-4 text-sm font-medium text-gray-600 dark:text-gray-300" dir="ltr">
                           {member.createdAt || "—"}
                         </td>
 
                         <td className="px-6 py-4">
-                          <span
-                            className={cn(
-                              "inline-flex rounded-full px-3 py-1 text-xs font-bold",
-                              status.className,
-                            )}
-                          >
-                            {status.label}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <span
+                              className={cn(
+                                "inline-flex w-fit rounded-full px-3 py-1 text-xs font-bold",
+                                status.className,
+                              )}
+                            >
+                              {status.label}
+                            </span>
+                            {member.statusNote ? (
+                              <span className="text-[10px] font-medium text-red-500 dark:text-red-400">
+                                {member.statusNote}
+                              </span>
+                            ) : null}
+                          </div>
                         </td>
 
                         <td className={cn(TABLE_ACTIONS_TD, "px-6 py-4")}>
@@ -163,7 +187,7 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
 
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-6 py-14 text-center text-sm text-gray-400 dark:text-gray-500">
+                  <td colSpan={8} className="px-6 py-14 text-center text-sm text-gray-400 dark:text-gray-500">
                     لا توجد حسابات موظفين أو إدارة مطابقة.
                   </td>
                 </tr>

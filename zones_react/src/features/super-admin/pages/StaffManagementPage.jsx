@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { zonesToastInfo } from "../../../shared/utils/zonesAlerts";
+import { zonesToastError, zonesToastInfo, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import PageHeader from "../components/ui/PageHeader";
 import StaffTable from "../components/StaffTable";
-import { fetchDashboardStaff } from "../data/staffManagementApi";
+import {
+  archiveStaffMember,
+  fetchDashboardStaff,
+  toggleStaffActive,
+} from "../data/staffManagementApi";
 
 const FILTERS = [
   { key: "all", label: "الكل", param: undefined },
@@ -50,6 +54,35 @@ export default function StaffManagementPage() {
 
   const placeholderAction = (label) => () => zonesToastInfo(`سيتم تفعيل ${label} قريباً.`);
 
+  const handleSuspend = async (member) => {
+    const result = await toggleStaffActive({
+      id: member.id,
+      active: member.status === "active",
+    });
+
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر تحديث حالة الحساب.");
+      return;
+    }
+
+    zonesToastSuccess("تم تحديث حالة الحساب.");
+    const activeFilter = FILTERS.find((item) => item.key === filter);
+    loadStaff(activeFilter?.param);
+  };
+
+  const handleDelete = async (member) => {
+    const result = await archiveStaffMember(member.id);
+
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر أرشفة الحساب.");
+      return;
+    }
+
+    zonesToastSuccess("تمت أرشفة الحساب.");
+    const activeFilter = FILTERS.find((item) => item.key === filter);
+    loadStaff(activeFilter?.param);
+  };
+
   return (
     <div>
       <PageHeader
@@ -84,8 +117,8 @@ export default function StaffManagementPage() {
         staff={staff}
         loading={loading}
         onEdit={placeholderAction("تعديل الصلاحيات")}
-        onSuspend={placeholderAction("تعليق الحساب")}
-        onDelete={placeholderAction("حذف الحساب")}
+        onSuspend={handleSuspend}
+        onDelete={handleDelete}
       />
 
       <div className="mt-4 flex flex-wrap justify-center gap-2">

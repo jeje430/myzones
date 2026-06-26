@@ -1,4 +1,6 @@
 import { formatCurrency } from "../utils/financeData";
+import PlatformLogo from "../../../shared/components/PlatformLogo";
+import { useBranding } from "../../../shared/context/BrandingContext";
 
 function MiniLineChart({ points, stroke }) {
   if (!points?.length) return null;
@@ -33,6 +35,8 @@ function ChartBlock({ title, points, stroke, show }) {
 }
 
 export default function FinanceReportPdfView({ data }) {
+  const { platformName } = useBranding();
+
   if (!data) return null;
 
   const type = data.reportType;
@@ -45,8 +49,8 @@ export default function FinanceReportPdfView({ data }) {
     <div className="finance-pdf-root" dir="rtl">
       <header className="finance-pdf-header">
         <div className="finance-pdf-brand">
-          <img src="/zones-logo.png" alt="ZONES" className="finance-pdf-logo" onError={(e) => { e.target.style.display = "none"; }} />
-          <span className="finance-pdf-brand__text">ZONES</span>
+          <PlatformLogo alt={platformName} className="finance-pdf-logo" />
+          <span className="finance-pdf-brand__text">{platformName}</span>
         </div>
         <div className="finance-pdf-header__meta">
           <p className="finance-pdf-header__lounge">{data.loungeName}</p>

@@ -14,9 +14,7 @@ trait BuildsPublishedLoungeQuery
     protected function publishedLoungesQuery(): Builder
     {
         return Station::query()
-            ->where('is_published', true)
-            ->where('is_active', true)
-            ->whereNotNull('manager_id')
+            ->customerVisible()
             ->with([
                 'packages' => fn ($q) => $q->where('is_active', true),
                 'devices',

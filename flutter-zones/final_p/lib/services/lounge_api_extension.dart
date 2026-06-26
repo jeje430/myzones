@@ -1,5 +1,6 @@
 import '../data/dto/lounge_catalog_dto.dart';
 import '../data/repositories/lounge_catalog_repository.dart';
+import '../core/http/api_client.dart';
 import '../models/lounge_model.dart';
 import '../models/lounge_rating.dart';
 import '../models/device_rating.dart';
@@ -162,14 +163,27 @@ class LoungeDataStore {
     return comment;
   }
 
+  void removeLounge(String loungeId) {
+    _lounges.remove(loungeId);
+    _ratingsByLounge.remove(loungeId);
+    _commentsByLounge.remove(loungeId);
+  }
+
   Future<LoungeModel> refreshLounge(String loungeId) async {
-    final dto = await _repository.fetchLounge(loungeId);
-    final lounge = LoungeCatalogMapper.toLounge(dto);
-    _lounges[loungeId] = lounge;
-    _ratingsByLounge[loungeId] = LoungeCatalogMapper.toStoredReviews(dto);
-    _commentsByLounge[loungeId] = LoungeCatalogMapper.toStoredComments(dto);
-    _isLoaded = true;
-    return lounge;
+    try {
+      final dto = await _repository.fetchLounge(loungeId);
+      final lounge = LoungeCatalogMapper.toLounge(dto);
+      _lounges[loungeId] = lounge;
+      _ratingsByLounge[loungeId] = LoungeCatalogMapper.toStoredReviews(dto);
+      _commentsByLounge[loungeId] = LoungeCatalogMapper.toStoredComments(dto);
+      _isLoaded = true;
+      return lounge;
+    } on ApiException catch (error) {
+      if (error.statusCode == 404) {
+        removeLounge(loungeId);
+      }
+      rethrow;
+    }
   }
 
   Future<List<LoungeModel>> loadNearbyAndMerge({

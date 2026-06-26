@@ -16,7 +16,8 @@ import {
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
 import { SUPER_ADMIN_ROUTES } from "../data/superAdminConstants";
 import { logoutSuperAdmin } from "../data/superAdminAuth";
-import { ZONES_LOGO_SRC } from "../data/superAdminDashboardData";
+import PlatformLogo from "../../../shared/components/PlatformLogo";
+import { useBranding } from "../../../shared/context/BrandingContext";
 
 const SINGLE_ITEMS_TOP = [
   { label: "لوحة التحكم", path: SUPER_ADMIN_ROUTES.dashboard, icon: Home },
@@ -78,6 +79,7 @@ const linkClass = ({ isActive }) =>
 export default function SuperAdminSidebar({ pendingCount = 0, onNavigate }) {
   const location = useLocation();
   const navigate = useNavigate();
+  const { platformName } = useBranding();
   const groupContainsActive = (group) => group.children.some((c) => location.pathname === c.path);
   const [open, setOpen] = useState(() => {
     const initial = {};
@@ -165,11 +167,11 @@ export default function SuperAdminSidebar({ pendingCount = 0, onNavigate }) {
       dir="rtl"
     >
       <div className="flex items-center gap-3 bg-gradient-to-l from-[#6B5478] to-[#836a90] px-5 py-5">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
-          <img src={ZONES_LOGO_SRC} alt="ZONES" className="h-full w-full object-cover" />
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
+          <PlatformLogo variant="avatar" />
         </span>
         <div className="text-white">
-          <p className="text-sm font-extrabold leading-tight">منصة إدارة الصالات</p>
+          <p className="text-sm font-extrabold leading-tight">{platformName}</p>
           <p className="text-[11px] font-semibold text-white/75">لوحة تحكم الأدمن</p>
         </div>
       </div>

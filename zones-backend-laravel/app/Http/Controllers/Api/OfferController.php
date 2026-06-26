@@ -19,6 +19,7 @@ class OfferController extends Controller
             ->whereNotNull('package_id')
             ->where('valid_from', '<=', now())
             ->where('expires_at', '>=', now())
+            ->whereHas('station', fn ($query) => $query->customerVisible())
             ->with(['timeSlots', 'station', 'package'])
             ->orderByDesc('valid_from')
             ->get();
@@ -32,6 +33,7 @@ class OfferController extends Controller
     {
         abort_unless($offer->is_active, 404);
         abort_unless($offer->package_id && $offer->station_id, 404);
+        abort_unless($this->offerStationIsVisible($offer), 404);
 
         $offer->load(['timeSlots', 'station', 'package']);
 
@@ -44,6 +46,7 @@ class OfferController extends Controller
     {
         abort_unless($offer->is_active, 404);
         abort_unless($offer->package_id && $offer->station_id, 404);
+        abort_unless($this->offerStationIsVisible($offer), 404);
         abort_unless($slot->offer_id === $offer->id, 404);
         abort_unless($slot->is_available, 422, 'هذا الموعد غير متاح');
 
@@ -56,5 +59,17 @@ class OfferController extends Controller
             'booking_id' => $bookingId,
             'final_price' => (float) $offer->discounted_price,
         ], 201);
+    }
+
+    private function offerStationIsVisible(Offer $offer): bool
+    {
+        $station = $offer->station;
+        if (! $station) {
+            return false;
+        }
+
+        $station->loadMissing('manager');
+
+        return $station->isCustomerVisible();
     }
 }

@@ -4,6 +4,7 @@ import '../models/lounge_model.dart';
 import '../models/lounge_rating.dart';
 import '../models/device_rating.dart';
 import '../models/lounge_comment.dart';
+import '../core/http/api_client.dart';
 import '../services/lounge_api_extension.dart';
 
 class LoungeRatingsProvider extends ChangeNotifier {
@@ -96,6 +97,15 @@ class LoungeRatingsProvider extends ChangeNotifier {
     try {
       await _store.refreshLounge(loungeId);
       _lounges = _store.getAllLounges();
+      _error = null;
+      notifyListeners();
+    } on ApiException catch (error) {
+      if (error.statusCode == 404) {
+        _lounges = _store.getAllLounges();
+        _error = null;
+      } else {
+        _error = error.message;
+      }
       notifyListeners();
     } catch (e) {
       _error = e.toString();

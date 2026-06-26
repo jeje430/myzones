@@ -83,7 +83,7 @@ class _LoungeDetailsScreenState extends State<LoungeDetailsScreen> {
         ),
         body: Center(
           child: Text(
-            'الصالة غير موجودة',
+            'الصالة غير متاحة',
             style: ZonezTypography.body(color: ZonezColors.textMuted),
           ),
         ),

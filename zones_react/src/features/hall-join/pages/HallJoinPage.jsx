@@ -13,6 +13,7 @@ import {
   X,
 } from "lucide-react";
 import ThemePill from "../../../shared/components/ThemePill";
+import PlatformLogo from "../../../shared/components/PlatformLogo";
 import IconButton from "../../../shared/components/ui/IconButton";
 import IconGlyph from "../../../shared/components/ui/IconGlyph";
 import { submitHallJoinRequest } from "../data/hallJoinApi";
@@ -84,7 +85,7 @@ function WelcomeStep({ onStart }) {
   return (
     <div className="flex min-h-[70vh] flex-col items-center justify-center text-center">
       <span className="mb-6 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-[#6B5478]/15 ring-1 ring-[#6B5478]/30 dark:bg-[#6B5478]/20 dark:ring-[#6B5478]/40">
-        <img src="/zones-logo.png" alt="ZONES" className="h-full w-full object-cover" />
+        <PlatformLogo className="h-full w-full object-contain" />
       </span>
       <p className="mb-2 flex items-center justify-center gap-1.5 text-sm font-bold text-[#6B5478]">
         <Sparkles size={16} strokeWidth={2.25} />
@@ -374,7 +375,7 @@ export default function HallJoinPage() {
         <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
           <div className="flex items-center gap-3">
             <span className="flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl ring-1 ring-[#6B5478]/25 dark:ring-[#6B5478]/40">
-              <img src="/zones-logo.png" alt="ZONES" className="h-full w-full object-cover" />
+              <PlatformLogo className="h-full w-full object-contain" />
             </span>
             <div>
               <p className="text-base font-bold text-[#0b1020] dark:text-white">ZONES</p>

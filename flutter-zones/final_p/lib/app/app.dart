@@ -7,6 +7,7 @@ import '../core/routes/app_routes.dart';
 import '../core/theme/app_theme.dart';
 import '../features/auth/bloc/auth_bloc.dart';
 import '../features/notifications/bloc/notification_bloc.dart';
+import '../providers/branding_provider.dart';
 import '../providers/app_state_provider.dart';
 import '../providers/lounge_ratings_provider.dart';
 import '../providers/theme_provider.dart';
@@ -31,11 +32,12 @@ class ZonezApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
+    final branding = context.watch<BrandingProvider>();
 
     return SessionSyncListener(
       child: MaterialApp(
         navigatorKey: PushNotificationService.navigatorKey,
-        title: 'Zonez',
+        title: branding.platformName,
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
         darkTheme: AppTheme.dark(),
@@ -74,7 +76,9 @@ class ZonezApp extends StatelessWidget {
 }
 
 class ZonezRoot extends StatelessWidget {
-  const ZonezRoot({super.key});
+  const ZonezRoot({super.key, required this.brandingProvider});
+
+  final BrandingProvider brandingProvider;
 
   @override
   Widget build(BuildContext context) {
@@ -85,6 +89,7 @@ class ZonezRoot extends StatelessWidget {
       ],
       child: MultiProvider(
         providers: [
+          ChangeNotifierProvider<BrandingProvider>.value(value: brandingProvider),
           ChangeNotifierProvider(create: (_) => ThemeProvider()),
           ChangeNotifierProvider(create: (_) => AppStateProvider()),
           ChangeNotifierProvider(create: (_) => ZonesDataProvider()),

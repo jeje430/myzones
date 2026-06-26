@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Support\MediaUrl;
 use Illuminate\Database\Eloquent\Model;
 
 class PlatformSetting extends Model
@@ -12,10 +13,14 @@ class PlatformSetting extends Model
 
     public const DEFAULT_PLATFORM_COMMISSION_RATE = 10;
 
+    public const DEFAULT_PLATFORM_NAME = 'منصة إدارة الصالات';
+
     protected $fillable = [
         'loyalty_points_per_session',
         'loyalty_minimum_points_required',
         'platform_commission_rate',
+        'platform_name',
+        'platform_logo_path',
     ];
 
     protected function casts(): array
@@ -35,6 +40,7 @@ class PlatformSetting extends Model
                 'loyalty_points_per_session' => self::DEFAULT_POINTS_PER_SESSION,
                 'loyalty_minimum_points_required' => self::DEFAULT_MINIMUM_POINTS_REQUIRED,
                 'platform_commission_rate' => self::DEFAULT_PLATFORM_COMMISSION_RATE,
+                'platform_name' => self::DEFAULT_PLATFORM_NAME,
             ],
         );
     }
@@ -60,6 +66,14 @@ class PlatformSetting extends Model
     {
         return [
             'platform_commission_rate' => round((float) $this->platform_commission_rate, 2),
+        ];
+    }
+
+    public function toBrandingPayload(): array
+    {
+        return [
+            'platform_name' => $this->platform_name ?: self::DEFAULT_PLATFORM_NAME,
+            'logo_url' => MediaUrl::resolve($this->platform_logo_path),
         ];
     }
 }

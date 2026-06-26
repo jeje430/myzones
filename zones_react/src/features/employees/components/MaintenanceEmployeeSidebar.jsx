@@ -9,7 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
-import { ZONES_LOGO_SRC } from "../../super-admin/data/superAdminDashboardData";
+import PlatformLogo from "../../../shared/components/PlatformLogo";
 import { clearAuthSession, getAuthSession } from "../../auth/data/mockUsersStorage";
 import { EMPLOYEE_LOGIN_PATH } from "../../auth/data/authRoutes";
 import { getActiveAccountIdFromUrl } from "../../auth/data/accountSessionStorage";
@@ -69,8 +69,8 @@ export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigat
       dir="rtl"
     >
       <div className="flex items-center gap-3 bg-gradient-to-l from-[#6B5478] to-[#836a90] px-5 py-5">
-        <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
-          <img src={ZONES_LOGO_SRC} alt="ZONES" className="h-full w-full object-cover" />
+        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
+          <PlatformLogo variant="avatar" />
         </span>
         <div className="text-white">
           <p className="text-sm font-extrabold leading-tight">منصة إدارة الصالات</p>

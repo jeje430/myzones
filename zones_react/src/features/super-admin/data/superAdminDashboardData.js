@@ -2,7 +2,7 @@ import { fetchHallJoinRequests } from "./hallJoinRequestsApi";
 import { fetchPlatformCommissionSummary, fetchPlatformCommissionSettings } from "./commissionSettingsApi";
 import { HALL_REQUEST_STATUS, HALL_REQUEST_STATUS_LABELS } from "./hallRequestStatus";
 
-export const ZONES_LOGO_SRC = "/zones-logo.png";
+export { ZONES_LOGO_SRC } from "../../../shared/branding/brandingConstants";
 
 /** بيانات احتياطية عند فشل API */
 export function getLocalDashboardData() {

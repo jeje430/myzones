@@ -57,9 +57,15 @@ class AuthRepository {
     }
 
     if (statusCode == 403) {
+      if (message?.contains('disabled') == true || message?.contains('inactive') == true) {
+        return const AuthException(
+          AuthErrorType.userNotFound,
+          'Your account has been disabled.',
+        );
+      }
       return AuthException(
         AuthErrorType.userNotFound,
-        message?.contains('deleted') == true || message?.contains('inactive') == true
+        message?.contains('deleted') == true
             ? 'تم حذف هذا الحساب. يرجى إنشاء حساب جديد.'
             : (message ?? 'لا يمكن تسجيل الدخول بهذا الحساب'),
       );

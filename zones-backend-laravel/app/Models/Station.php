@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\SoftDeletes;
@@ -52,6 +53,30 @@ class Station extends Model
     public function manager(): BelongsTo
     {
         return $this->belongsTo(User::class, 'manager_id');
+    }
+
+    /**
+     * @param  Builder<Station>  $query
+     * @return Builder<Station>
+     */
+    public function scopeCustomerVisible(Builder $query): Builder
+    {
+        return $query
+            ->where('is_published', true)
+            ->where('is_active', true)
+            ->whereNotNull('manager_id')
+            ->whereHas('manager', fn (Builder $managerQuery) => $managerQuery->where('account_status', 'active'));
+    }
+
+    public function isCustomerVisible(): bool
+    {
+        if (! $this->is_published || ! $this->is_active || ! $this->manager_id) {
+            return false;
+        }
+
+        $this->loadMissing('manager');
+
+        return $this->manager !== null && $this->manager->account_status === 'active';
     }
 
     public function packages(): \Illuminate\Database\Eloquent\Relations\HasMany

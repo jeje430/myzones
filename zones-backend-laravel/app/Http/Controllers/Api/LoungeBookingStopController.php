@@ -15,10 +15,8 @@ class LoungeBookingStopController extends Controller
 
     public function show(Station $station): JsonResponse
     {
-        abort_unless(
-            $station->is_published && $station->is_active && $station->manager_id !== null,
-            404,
-        );
+        $station->loadMissing('manager');
+        abort_unless($station->isCustomerVisible(), 404, 'Hall unavailable');
 
         $active = $this->bookingStops->activeForStation($station);
 

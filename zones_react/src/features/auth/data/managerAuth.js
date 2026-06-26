@@ -51,8 +51,8 @@ export async function loginManager({ email, password, stationId }) {
     if (message.includes("does not belong to this station")) {
       return { ok: false, error: "الصالة المختارة لا تطابق حسابك." };
     }
-    if (message.includes("inactive")) {
-      return { ok: false, error: "تم تعطيل هذا الحساب." };
+    if (message.includes("disabled") || message.includes("inactive")) {
+      return { ok: false, error: "Your account has been disabled." };
     }
     return { ok: false, error: message };
   }

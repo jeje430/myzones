@@ -2,8 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
 import '../core/theme/zonez_colors.dart';
+import 'branding_logo_image.dart';
 
-/// Centered neon ZONES logo + Arabic tagline for auth screens.
+/// Centered neon platform logo + Arabic tagline for auth screens.
 class AuthLogoHero extends StatelessWidget {
   const AuthLogoHero({
     super.key,
@@ -50,11 +51,9 @@ class AuthLogoHero extends StatelessWidget {
                     ),
                   ],
           ),
-          child: Image.asset(
-            'assets/images/logo.png',
+          child: BrandingLogoImage(
             width: logoWidth * 0.78,
             fit: BoxFit.contain,
-            filterQuality: FilterQuality.high,
           ),
         ),
         const SizedBox(height: 18),

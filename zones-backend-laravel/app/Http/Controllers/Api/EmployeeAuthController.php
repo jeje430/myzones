@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Api\Concerns\BlocksDisabledAccounts;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\UserResource;
 use App\Models\User;
@@ -12,6 +13,8 @@ use Illuminate\Validation\ValidationException;
 
 class EmployeeAuthController extends Controller
 {
+    use BlocksDisabledAccounts;
+
     public function login(Request $request): JsonResponse
     {
         $request->validate([
@@ -29,10 +32,8 @@ class EmployeeAuthController extends Controller
             ]);
         }
 
-        if ($user->account_status !== 'active') {
-            return response()->json([
-                'message' => 'Account is inactive',
-            ], 403);
+        if ($this->accountLoginBlocked($user)) {
+            return $this->blockedAccountResponse();
         }
 
         if (! $user->hasAnyRole(['reception', 'maintenance'])) {

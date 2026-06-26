@@ -1,8 +1,13 @@
+import PlatformLogo from "./PlatformLogo";
+import { useBranding } from "../context/BrandingContext";
+
 export default function Logo() {
+  const { platformName } = useBranding();
+
   return (
     <div className="zones-logo">
-      <img src="/zones-logo.png" alt="ZONES" />
-      <span>ZONES</span>
+      <PlatformLogo />
+      <span>{platformName}</span>
     </div>
   );
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Support\MediaUrl;
+use App\Support\WorkShiftSchedule;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -32,6 +33,8 @@ class UserResource extends JsonResource
             'station_name' => $station?->name,
             'hall_name' => $station?->name,
             'work_shift' => $this->work_shift,
+            'working_hours' => WorkShiftSchedule::workingHours($this->work_shift),
+            'shift_period_label' => WorkShiftSchedule::periodLabel($this->work_shift),
             'email_verified_at' => $this->email_verified_at,
             'phone_verified_at' => $this->phone_verified_at,
             'last_login_at' => $this->last_login_at,
