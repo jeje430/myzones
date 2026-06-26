@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/zonez_colors.dart';
+import '../../data/repositories/auth_repository.dart';
+import '../../models/auth_exception.dart';
 import '../../widgets/auth_header.dart';
 import '../../widgets/circuit_background.dart';
 import '../../widgets/neon_gradient_border.dart';
@@ -17,6 +20,8 @@ class ForgotPasswordScreen extends StatefulWidget {
 
 class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   final _emailController = TextEditingController();
+  bool _isLoading = false;
+  String? _error;
 
   @override
   void dispose() {
@@ -24,14 +29,35 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
     super.dispose();
   }
 
-  void _sendCode() {
-    Navigator.pushNamed(
-      context,
-      AppRoutes.otpVerification,
-      arguments: _emailController.text.isEmpty
-          ? 'admin@zones.com'
-          : _emailController.text,
-    );
+  Future<void> _sendCode() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty) {
+      setState(() => _error = 'يرجى إدخال البريد الإلكتروني');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await AuthRepository.instance.sendPasswordResetCode(email: email);
+      if (!mounted) return;
+      Navigator.pushNamed(
+        context,
+        AppRoutes.otpVerification,
+        arguments: email,
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'حدث خطأ غير متوقع');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -97,10 +123,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                                 controller: _emailController,
                                 keyboardType: TextInputType.emailAddress,
                               ),
+                              if (_error != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _error!,
+                                  style: GoogleFonts.cairo(
+                                    color: ZonezColors.deleteRed,
+                                    fontSize: 13,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                               const SizedBox(height: 28),
                               NeonGradientButton(
-                                label: 'إرسال رمز التحقق',
-                                onPressed: _sendCode,
+                                label: _isLoading ? 'جاري الإرسال...' : 'إرسال رمز التحقق',
+                                onPressed: _isLoading ? null : _sendCode,
                               ),
                             ],
                           ),

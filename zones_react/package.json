@@ -28,6 +28,7 @@
     "jspdf": "^4.2.1",
     "lucide-react": "^1.14.0",
     "react": "^19.2.5",
+    "react-avatar-editor": "^15.1.0",
     "react-bootstrap": "^2.10.10",
     "react-dom": "^19.2.5",
     "react-hook-form": "^7.75.0",

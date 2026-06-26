@@ -6,6 +6,12 @@ import TablePagination from "../../../shared/components/TablePagination";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import OfferDetailsModal from "../../offers/components/OfferDetailsModal";
 import { loadActivePackages, PACKAGES_STORAGE_EVENT } from "../../devices-packages/data/packagesStorage";
 import {
@@ -88,6 +94,8 @@ export default function ReceptionOffersPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: offersList, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -116,6 +124,7 @@ export default function ReceptionOffersPage() {
           <table className="w-full min-w-[1100px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">اسم العرض</th>
                 <th className="px-3 py-2.5 font-bold">الباقة</th>
                 <th className="px-3 py-2.5 font-bold">سعر الباقة</th>
@@ -131,7 +140,7 @@ export default function ReceptionOffersPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={10} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={11} className="px-3 py-10 text-center text-gray-400">
                     لا توجد عروض مطابقة.
                   </td>
                 </tr>
@@ -140,7 +149,8 @@ export default function ReceptionOffersPage() {
                   const pkgPrice = getOfferPackagePrice(row.packageId, packages);
                   const offerPrice = calcOfferPrice(pkgPrice, row.discountPercent);
                   return (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
                       <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
                         {getOfferPackageLabel(row.packageId, packages)}

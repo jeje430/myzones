@@ -18,6 +18,7 @@ class BookingCheckoutSummary extends StatelessWidget {
     this.earnedPoints,
     this.originalPrice,
     this.discountPercent,
+    this.deviceName,
     this.isPaymentStep = true,
   });
 
@@ -29,6 +30,7 @@ class BookingCheckoutSummary extends StatelessWidget {
   final int? earnedPoints;
   final double? originalPrice;
   final int? discountPercent;
+  final String? deviceName;
   final bool isPaymentStep;
 
   @override
@@ -121,8 +123,11 @@ class BookingCheckoutSummary extends StatelessWidget {
                 child: Column(
                   children: [
                     _SummaryRow('اسم الصالة', loungeName),
+                    _SummaryRow('الباقة', packageName),
                     _SummaryRow('التاريخ', dateLabel),
                     _SummaryRow('الوقت', timeLabel),
+                    if (deviceName != null && deviceName!.isNotEmpty)
+                      _SummaryRow('الجهاز', deviceName!),
                     if (earnedPoints != null) ...[
                       const SizedBox(height: 12),
                       Container(
@@ -269,11 +274,11 @@ class BookingPaymentMethodPicker extends StatelessWidget {
         ),
         const SizedBox(height: 12),
         _MethodTile(
-          title: 'دفع الآن',
-          subtitle: 'مدفوع — تأكيد فوري',
-          icon: Icons.payment_rounded,
-          selected: selected == PaymentStatus.paid,
-          onTap: () => onChanged(PaymentStatus.paid),
+          title: 'الدفع الإلكتروني',
+          subtitle: 'ادفع الآن ببطاقتك البنكية',
+          icon: Icons.credit_card_rounded,
+          selected: selected == PaymentStatus.electronic,
+          onTap: () => onChanged(PaymentStatus.electronic),
         ),
         const SizedBox(height: 10),
         _MethodTile(

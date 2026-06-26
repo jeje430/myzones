@@ -1,30 +1,15 @@
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
-
+import { useManagerPaths } from "../../../shared/tenant/ManagerWorkspaceProvider";
 import TournamentDetailsSection from "../components/TournamentDetailsSection";
-
-
-
-const MANAGER_TOURNAMENT_ROUTES = {
-  tournaments: "/tournaments",
-  tournamentsData: "/tournaments/data",
-  participants: (id) => `/tournaments/${id}/participants`,
-  bracket: (id) => `/tournaments/${id}/bracket`,
-};
-
-
+import { buildManagerTournamentRoutes } from "../managerTournamentRoutes";
 
 export default function TournamentDetailsPage() {
+  const { routes } = useManagerPaths();
+  const tournamentRoutes = buildManagerTournamentRoutes(routes);
 
   return (
-
     <ManagerLayout>
-
-      <TournamentDetailsSection routes={MANAGER_TOURNAMENT_ROUTES} />
-
+      <TournamentDetailsSection routes={tournamentRoutes} />
     </ManagerLayout>
-
   );
-
 }
-
-

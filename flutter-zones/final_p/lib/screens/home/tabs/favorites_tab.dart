@@ -83,6 +83,9 @@ class FavoritesTab extends StatelessWidget {
                         location: l.location,
                         devices: l.totalDevices,
                         price: l.startingPrice,
+                        imageUrl: l.imageUrl,
+                        services: l.services,
+                        workHoursLabel: l.workHoursLabel,
                         isFavorite: true,
                         onFavoriteTap: () => onFavoriteTap(l.name),
                         onTap: () {

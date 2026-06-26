@@ -14,6 +14,17 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
+import {
   zonesConfirm,
   zonesToastError,
   zonesToastSuccess,
@@ -25,15 +36,27 @@ import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
 import Button from "../../super-admin/components/ui/Button";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
+import { refreshHallCatalogFromApi } from "../data/hallCatalogSync";
 import {
   getDevicePackageLabel,
   loadDevices,
+  persistDeviceArchive,
+  persistDeviceCreate,
+  persistDeviceToggleActive,
+  persistDeviceUpdate,
   saveDevices,
   suggestDeviceName,
+  typeLabelFromType,
 } from "../data/devicesStorage";
-import { loadPackages, savePackages } from "../data/packagesStorage";
-import { normalizeDeviceCodeName, typeLabelFromType } from "../data/deviceNaming";
-import { saveCustomDeviceType } from "../data/customDeviceTypesStorage";
+import { findDuplicateDevice } from "../data/deviceValidation";
+import {
+  loadPackages,
+  persistPackageArchive,
+  persistPackageCreate,
+  persistPackageToggleActive,
+  persistPackageUpdate,
+  savePackages,
+} from "../data/packagesStorage";
 import { getDeviceLastMaintenance } from "../utils/deviceMaintenance";
 import { useDevicesSync } from "../hooks/useDevicesSync";
 import { usePackagesSync } from "../hooks/usePackagesSync";
@@ -118,6 +141,13 @@ export default function DevicesPackagesPage() {
   const [packageDetailOpen, setPackageDetailOpen] = useState(false);
   const [packageModalMode, setPackageModalMode] = useState("details");
   const [detailPackage, setDetailPackage] = useState(null);
+
+  useEffect(() => {
+    refreshHallCatalogFromApi().finally(() => {
+      setDevicesList(loadDevices());
+      setPackagesList(loadPackages());
+    });
+  }, []);
 
   useEffect(() => {
     saveDevices(devicesList);
@@ -211,6 +241,11 @@ export default function DevicesPackagesPage() {
     [filteredPackages, packagePage],
   );
 
+  const devicePageIds = useMemo(() => pageDevices.map((row) => row.id), [pageDevices]);
+  const packagePageIds = useMemo(() => pagePackages.map((row) => row.id), [pagePackages]);
+  const deviceSelection = useTableSelection({ items: activeDevices, pageIds: devicePageIds });
+  const packageSelection = useTableSelection({ items: activePackages, pageIds: packagePageIds });
+
   const syncedDevices = useMemo(() => loadSyncedActiveDevices(), [devicesList]);
 
   const deviceStats = useMemo(() => {
@@ -256,29 +291,19 @@ export default function DevicesPackagesPage() {
   };
 
   const resolveDeviceName = (patch) => {
-    const rawName = patch.name?.trim();
-    let codeName;
+    const codeName = patch.name?.trim() || suggestDeviceName(patch.type, devicesList);
 
-    if (rawName) {
-      codeName = normalizeDeviceCodeName(rawName, patch.type);
-      if (!codeName) {
-        zonesToastError(
-          "استخدم صيغة مثل PC-01 أو PC-016 (نوع الجهاز ثم رقم بدون تكرار الشرطة).",
-          "رقم الجهاز غير صالح",
-        );
-        return null;
-      }
-    } else {
-      codeName = suggestDeviceName(patch.type, devicesList);
-    }
-
-    const duplicate = devicesList.some(
-      (d) => d.name.toUpperCase() === codeName.toUpperCase() && d.id !== detailDevice?.id,
-    );
-    if (duplicate) {
-      zonesToastError(`الجهاز «${codeName}» موجود مسبقاً. اختر رقماً آخر.`, "رقم الجهاز مستخدم");
+    if (!codeName.trim()) {
+      zonesToastError("أدخل رقم الجهاز أو اسمه.", "رقم الجهاز مطلوب");
       return null;
     }
+
+    const duplicate = findDuplicateDevice(codeName, devicesList, detailDevice?.id ?? null);
+    if (duplicate) {
+      zonesToastError(`الجهاز «${codeName}» موجود مسبقاً. اختر اسماً آخر.`, "رقم الجهاز مستخدم");
+      return null;
+    }
+
     return codeName;
   };
 
@@ -299,31 +324,22 @@ export default function DevicesPackagesPage() {
     if (!codeName) return;
 
     const typeLabel = patch.typeLabel || typeLabelFromType(patch.type);
-    saveCustomDeviceType({ type: patch.type, typeLabel });
-    const nid = Math.max(0, ...devicesList.map((d) => d.id)) + 1;
-    setDevicesList((list) => {
-      const next = [
-        ...list,
-        {
-          id: nid,
-          name: codeName,
-          type: patch.type,
-          typeLabel,
-          packageId: patch.packageId,
-          isActive: patch.isActive,
-          hasFault: false,
-          isArchived: false,
-          price: "—",
-          image: null,
-          notes: patch.notes || "",
-          createdAt: formatFaultDateTime(),
-        },
-      ];
-      saveDevices(next);
-      return next;
+    const result = await persistDeviceCreate({
+      name: codeName,
+      type: patch.type,
+      typeLabel,
+      packageId: patch.packageId,
+      isActive: patch.isActive,
+      notes: patch.notes || "",
     });
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذر حفظ الجهاز");
+      return;
+    }
+
+    setDevicesList(loadDevices());
     closeDeviceModal();
-    zonesToastSuccess("تم الحفظ");
+    zonesToastSuccess(result.message || "تم الحفظ");
   };
 
   const saveDeviceEdit = async (patch) => {
@@ -339,7 +355,6 @@ export default function DevicesPackagesPage() {
     if (!codeName) return;
 
     const typeLabel = patch.typeLabel || typeLabelFromType(patch.type);
-    saveCustomDeviceType({ type: patch.type, typeLabel });
     const next = {
       name: codeName,
       type: patch.type,
@@ -349,11 +364,16 @@ export default function DevicesPackagesPage() {
       price: detailDevice.price || "—",
       notes: patch.notes ?? detailDevice.notes,
     };
-    setDevicesList((list) =>
-      list.map((d) => (d.id === detailDevice.id ? { ...d, ...next } : d)),
-    );
+
+    const result = await persistDeviceUpdate(detailDevice.id, next);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذر حفظ التعديلات");
+      return;
+    }
+
+    setDevicesList(loadDevices());
     closeDeviceModal();
-    zonesToastSuccess("تم حفظ التعديلات");
+    zonesToastSuccess(result.message || "تم حفظ التعديلات");
   };
 
   const handleDeviceSave = (patch) => {
@@ -361,51 +381,122 @@ export default function DevicesPackagesPage() {
     return saveDeviceEdit(patch);
   };
 
-  const toggleDeviceActive = async (row) => {
-    const enabling = row.isActive === false;
+  const runToggleDeviceActive = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(activeDevices, targetIds);
+    const enabling = rowForMessage.isActive === false;
+
     const confirmed = await zonesConfirm({
-      title: enabling ? "تفعيل الجهاز؟" : "تعطيل الجهاز؟",
-      text: enabling
-        ? `«${row.name}» سيُفعَّل بعد التأكد من إتمام الصيانة.`
-        : `«${row.name}» سيُعطَّل ويُرسل فوراً إلى موظف الصيانة.`,
+      title: isBulk
+        ? enabling
+          ? `تفعيل ${targetIds.length} أجهزة؟`
+          : `تعطيل ${targetIds.length} أجهزة؟`
+        : enabling
+          ? "تفعيل الجهاز؟"
+          : "تعطيل الجهاز؟",
+      text: isBulk
+        ? enabling
+          ? `سيتم تفعيل ${targetIds.length} أجهزة بعد التأكد من إتمام الصيانة.`
+          : `سيتم تعطيل ${targetIds.length} أجهزة وإرسالها إلى موظف الصيانة.`
+        : enabling
+          ? `«${rowForMessage.name}» سيُفعَّل بعد التأكد من إتمام الصيانة.`
+          : `«${rowForMessage.name}» سيُعطَّل ويُرسل فوراً إلى موظف الصيانة.`,
       confirmText: enabling ? "تفعيل" : "تعطيل",
       cancelText: "تراجع",
     });
     if (!confirmed) return;
 
-    if (enabling) {
-      if (!tryEnableDevice(row.id)) return;
-      setDevicesList(loadDevices());
-      zonesToastSuccess("تم تفعيل الجهاز");
+    let success = 0;
+    for (const row of targets) {
+      if (enabling) {
+        if (!tryEnableDevice(row.id)) continue;
+        const result = await persistDeviceToggleActive(row.id, true, {
+          hasFault: false,
+          maintenanceInProgress: false,
+        });
+        if (result.ok) success += 1;
+      } else {
+        if (!disableDeviceFromManager(row, session?.fullName || "مدير الصالة")) continue;
+        const result = await persistDeviceToggleActive(row.id, false, { hasFault: true });
+        if (result.ok) success += 1;
+      }
+    }
+
+    if (success === 0) {
+      zonesToastError(enabling ? "تعذر تفعيل الأجهزة" : "تعذر تعطيل الأجهزة");
       return;
     }
 
-    if (!disableDeviceFromManager(row, session?.fullName || "مدير الصالة")) return;
+    deviceSelection.clearSelection();
     setDevicesList(loadDevices());
-    zonesToastSuccess("تم تعطيل الجهاز — يظهر في الأعطال النشطة للصيانة");
+    zonesToastSuccess(
+      isBulk
+        ? enabling
+          ? `تم تفعيل ${success} من ${targets.length} أجهزة`
+          : `تم تعطيل ${success} من ${targets.length} أجهزة — تظهر في الأعطال النشطة`
+        : enabling
+          ? "تم تفعيل الجهاز"
+          : "تم تعطيل الجهاز — يظهر في الأعطال النشطة للصيانة",
+    );
   };
 
-  const archiveDevice = async (row) => {
+  const toggleDeviceActive = (row) =>
+    runToggleDeviceActive(resolveBulkActionIds(row.id, deviceSelection.selectedIds), row);
+
+  const handleBulkToggleDeviceActive = (enabling) => {
+    const targets = filterItemsByIds(activeDevices, deviceSelection.selectedIds).filter((row) =>
+      enabling ? row.isActive === false : row.isActive !== false,
+    );
+    if (!targets.length) return;
+    runToggleDeviceActive(
+      targets.map((row) => row.id),
+      enabling ? targets[0] : { ...targets[0], isActive: true },
+    );
+  };
+
+  const runArchiveDevice = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(activeDevices, targetIds);
+
     const confirmed = await zonesConfirm({
-      title: "أرشفة الجهاز؟",
-      text: `سيتم نقل «${row.name}» إلى الأرشيف.`,
+      title: isBulk ? `أرشفة ${targetIds.length} أجهزة؟` : "أرشفة الجهاز؟",
+      text: isBulk
+        ? `سيتم نقل ${targetIds.length} أجهزة إلى الأرشيف.`
+        : `سيتم نقل «${rowForMessage.name}» إلى الأرشيف.`,
       icon: "warning",
       confirmText: "أرشفة",
       cancelText: "تراجع",
     });
     if (!confirmed) return;
-    setDevicesList((list) =>
-      list.map((d) =>
-        d.id === row.id
-          ? { ...d, isArchived: true, archivedAt: formatFaultDateTime(), isActive: false }
-          : d,
-      ),
-    );
-    if (detailDevice?.id === row.id) {
-      setDeviceDetailOpen(false);
-      setDetailDevice(null);
+
+    let success = 0;
+    for (const row of targets) {
+      const result = await persistDeviceArchive(row.id);
+      if (result.ok) {
+        success += 1;
+        if (detailDevice?.id === row.id) {
+          setDeviceDetailOpen(false);
+          setDetailDevice(null);
+        }
+      }
     }
-    zonesToastSuccess("تمت الأرشفة");
+
+    if (success === 0) {
+      zonesToastError("تعذر أرشفة الأجهزة");
+      return;
+    }
+
+    deviceSelection.clearSelection();
+    setDevicesList(loadDevices());
+    zonesToastSuccess(isBulk ? `تمت أرشفة ${success} من ${targets.length} أجهزة` : "تمت الأرشفة");
+  };
+
+  const archiveDevice = (row) => runArchiveDevice(resolveBulkActionIds(row.id, deviceSelection.selectedIds), row);
+
+  const handleBulkArchiveDevice = () => {
+    const targets = filterItemsByIds(activeDevices, deviceSelection.selectedIds);
+    if (!targets.length) return;
+    runArchiveDevice(deviceSelection.selectedIds, targets[0]);
   };
 
   const openAddPackage = () => {
@@ -440,23 +531,22 @@ export default function DevicesPackagesPage() {
     });
     if (!confirmed) return;
 
-    const nid = Math.max(0, ...packagesList.map((p) => p.id)) + 1;
-    setPackagesList((list) => [
-      ...list,
-      {
-        id: nid,
-        name: patch.name,
-        price: patch.price || "—",
-        hours: patch.hours || "—",
-        deviceLabel: patch.deviceLabel || "—",
-        description: patch.description || "",
-        notes: patch.notes || "",
-        isActive: patch.isActive,
-        createdAt: formatFaultDateTime(),
-      },
-    ]);
+    const result = await persistPackageCreate({
+      name: patch.name,
+      price: patch.price || "—",
+      packageType: patch.packageType || patch.deviceLabel || "ps5",
+      deviceLabel: patch.deviceLabel || patch.packageType || "ps5",
+      description: patch.description || "",
+      isActive: patch.isActive,
+    });
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذر حفظ الباقة");
+      return;
+    }
+
+    setPackagesList(loadPackages());
     closePackageModal();
-    zonesToastSuccess("تم الحفظ");
+    zonesToastSuccess(result.message || "تم الحفظ");
   };
 
   const savePackageEdit = async (patch) => {
@@ -471,17 +561,21 @@ export default function DevicesPackagesPage() {
     const next = {
       name: patch.name || detailPackage.name,
       price: patch.price || "—",
-      hours: patch.hours || "—",
-      deviceLabel: patch.deviceLabel || "—",
+      packageType: patch.packageType || patch.deviceLabel || detailPackage.packageType,
+      deviceLabel: patch.deviceLabel || patch.packageType || detailPackage.deviceLabel,
       description: patch.description || "",
-      notes: patch.notes || "",
       isActive: patch.isActive,
     };
-    setPackagesList((list) =>
-      list.map((p) => (p.id === detailPackage.id ? { ...p, ...next } : p)),
-    );
+
+    const result = await persistPackageUpdate(detailPackage.id, next);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذر حفظ التعديلات");
+      return;
+    }
+
+    setPackagesList(loadPackages());
     closePackageModal();
-    zonesToastSuccess("تم حفظ التعديلات");
+    zonesToastSuccess(result.message || "تم حفظ التعديلات");
   };
 
   const handlePackageSave = (patch) => {
@@ -489,41 +583,109 @@ export default function DevicesPackagesPage() {
     return savePackageEdit(patch);
   };
 
-  const togglePackageActive = async (row) => {
-    const enabling = row.isActive === false;
+  const runTogglePackageActive = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(activePackages, targetIds);
+    const enabling = rowForMessage.isActive === false;
+
     const confirmed = await zonesConfirm({
-      title: enabling ? "تفعيل الباقة؟" : "تعطيل الباقة؟",
-      text: enabling
-        ? `«${row.name}» ستُفعَّل وتظهر للزبائن والأجهزة.`
-        : `«${row.name}» ستُعطَّل ولن تظهر في القوائم.`,
+      title: isBulk
+        ? enabling
+          ? `تفعيل ${targetIds.length} باقات؟`
+          : `تعطيل ${targetIds.length} باقات؟`
+        : enabling
+          ? "تفعيل الباقة؟"
+          : "تعطيل الباقة؟",
+      text: isBulk
+        ? enabling
+          ? `سيتم تفعيل ${targetIds.length} باقات.`
+          : `سيتم تعطيل ${targetIds.length} باقات.`
+        : enabling
+          ? `«${rowForMessage.name}» ستُفعَّل وتظهر للزبائن والأجهزة.`
+          : `«${rowForMessage.name}» ستُعطَّل ولن تظهر في القوائم.`,
       confirmText: enabling ? "تفعيل" : "تعطيل",
       cancelText: "تراجع",
     });
     if (!confirmed) return;
-    setPackagesList((list) =>
-      list.map((p) => (p.id === row.id ? { ...p, isActive: enabling } : p)),
+
+    let success = 0;
+    for (const row of targets) {
+      const result = await persistPackageToggleActive(row.id, enabling);
+      if (result.ok) success += 1;
+    }
+
+    if (success === 0) {
+      zonesToastError("تعذر تحديث حالة الباقات");
+      return;
+    }
+
+    packageSelection.clearSelection();
+    setPackagesList(loadPackages());
+    zonesToastSuccess(
+      isBulk
+        ? enabling
+          ? `تم تفعيل ${success} من ${targets.length} باقات`
+          : `تم تعطيل ${success} من ${targets.length} باقات`
+        : enabling
+          ? "تم تفعيل الباقة"
+          : "تم تعطيل الباقة",
     );
-    zonesToastSuccess(enabling ? "تم تفعيل الباقة" : "تم تعطيل الباقة");
   };
 
-  const archivePackage = async (row) => {
+  const togglePackageActive = (row) =>
+    runTogglePackageActive(resolveBulkActionIds(row.id, packageSelection.selectedIds), row);
+
+  const handleBulkTogglePackageActive = (enabling) => {
+    const targets = filterItemsByIds(activePackages, packageSelection.selectedIds).filter((row) =>
+      enabling ? row.isActive === false : row.isActive !== false,
+    );
+    if (!targets.length) return;
+    runTogglePackageActive(
+      targets.map((row) => row.id),
+      enabling ? targets[0] : { ...targets[0], isActive: true },
+    );
+  };
+
+  const runArchivePackage = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(activePackages, targetIds);
+
     const confirmed = await zonesConfirm({
-      title: "أرشفة الباقة؟",
-      text: `سيتم نقل «${row.name}» إلى الأرشيف.`,
+      title: isBulk ? `أرشفة ${targetIds.length} باقات؟` : "أرشفة الباقة؟",
+      text: isBulk
+        ? `سيتم نقل ${targetIds.length} باقات إلى الأرشيف.`
+        : `سيتم نقل «${rowForMessage.name}» إلى الأرشيف.`,
       icon: "warning",
       confirmText: "أرشفة",
       cancelText: "تراجع",
     });
     if (!confirmed) return;
-    setPackagesList((list) =>
-      list.map((p) =>
-        p.id === row.id
-          ? { ...p, isArchived: true, archivedAt: formatFaultDateTime(), isActive: false }
-          : p,
-      ),
-    );
-    if (detailPackage?.id === row.id) closePackageModal();
-    zonesToastSuccess("تمت الأرشفة");
+
+    let success = 0;
+    for (const row of targets) {
+      const result = await persistPackageArchive(row.id);
+      if (result.ok) {
+        success += 1;
+        if (detailPackage?.id === row.id) closePackageModal();
+      }
+    }
+
+    if (success === 0) {
+      zonesToastError("تعذر أرشفة الباقات");
+      return;
+    }
+
+    packageSelection.clearSelection();
+    setPackagesList(loadPackages());
+    zonesToastSuccess(isBulk ? `تمت أرشفة ${success} من ${targets.length} باقات` : "تمت الأرشفة");
+  };
+
+  const archivePackage = (row) => runArchivePackage(resolveBulkActionIds(row.id, packageSelection.selectedIds), row);
+
+  const handleBulkArchivePackage = () => {
+    const targets = filterItemsByIds(activePackages, packageSelection.selectedIds);
+    if (!targets.length) return;
+    runArchivePackage(packageSelection.selectedIds, targets[0]);
   };
 
   return (
@@ -546,7 +708,7 @@ export default function DevicesPackagesPage() {
               label="في الصيانة"
               value={deviceStats.inMaintenance}
               icon={Power}
-              tone="amber"
+              tone="gray"
               hint="نفس العدد في لوحة موظف الصيانة"
             />
           </div>
@@ -570,10 +732,21 @@ export default function DevicesPackagesPage() {
               </Button>
             </div>
 
+            <TableBulkActionBar
+              count={deviceSelection.count}
+              onClear={deviceSelection.clearSelection}
+              actions={[
+                { label: "تفعيل المحدد", icon: Power, onClick: () => handleBulkToggleDeviceActive(true) },
+                { label: "تعطيل المحدد", icon: PowerOff, onClick: () => handleBulkToggleDeviceActive(false) },
+                { label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchiveDevice },
+              ]}
+            />
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[920px] text-right text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                    <TableSelectHeaderCell {...deviceSelection} />
                     <th className="px-3 py-2.5 font-bold">رقم الجهاز</th>
                     <th className="px-3 py-2.5 font-bold">نوع الجهاز</th>
                     <th className="px-3 py-2.5 font-bold">الباقة التابعة</th>
@@ -587,7 +760,8 @@ export default function DevicesPackagesPage() {
                   {pageDevices.map((row) => {
                     const syncedRow = syncedDevices.find((d) => d.id === row.id) || row;
                     return (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(deviceSelection.isSelected(row.id))}>
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...deviceSelection} />
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100" dir="ltr">
                         {row.name}
                       </td>
@@ -622,7 +796,7 @@ export default function DevicesPackagesPage() {
                   })}
                   {pageDevices.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                      <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
                         لا توجد أجهزة مطابقة.
                       </td>
                     </tr>
@@ -669,12 +843,22 @@ export default function DevicesPackagesPage() {
               </Button>
             </div>
 
+            <TableBulkActionBar
+              count={packageSelection.count}
+              onClear={packageSelection.clearSelection}
+              actions={[
+                { label: "تفعيل المحدد", icon: Power, onClick: () => handleBulkTogglePackageActive(true) },
+                { label: "تعطيل المحدد", icon: PowerOff, onClick: () => handleBulkTogglePackageActive(false) },
+                { label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchivePackage },
+              ]}
+            />
+
             <div className="overflow-x-auto">
               <table className="w-full min-w-[960px] text-right text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                    <TableSelectHeaderCell {...packageSelection} />
                     <th className="px-3 py-2.5 font-bold">اسم الباقة</th>
-                    <th className="px-3 py-2.5 font-bold">المدة</th>
                     <th className="px-3 py-2.5 font-bold">السعر</th>
                     <th className="px-3 py-2.5 font-bold">جهاز مستخدم</th>
                     <th className="px-3 py-2.5 font-bold">تاريخ الإضافة</th>
@@ -684,9 +868,9 @@ export default function DevicesPackagesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {pagePackages.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(packageSelection.isSelected(row.id))}>
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...packageSelection} />
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
-                      <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{row.hours}</td>
                       <td className="px-3 py-3 font-bold text-[#6B5478]">{row.price}</td>
                       <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{row.deviceLabel}</td>
                       <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">

@@ -2,7 +2,6 @@ import {
   buildExpenseSeries,
   buildRevenueSeries,
   deriveExpenseTotals,
-  deriveProfitHighlights,
   deriveRevenueTotals,
   formatCurrency,
 } from "./financeData";
@@ -44,25 +43,6 @@ export function deriveOverviewTotals(year, month) {
     revDelta: rev.revDelta,
     expDelta: exp.expDelta,
     netDelta: ((net - prevNet) / Math.abs(prevNet || 1)) * 100,
-  };
-}
-
-export function deriveOverviewInsights(year, month, series) {
-  const highlights = deriveProfitHighlights(year, month);
-  let best = series[0];
-  let worst = series[0];
-  for (const p of series) {
-    if (!best || p.netProfit > best.netProfit) best = p;
-    if (!worst || p.netProfit < worst.netProfit) worst = p;
-  }
-  return {
-    topDevice: highlights.topDevice,
-    topDeviceProfit: highlights.topDeviceProfit,
-    bestLabel: best?.label ?? "—",
-    bestProfit: best?.netProfit ?? 0,
-    worstLabel: worst?.label ?? "—",
-    worstProfit: worst?.netProfit ?? 0,
-    dailyBookings: highlights.dailyBookings,
   };
 }
 

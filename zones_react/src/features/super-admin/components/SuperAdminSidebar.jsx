@@ -15,7 +15,7 @@ import {
 } from "lucide-react";
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
 import { SUPER_ADMIN_ROUTES } from "../data/superAdminConstants";
-import { clearSuperAdminSession } from "../data/superAdminAuth";
+import { logoutSuperAdmin } from "../data/superAdminAuth";
 import { ZONES_LOGO_SRC } from "../data/superAdminDashboardData";
 
 const SINGLE_ITEMS_TOP = [
@@ -35,6 +35,7 @@ const GROUPS = [
     label: "إدارة المستخدمين",
     icon: Users,
     children: [
+      { label: "الموظفون والإدارة", path: SUPER_ADMIN_ROUTES.staffManagement },
       { label: "مدراء الصالات", path: SUPER_ADMIN_ROUTES.managers },
       { label: "الموظفون", path: SUPER_ADMIN_ROUTES.employees },
     ],
@@ -95,7 +96,7 @@ export default function SuperAdminSidebar({ pendingCount = 0, onNavigate }) {
       danger: true,
     });
     if (!confirmed) return;
-    clearSuperAdminSession();
+    await logoutSuperAdmin();
     onNavigate?.();
     navigate(SUPER_ADMIN_ROUTES.login, { replace: true });
   };

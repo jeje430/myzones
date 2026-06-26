@@ -1,6 +1,5 @@
 import { findUserByEmail, getUserById } from "./mockUsersStorage";
 import { getSuperAdminState } from "../../super-admin/data/superAdminStorage";
-import { authenticateSuperAdmin } from "../../super-admin/data/superAdminAuth";
 import { normalizeGmailEmail } from "../../../shared/utils/normalizeGmailEmail";
 
 export const LOGIN_BLOCK_CODES = {
@@ -70,10 +69,6 @@ export function getAccountBlockCode(user) {
 
 export function attemptLogin(email, password) {
   const normalizedEmail = normalizeGmailEmail(email);
-  const superAdmin = authenticateSuperAdmin(normalizedEmail, password);
-  if (superAdmin) {
-    return { ok: true, accountType: "super_admin", user: superAdmin };
-  }
 
   const user = findUserByEmail(normalizedEmail);
   if (!user || user.password !== password) {

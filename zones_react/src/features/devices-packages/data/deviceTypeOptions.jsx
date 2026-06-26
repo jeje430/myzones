@@ -1,40 +1,56 @@
-import { Gamepad2, Glasses, Monitor } from "lucide-react";
-import { DEVICE_TYPE_LABEL } from "./deviceNaming";
-import { collectDeviceTypeEntries } from "./customDeviceTypesStorage";
+import { DEVICE_TYPES } from "./deviceTypesConfig";
+import { CarFront, Gamepad2, Glasses, Monitor } from "lucide-react";
 
 const ICONS = {
-  ps5: <Gamepad2 size={16} strokeWidth={2} />,
-  xbox: <Gamepad2 size={16} strokeWidth={2} />,
-  vr: <Glasses size={16} strokeWidth={2} />,
-  pc: <Monitor size={16} strokeWidth={2} />,
-  custom: <Gamepad2 size={16} strokeWidth={2} />,
+  ps5: Gamepad2,
+  ps4: Gamepad2,
+  xbox: Gamepad2,
+  vr: Glasses,
+  pc: Monitor,
+  sim: CarFront,
 };
 
-export const DEVICE_TYPE_SELECT_OPTIONS = [
-  { value: "ps5", label: DEVICE_TYPE_LABEL.ps5, icon: ICONS.ps5 },
-  { value: "xbox", label: DEVICE_TYPE_LABEL.xbox, icon: ICONS.xbox },
-  { value: "vr", label: DEVICE_TYPE_LABEL.vr, icon: ICONS.vr },
-  { value: "pc", label: DEVICE_TYPE_LABEL.pc, icon: ICONS.pc },
-];
+/** @deprecated Use DEVICE_TYPES from deviceTypesConfig */
+export const DEVICE_TYPE_SELECT_OPTIONS = DEVICE_TYPES.map((row) => ({
+  value: row.code,
+  label: row.label,
+  prefix: row.prefix,
+  Icon: ICONS[row.code] ?? Gamepad2,
+}));
 
-/** الأنواع الافتراضية + المحفوظة + المستخدمة في الأجهزة */
-export function buildDeviceTypeOptions(devices = []) {
-  const map = new Map();
+export function buildDeviceTypeOptions() {
+  return DEVICE_TYPE_SELECT_OPTIONS;
+}
 
-  DEVICE_TYPE_SELECT_OPTIONS.forEach((option) => {
-    map.set(option.label.toLowerCase(), option);
-  });
+/** توحيد التسميات القديمة (PlayStation → PlayStation 5) */
+const LEGACY_LABEL_TO_CODE = Object.freeze({
+  playstation: "ps5",
+  "play station": "ps5",
+  "playstation 5": "ps5",
+  "playstation 4": "ps4",
+  "gaming pc": "pc",
+  "pc gaming": "pc",
+  "vr headset": "vr",
+  "virtual reality": "vr",
+  xbox: "xbox",
+  "simulator racing": "sim",
+});
 
-  collectDeviceTypeEntries(devices).forEach((row) => {
-    const key = row.typeLabel.toLowerCase();
-    if (map.has(key)) return;
-    map.set(key, {
-      value: row.type,
-      label: row.typeLabel,
-      icon: ICONS.custom,
-      custom: true,
-    });
-  });
+export function resolveCanonicalDeviceType(type, typeLabel) {
+  const normalizedType = String(type || "").trim().toLowerCase();
+  if (DEVICE_TYPES.some((row) => row.code === normalizedType)) {
+    const row = DEVICE_TYPES.find((r) => r.code === normalizedType);
+    return { type: row.code, typeLabel: row.label };
+  }
 
-  return Array.from(map.values());
+  const fromLabel = LEGACY_LABEL_TO_CODE[String(typeLabel || "").trim().toLowerCase()];
+  if (fromLabel) {
+    const row = DEVICE_TYPES.find((r) => r.code === fromLabel);
+    return { type: row.code, typeLabel: row.label };
+  }
+
+  return {
+    type: normalizedType || "ps5",
+    typeLabel: String(typeLabel || "").trim() || DEVICE_TYPES[0].label,
+  };
 }

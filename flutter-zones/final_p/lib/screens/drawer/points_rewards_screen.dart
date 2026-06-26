@@ -6,6 +6,7 @@ import '../../core/theme/zonez_colors.dart';
 import '../../models/reward_milestone.dart';
 import '../../providers/app_state_provider.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 
 class PointsRewardsScreen extends StatelessWidget {
   const PointsRewardsScreen({super.key});
@@ -95,7 +96,9 @@ class PointsRewardsScreen extends StatelessWidget {
       body: Stack(
         children: [
           const CircuitBackground(),
-          ListView(
+          ZonezScreen(
+            top: false,
+            child: ListView(
             padding: const EdgeInsets.all(20),
             children: [
               Container(
@@ -205,6 +208,7 @@ class PointsRewardsScreen extends StatelessWidget {
                 ),
               ],
             ],
+          ),
           ),
         ],
       ),

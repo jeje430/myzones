@@ -8,7 +8,8 @@ import { setDeviceFault } from "../../devices-packages/data/devicesStorage";
 import { getAuthSession } from "../../auth/data/mockUsersStorage";
 import { FAULT_STATUSES, FAULT_TYPES, formatFaultDateTime, toDateInputValue } from "../../maintenance/data/faultMeta";
 import { addFault, nextFaultId, loadFaults } from "../../maintenance/data/maintenanceFaultsStorage";
-import { MAINTENANCE_EMPLOYEE_ROUTES } from "../data/maintenanceEmployeeRoutes";
+import { useMaintenanceEmployeeRoutes } from "../data/maintenanceEmployeeRoutes";
+import { getActiveAccountIdFromUrl } from "../../auth/data/accountSessionStorage";
 
 const labelCls = "mb-1.5 block text-[11px] font-bold text-gray-500 dark:text-gray-400";
 const inputCls =
@@ -18,7 +19,8 @@ const formGrid = "grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3";
 
 export default function MaintenanceRegisterFaultPage() {
   const navigate = useNavigate();
-  const session = getAuthSession();
+  const { routes } = useMaintenanceEmployeeRoutes();
+  const session = getAuthSession(getActiveAccountIdFromUrl() ?? undefined);
   const devices = useMemo(() => loadSelectableDevicesForFault(), []);
   const previewId = useMemo(() => nextFaultId(loadFaults()), []);
 
@@ -54,7 +56,7 @@ export default function MaintenanceRegisterFaultPage() {
     }
 
     zonesToastSuccess("تم حفظ سجل العطل بنجاح.", "تم التسجيل");
-    navigate(MAINTENANCE_EMPLOYEE_ROUTES.faults);
+    navigate(routes.faults);
   };
 
   return (

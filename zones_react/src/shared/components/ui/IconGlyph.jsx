@@ -3,6 +3,7 @@ const TONES = {
   green: "text-emerald-600 dark:text-emerald-400",
   red: "text-red-600 dark:text-red-400",
   amber: "text-amber-600 dark:text-amber-400",
+  gray: "text-gray-600 dark:text-gray-400",
   rose: "text-rose-500 dark:text-rose-400",
   violet: "text-violet-500 dark:text-violet-400",
 };

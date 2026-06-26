@@ -1,19 +1,19 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { GitBranch, Users } from "lucide-react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import Button from "../../super-admin/components/ui/Button";
-import { TournamentBreadcrumb } from "./TournamentDetailUi";
-import { isBracketReady } from "../bracket/bracketStorage";
-import { formatParticipantDate } from "../data/participantMeta";
 import {
-  TOURNAMENT_PARTICIPANTS_EVENT,
-  buildTournamentSlotGrid,
-  countParticipantsForTournament,
-  getTournamentCapacity,
-  loadTournamentParticipants,
-} from "../data/tournamentParticipantsStorage";
-import { loadTournamentRows, TOURNAMENTS_LIST_EVENT } from "../tournamentsListStorage";
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
+import { TournamentBreadcrumb } from "./TournamentDetailUi";
+import {
+  fetchManagerTournament,
+  fetchTournamentParticipants,
+} from "../data/managerTournamentsApi";
 
 /**
  * @param {object} props
@@ -27,39 +27,68 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
   const navigate = useNavigate();
   const location = useLocation();
   const numericId = Number(id);
-  const [refreshKey, setRefreshKey] = useState(0);
+
+  const [tournament, setTournament] = useState(location.state?.tournament ?? null);
+  const [participants, setParticipants] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+
+  const reload = useCallback(async () => {
+    if (!Number.isFinite(numericId)) return;
+
+    setError("");
+    const [tResult, pResult] = await Promise.all([
+      fetchManagerTournament(numericId),
+      fetchTournamentParticipants(numericId),
+    ]);
+
+    if (tResult.ok) setTournament(tResult.tournament);
+    else setError((prev) => prev || tResult.error || "تعذر تحميل البطولة.");
+
+    if (pResult.ok) setParticipants(pResult.participants);
+    else setError((prev) => prev || pResult.error || "تعذر تحميل المشاركين.");
+
+    setLoading(false);
+  }, [numericId]);
 
   useEffect(() => {
-    const sync = () => setRefreshKey((k) => k + 1);
-    window.addEventListener(TOURNAMENTS_LIST_EVENT, sync);
-    window.addEventListener(TOURNAMENT_PARTICIPANTS_EVENT, sync);
-    window.addEventListener("focus", sync);
+    reload();
+    const poll = window.setInterval(reload, 5000);
+    const onFocus = () => reload();
+    window.addEventListener("focus", onFocus);
     return () => {
-      window.removeEventListener(TOURNAMENTS_LIST_EVENT, sync);
-      window.removeEventListener(TOURNAMENT_PARTICIPANTS_EVENT, sync);
-      window.removeEventListener("focus", sync);
+      window.clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
     };
-  }, []);
+  }, [reload]);
 
-  const tournament = useMemo(() => {
-    const list = loadTournamentRows();
-    const fromState = location.state?.tournament;
-    const fromList = list.find((r) => r.id === numericId);
-    if (fromList) return fromList;
-    if (fromState && Number(fromState.id) === numericId) return fromState;
-    return null;
-  }, [numericId, location.key, location.state, refreshKey]);
+  const capacity = tournament?.participants ?? 0;
+  const registered = useMemo(
+    () => participants.filter((p) => p.status === "registered"),
+    [participants],
+  );
+  const filled = tournament?.registeredCount ?? registered.length;
+  const isFull = capacity > 0 && filled >= capacity;
 
-  const capacity = tournament ? getTournamentCapacity(tournament.id) : 0;
-  const filled = tournament ? countParticipantsForTournament(tournament.id) : 0;
-  const isFull = tournament ? filled >= capacity : false;
   const slots = useMemo(() => {
-    if (!tournament) return [];
-    loadTournamentParticipants();
-    return buildTournamentSlotGrid(tournament.id, capacity);
-  }, [tournament, capacity, refreshKey]);
+    const sorted = [...registered].sort(
+      (a, b) => new Date(a.registered_at || 0) - new Date(b.registered_at || 0),
+    );
+    return Array.from({ length: capacity || 0 }, (_, i) => ({
+      slotIndex: i + 1,
+      participant: sorted[i] ?? null,
+    }));
+  }, [registered, capacity]);
 
-  const backPath = location.state?.from === "list" ? routes.tournaments : routes.tournaments;
+  const selectableParticipants = useMemo(
+    () =>
+      slots
+        .filter((s) => s.participant?.id != null)
+        .map((s) => ({ ...s.participant, id: s.participant.id })),
+    [slots],
+  );
+  const pageIds = useMemo(() => selectableParticipants.map((p) => p.id), [selectableParticipants]);
+  const selection = useTableSelection({ items: selectableParticipants, pageIds });
 
   const openBracket = () => {
     if (!tournament || !isFull) return;
@@ -68,14 +97,34 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
     });
   };
 
-  if (!Number.isFinite(numericId) || !tournament) {
+  const formatDate = (iso) => {
+    if (!iso) return "—";
+    try {
+      return new Date(iso).toLocaleString("ar-LY");
+    } catch {
+      return iso;
+    }
+  };
+
+  if (!Number.isFinite(numericId)) {
     return (
       <>
         <PageHeader title="قائمة المشاركين" onBack={() => navigate(routes.tournaments)} backLabel="رجوع" />
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
-          <p>تعذر تحميل قائمة المشاركين.</p>
+          <p>معرّف البطولة غير صالح.</p>
+        </div>
+      </>
+    );
+  }
+
+  if (!loading && !tournament) {
+    return (
+      <>
+        <PageHeader title="قائمة المشاركين" onBack={() => navigate(routes.tournaments)} backLabel="رجوع" />
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          <p>{error || "تعذر تحميل قائمة المشاركين."}</p>
           <Link to={routes.tournaments} className="mt-2 inline-block text-xs font-bold text-[#6B5478]">
-            العودة لعرض البطولات
+            العودة للبطولات
           </Link>
         </div>
       </>
@@ -88,20 +137,28 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
     <>
       <PageHeader
         title="قائمة المشاركين"
-        description={`${tournament.name} — ${filled} / ${capacity} مشترك`}
-        onBack={() => navigate(backPath)}
-        backLabel="رجوع لعرض البطولات"
+        description={
+          tournament ? `${tournament.name} — ${filled} / ${capacity} مشترك` : "جاري التحميل..."
+        }
+        onBack={() => navigate(routes.tournaments)}
+        backLabel="رجوع للبطولات"
       />
 
       <section className="space-y-4">
-        <TournamentBreadcrumb tournamentName={tournament.name} view="participants" />
+        {tournament ? <TournamentBreadcrumb tournamentName={tournament.name} view="participants" /> : null}
+
+        {error ? (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600 dark:border-red-900/40 dark:bg-red-950/20">
+            {error}
+          </p>
+        ) : null}
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
             <div className="flex items-center gap-2">
               <Users size={16} className="text-[#6B5478]" />
               <h2 className="text-sm font-extrabold text-gray-900 dark:text-white">
-                مشتركو «{tournament.name}»
+                مشتركو «{tournament?.name || "..."}»
               </h2>
             </div>
             <span
@@ -118,7 +175,9 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
           <div className="border-b border-gray-100 px-5 py-3 dark:border-gray-800">
             <div className="mb-1 flex justify-between text-[11px] font-bold text-gray-500">
               <span>تقدم التسجيل من التطبيق</span>
-              <span dir="ltr">{filled}/{capacity}</span>
+              <span dir="ltr">
+                {filled}/{capacity}
+              </span>
             </div>
             <div className="h-2 overflow-hidden rounded-full bg-gray-100 dark:bg-gray-800">
               <div
@@ -128,64 +187,82 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
             </div>
             <p className="mt-2 text-[11px] text-gray-500">
               {readOnly
-                ? "عرض فقط — التسجيل يتم من تطبيق الزبون حسب قوانين البطولة."
-                : "كل طلب من التطبيق يملأ خانة بالترتيب (1، 2، 3…). عند الاكتمال تُوزَّع الأسماء تلقائياً على الشجرة."}
+                ? "عرض فقط — التسجيل يتم من تطبيق الزبون."
+                : "كل طلب من التطبيق يملأ خانة بالترتيب. عند الاكتمال تُفعَّل شجرة البطولة."}
             </p>
           </div>
 
-          <div className="overflow-x-auto p-5">
-            <table className="w-full min-w-[720px] text-right text-xs">
-              <thead>
-                <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                  <th className="px-3 py-2.5 font-bold">#</th>
-                  <th className="px-3 py-2.5 font-bold">اسم المشترك</th>
-                  <th className="px-3 py-2.5 font-bold">البريد</th>
-                  <th className="px-3 py-2.5 font-bold">الهاتف</th>
-                  <th className="px-3 py-2.5 font-bold">تاريخ التسجيل</th>
-                  <th className="px-3 py-2.5 font-bold">الحالة</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-                {slots.map(({ slotIndex, participant }) => (
-                  <tr
-                    key={slotIndex}
-                    className={
-                      participant
-                        ? "transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                        : "bg-gray-50/50 dark:bg-gray-800/20"
-                    }
-                  >
-                    <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
-                      {slotIndex}
-                    </td>
-                    <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">
-                      {participant?.fullName || "— فارغ —"}
-                    </td>
-                    <td className="px-3 py-3 text-gray-600" dir="ltr">
-                      {participant?.email || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-gray-600" dir="ltr">
-                      {participant?.phone || "—"}
-                    </td>
-                    <td className="px-3 py-3 text-gray-600">
-                      {participant ? formatParticipantDate(participant.registeredAt) : "—"}
-                    </td>
-                    <td className="px-3 py-3">
-                      {participant ? (
-                        <span className="inline-flex rounded-full bg-[#6B5478]/12 px-2.5 py-0.5 text-[11px] font-bold text-[#6B5478]">
-                          مسجّل
-                        </span>
-                      ) : (
-                        <span className="inline-flex rounded-full bg-gray-200 px-2.5 py-0.5 text-[11px] font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-400">
-                          بانتظار التطبيق
-                        </span>
-                      )}
-                    </td>
+          {loading && slots.length === 0 ? (
+            <p className="px-5 py-10 text-center text-sm text-gray-500">جاري تحميل المشاركين...</p>
+          ) : (
+            <div className="overflow-x-auto p-5">
+              <table className="w-full min-w-[720px] text-right text-xs">
+                <thead>
+                  <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                    <TableSelectHeaderCell {...selection} />
+                    <th className="px-3 py-2.5 font-bold">#</th>
+                    <th className="px-3 py-2.5 font-bold">اسم المشترك</th>
+                    <th className="px-3 py-2.5 font-bold">البريد</th>
+                    <th className="px-3 py-2.5 font-bold">تاريخ التسجيل</th>
+                    <th className="px-3 py-2.5 font-bold">الحالة</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                  {slots.map(({ slotIndex, participant }) => (
+                    <tr
+                      key={slotIndex}
+                      className={
+                        participant?.id
+                          ? selectableRowClass(selection.isSelected(participant.id))
+                          : participant
+                            ? "transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                            : "bg-gray-50/50 dark:bg-gray-800/20"
+                      }
+                    >
+                      {participant?.id ? (
+                        <TableSelectRowCell
+                          id={participant.id}
+                          ariaLabel={`تحديد ${participant.name}`}
+                          {...selection}
+                        />
+                      ) : (
+                        <td className="w-[44px] px-3 py-3" />
+                      )}
+                      <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
+                        {slotIndex}
+                      </td>
+                      <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">
+                        {participant?.name || "— فارغ —"}
+                      </td>
+                      <td className="px-3 py-3 text-gray-600" dir="ltr">
+                        {participant?.email || "—"}
+                      </td>
+                      <td className="px-3 py-3 text-gray-600">
+                        {participant ? formatDate(participant.registered_at) : "—"}
+                      </td>
+                      <td className="px-3 py-3">
+                        {participant ? (
+                          <span
+                            className={`inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                              participant.status === "withdrawn"
+                                ? "bg-red-500/10 text-red-600"
+                                : "bg-[#6B5478]/12 text-[#6B5478]"
+                            }`}
+                          >
+                            {participant.status_label || "مسجّل"}
+                          </span>
+                        ) : (
+                          <span className="inline-flex rounded-full bg-gray-200 px-2.5 py-0.5 text-[11px] font-bold text-gray-500 dark:bg-gray-700 dark:text-gray-400">
+                            بانتظار التطبيق
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -203,17 +280,13 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
                   الشجرة فارغة — لم يكتمل عدد المشاركين بعد
                 </p>
                 <p className="mt-1 text-xs text-gray-500">
-                  يتبقى {capacity - filled} مقعداً من أصل {capacity}. عند اكتمال التسجيل تُولَّد الشجرة
-                  تلقائياً وتوزَّع الأسماء عشوائياً.
+                  يتبقى {Math.max(0, capacity - filled)} مقعداً من أصل {capacity}.
                 </p>
               </div>
             ) : (
               <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-5 text-center dark:border-emerald-900/40 dark:bg-emerald-950/20">
                 <p className="text-sm font-bold text-emerald-800 dark:text-emerald-300">
                   اكتملت البطولة — الشجرة جاهزة ({capacity} مشترك)
-                </p>
-                <p className="mt-1 text-xs text-emerald-700/80 dark:text-emerald-400/80">
-                  تم توزيع المشاركين تلقائياً على جدول الإقصاء.
                 </p>
               </div>
             )}
@@ -223,16 +296,11 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
                 size="sm"
                 icon={GitBranch}
                 onClick={openBracket}
-                disabled={!isFull || !isBracketReady(tournament)}
+                disabled={!isFull || !tournament}
               >
                 عرض شجرة
               </Button>
             </div>
-            {!isFull ? (
-              <p className="text-center text-[11px] text-gray-400">
-                زر «عرض شجرة» يُفعَّل بعد اكتمال {capacity} مشتركاً.
-              </p>
-            ) : null}
           </div>
         </div>
       </section>

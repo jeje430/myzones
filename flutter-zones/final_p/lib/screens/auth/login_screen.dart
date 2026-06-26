@@ -1,13 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/zonez_colors.dart';
-import '../../models/auth_exception.dart';
-import '../../providers/app_state_provider.dart';
-import '../../providers/auth_provider.dart';
-import '../../providers/zones_data_provider.dart';
+import '../../features/auth/bloc/auth_bloc.dart';
+import '../../features/auth/bloc/auth_event.dart';
+import '../../features/auth/bloc/auth_state.dart';
 import '../../widgets/auth_header.dart';
 import '../../widgets/circuit_background.dart';
 import '../../widgets/neon_gradient_button.dart';
@@ -125,32 +124,35 @@ class _LoginScreenState extends State<LoginScreen> {
     final form = _formKey.currentState;
     if (form == null || !form.validate()) return;
 
-    final auth = context.read<AuthProvider>();
-    final appState = context.read<AppStateProvider>();
-    final zonesData = context.read<ZonesDataProvider>();
+    context.read<AuthBloc>().add(
+          AuthLoginRequested(
+            email: _emailController.text.trim(),
+            password: _passwordController.text,
+          ),
+        );
+  }
 
-    try {
-      await auth.login(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        appState: appState,
-        zonesData: zonesData,
-      );
-
-      if (!mounted) return;
-      Navigator.pushReplacementNamed(context, AppRoutes.home);
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      setState(() => _authError = e.message);
-    }
+  void _googleSignIn() {
+    context.read<AuthBloc>().add(const AuthGoogleSignInRequested());
   }
 
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final auth = context.watch<AuthProvider>();
 
-    return Scaffold(
+    return BlocConsumer<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthAuthenticated) {
+          Navigator.pushReplacementNamed(context, AppRoutes.home);
+        }
+        if (state is AuthFailure) {
+          setState(() => _authError = state.message);
+        }
+      },
+      builder: (context, state) {
+        final isBusy = state is AuthLoading;
+
+        return Scaffold(
       body: Stack(
         children: [
           const CircuitBackground(),
@@ -254,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     const SizedBox(height: 16),
-                    auth.isBusy
+                    isBusy
                         ? const Center(
                             child: CircularProgressIndicator(
                               color: ZonezColors.neonPurple,
@@ -264,6 +266,21 @@ class _LoginScreenState extends State<LoginScreen> {
                             label: 'تسجيل الدخول',
                             onPressed: _login,
                           ),
+                    const SizedBox(height: 12),
+                    if (!isBusy)
+                      OutlinedButton.icon(
+                        onPressed: _googleSignIn,
+                        icon: const Icon(Icons.g_mobiledata, size: 22),
+                        label: Text(
+                          'تسجيل الدخول عبر Google',
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: onSurface,
+                          side: BorderSide(color: ZonezColors.neonPurple.withValues(alpha: 0.5)),
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                        ),
+                      ),
                     const SizedBox(height: 20),
                     Center(
                       child: TextButton(
@@ -304,6 +321,8 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
         ],
       ),
+        );
+      },
     );
   }
 }

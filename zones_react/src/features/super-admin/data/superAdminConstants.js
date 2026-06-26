@@ -1,15 +1,17 @@
-export const SUPER_ADMIN_EMAIL = "superadmin@gmail.com";
-export const SUPER_ADMIN_PASSWORD = "12345678";
-
 export const DEFAULT_COMMISSION_RATE = 3;
 
 export const SUPER_ADMIN_ROUTES = {
-  login: "/auth/login",
+  login: "/super-admin/login",
+  register: "/super-admin/register",
+  forgotPassword: "/super-admin/forgot-password",
+  otp: "/super-admin/otp",
+  resetPassword: "/super-admin/reset-password",
   dashboard: "/super-admin/dashboard",
   pending: "/super-admin/pending-requests",
   halls: "/super-admin/halls",
   managers: "/super-admin/managers",
   employees: "/super-admin/employees",
+  staffManagement: "/super-admin/staff-management",
   archive: "/super-admin/archive",
   archiveHalls: "/super-admin/archive/halls",
   archiveManagers: "/super-admin/archive/managers",

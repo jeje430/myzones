@@ -1,10 +1,11 @@
 import TournamentParticipantsSection from "../../tournaments/components/TournamentParticipantsSection";
-import { RECEPTION_EMPLOYEE_ROUTES } from "../data/receptionEmployeeRoutes";
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 
 export default function ReceptionTournamentParticipantsPage() {
+  const { routes } = useReceptionEmployeeRoutes();
   return (
     <TournamentParticipantsSection
-      getParticipantsPath={(id) => RECEPTION_EMPLOYEE_ROUTES.tournamentParticipants(id)}
+      getParticipantsPath={(id) => routes.tournamentParticipants(id)}
     />
   );
 }

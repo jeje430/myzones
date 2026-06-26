@@ -15,8 +15,8 @@ import {
 } from "../data/maintenanceDashboardData";
 
 const KPI_FILTERS = [
-  { key: "waiting", label: "في الانتظار", hint: "بانتظار بدء الإصلاح", icon: Clock, tone: "red", kpiKey: "waitingFaults" },
-  { key: "inProgress", label: "قيد الإصلاح", hint: "جاري العمل عليها", icon: Wrench, tone: "amber", kpiKey: "inProgressFaults" },
+  { key: "waiting", label: "في الانتظار", hint: "بانتظار بدء الإصلاح", icon: Clock, tone: "gray", kpiKey: "waitingFaults" },
+  { key: "inProgress", label: "قيد الإصلاح", hint: "جاري العمل عليها", icon: Wrench, tone: "gray", kpiKey: "inProgressFaults" },
   { key: "resolved", label: "تم الإصلاح", hint: "في السجل", icon: CheckCircle2, tone: "green", kpiKey: "resolvedFaults" },
 ];
 

@@ -1,55 +1,88 @@
 import '../data/dto/lounge_catalog_dto.dart';
-import '../data/seeds/lounge_catalog_seed.dart';
+import '../data/repositories/lounge_catalog_repository.dart';
 import '../models/lounge_model.dart';
 import '../models/lounge_rating.dart';
-import '../utils/booking_time_utils.dart';
+import '../models/device_rating.dart';
+import '../models/lounge_comment.dart';
 
-/// Mock lounge catalog and rating storage — backed by API-shaped seed data.
-/// Replace [LoungeCatalogRepository.fetchCatalog] with HTTP when the dashboard API is live.
+export '../data/repositories/booking_repository.dart'
+    show DeviceBookingConfirmation, BookingRepository;
+
+/// In-memory lounge cache backed by Laravel GET /api/lounges.
 class LoungeDataStore {
   LoungeDataStore._();
   static final LoungeDataStore instance = LoungeDataStore._();
 
+  final LoungeCatalogRepository _repository = LoungeCatalogRepository.instance;
+
   final Map<String, LoungeModel> _lounges = {};
   final Map<String, List<StoredCategoryRating>> _ratingsByLounge = {};
+  final Map<String, List<LoungeComment>> _commentsByLounge = {};
+  bool _isLoaded = false;
+  Future<void>? _loadFuture;
 
-  void seedIfEmpty() {
-    if (_lounges.isNotEmpty) return;
+  Future<void> ensureLoaded({bool forceRefresh = false}) {
+    if (_isLoaded && !forceRefresh) {
+      return Future.value();
+    }
 
-    final catalog = kLoungeCatalogApiPayload
-        .map(LoungeCatalogDto.fromJson)
-        .toList();
+    final pending = _loadFuture;
+    if (pending != null && !forceRefresh) {
+      return pending;
+    }
 
-    for (final dto in catalog) {
-      _lounges[dto.id] = LoungeCatalogMapper.toLounge(dto);
-      _ratingsByLounge[dto.id] = LoungeCatalogMapper.toStoredReviews(dto);
-      _recalculateAverages(dto.id);
+    return _loadFuture = _loadFromApi(forceRefresh: forceRefresh);
+  }
+
+  Future<void> _loadFromApi({required bool forceRefresh}) async {
+    try {
+      final catalog = await _repository.fetchCatalog(forceRefresh: forceRefresh);
+
+      final nextLounges = <String, LoungeModel>{};
+      final nextRatings = <String, List<StoredCategoryRating>>{};
+      final nextComments = <String, List<LoungeComment>>{};
+
+      for (final dto in catalog) {
+        nextLounges[dto.id] = LoungeCatalogMapper.toLounge(dto);
+        nextRatings[dto.id] = LoungeCatalogMapper.toStoredReviews(dto);
+        nextComments[dto.id] = LoungeCatalogMapper.toStoredComments(dto);
+      }
+
+      _lounges
+        ..clear()
+        ..addAll(nextLounges);
+      _ratingsByLounge
+        ..clear()
+        ..addAll(nextRatings);
+      _commentsByLounge
+        ..clear()
+        ..addAll(nextComments);
+
+      _isLoaded = true;
+    } finally {
+      _loadFuture = null;
     }
   }
 
-  List<LoungeModel> getAllLounges() {
-    seedIfEmpty();
-    return _lounges.values.toList();
-  }
+  List<LoungeModel> getAllLounges() => _lounges.values.toList();
 
-  LoungeModel? getLounge(String id) {
-    seedIfEmpty();
-    return _lounges[id];
-  }
+  LoungeModel? getLounge(String id) => _lounges[id];
 
   LoungeModel? getLoungeByName(String name) {
-    seedIfEmpty();
     for (final lounge in _lounges.values) {
       if (lounge.name == name) return lounge;
     }
     return null;
   }
 
+  List<LoungeComment> getComments(String loungeId) {
+    return List<LoungeComment>.from(_commentsByLounge[loungeId] ?? []);
+  }
+
   List<StoredCategoryRating> getReviews(
     String loungeId, {
     RatingCategory? category,
   }) {
-    seedIfEmpty();
     final lounge = _lounges[loungeId];
     final ratings = _ratingsByLounge[loungeId] ?? [];
     final supported = lounge?.supportedRatingCategories.toSet() ?? {};
@@ -66,7 +99,6 @@ class LoungeDataStore {
   }
 
   double averageForCategory(String loungeId, RatingCategory category) {
-    seedIfEmpty();
     final lounge = _lounges[loungeId];
     if (lounge != null && !lounge.supportedRatingCategories.contains(category)) {
       return 0;
@@ -80,153 +112,89 @@ class LoungeDataStore {
     return ratings.reduce((a, b) => a + b) / ratings.length;
   }
 
-  void submitRating(LoungeRatingSubmission submission) {
-    seedIfEmpty();
-    final lounge = _lounges[submission.loungeId];
-    if (lounge == null) return;
-
-    final supported = lounge.supportedRatingCategories.toSet();
-    final stored = _ratingsByLounge.putIfAbsent(submission.loungeId, () => []);
-
-    for (final input in submission.categories) {
-      if (!input.isValid) continue;
-      if (!supported.contains(input.category)) continue;
-      stored.add(
-        StoredCategoryRating(
-          category: input.category,
-          stars: input.stars,
-          comment: input.comment.trim(),
-          submittedAt: submission.submittedAt,
-        ),
-      );
-    }
-    _recalculateAverages(submission.loungeId);
-  }
-
-  void _recalculateAverages(String loungeId) {
-    final lounge = _lounges[loungeId];
-    if (lounge == null) return;
-
-    final generalAvg = averageForCategory(loungeId, RatingCategory.general);
-    final generalCount = _ratingsByLounge[loungeId]
-            ?.where((r) => r.category == RatingCategory.general)
-            .length ??
-        0;
-
-    final updatedDevices = lounge.devices.map((device) {
-      final category = RatingCategory.fromDeviceType(device.type);
-      if (category == null || !device.isAvailable) return device;
-      final avg = averageForCategory(loungeId, category);
-      return device.copyWith(
-        averageRating: avg > 0
-            ? double.parse(avg.toStringAsFixed(1))
-            : device.averageRating,
-      );
-    }).toList();
-
-    _lounges[loungeId] = lounge.copyWith(
-      loungeAverageRating: generalAvg > 0
-          ? double.parse(generalAvg.toStringAsFixed(1))
-          : lounge.loungeAverageRating,
-      reviewCount: generalCount > 0 ? generalCount : lounge.reviewCount,
-      devices: updatedDevices,
-    );
-  }
-
-  AvailabilityResult checkAvailability({
+  Future<void> submitCombinedRatings({
     required String loungeId,
-    required DeviceType deviceType,
-    required DateTime date,
-  }) {
-    seedIfEmpty();
-    final lounge = _lounges[loungeId];
-    if (lounge == null) {
-      return const AvailabilityResult(
-        isAvailable: false,
-        message: 'الصالة غير موجودة',
-      );
-    }
-
-    final device = lounge.deviceByType(deviceType);
-    if (device == null || !device.isAvailable) {
-      return const AvailabilityResult(
-        isAvailable: false,
-        message: 'نعتذر، لا يوجد جهاز متاح',
-      );
-    }
-
-    if (deviceType == DeviceType.vr && date.weekday == DateTime.sunday) {
-      return const AvailabilityResult(
-        isAvailable: false,
-        message: 'نعتذر، لا يوجد جهاز متاح',
-      );
-    }
-
-    final slots = _generateSlots(date);
-    final availableSlots =
-        slots.where((s) => s.isAvailable).toList(growable: false);
-
-    if (availableSlots.isEmpty) {
-      return const AvailabilityResult(
-        isAvailable: false,
-        message: 'نعتذر، لا يوجد جهاز متاح',
-      );
-    }
-
-    return AvailabilityResult(isAvailable: true, slots: availableSlots);
-  }
-
-  List<HourlyTimeSlot> _generateSlots(DateTime date) {
-    final hours = [17, 18, 19, 20, 21, 22];
-    return hours.map((hour) {
-      final start = DateTime(date.year, date.month, date.day, hour);
-      final isPast = start.isBefore(DateTime.now());
-      final label = formatHourlySlotLabel(hour);
-      return HourlyTimeSlot(
-        id: '${date.millisecondsSinceEpoch}-$hour',
-        label: label,
-        startDateTime: start,
-        isAvailable: !isPast,
-      );
-    }).toList();
-  }
-
-  final Set<String> _bookedSlotKeys = {};
-
-  Future<DeviceBookingConfirmation> confirmDeviceBooking({
-    required String loungeId,
-    required DeviceType deviceType,
-    required DateTime date,
-    required HourlyTimeSlot slot,
+    CategoryRatingInput? generalRating,
+    required List<DeviceRatingInput> deviceRatings,
   }) async {
-    seedIfEmpty();
-    final key = '$loungeId-${deviceType.name}-${slot.id}';
-    if (_bookedSlotKeys.contains(key)) {
-      throw Exception('هذا الوقت محجوز مسبقاً');
+    if (generalRating != null && generalRating.isValid) {
+      await _repository.submitReview(
+        loungeId: loungeId,
+        category: generalRating.category,
+        stars: generalRating.stars,
+      );
     }
-    _bookedSlotKeys.add(key);
 
-    final lounge = _lounges[loungeId]!;
-    final device = lounge.deviceByType(deviceType)!;
-    final bookingId =
-        'ZNS-${DateTime.now().millisecondsSinceEpoch}-${deviceType.name}';
+    final validDevices = deviceRatings.where((r) => r.isValid).toList();
+    if (validDevices.isNotEmpty) {
+      await _repository.submitDeviceRatings(
+        loungeId: loungeId,
+        ratings: validDevices,
+      );
+    }
 
-    return DeviceBookingConfirmation(
-      bookingId: bookingId,
-      finalPrice: device.hourlyRate,
-      earnedPoints: (device.hourlyRate * 0.5).round(),
-    );
+    await refreshLounge(loungeId);
   }
-}
 
-class DeviceBookingConfirmation {
-  const DeviceBookingConfirmation({
-    required this.bookingId,
-    required this.finalPrice,
-    required this.earnedPoints,
-  });
+  Future<LoungeComment> submitComment({
+    required String loungeId,
+    required String body,
+  }) async {
+    final comment = await _repository.submitComment(
+      loungeId: loungeId,
+      body: body,
+    );
+    await refreshLounge(loungeId);
+    return comment;
+  }
 
-  final String bookingId;
-  final double finalPrice;
-  final int earnedPoints;
+  Future<LoungeComment> updateComment({
+    required String loungeId,
+    required int commentId,
+    required String body,
+  }) async {
+    final comment = await _repository.updateComment(
+      loungeId: loungeId,
+      commentId: commentId,
+      body: body,
+    );
+    await refreshLounge(loungeId);
+    return comment;
+  }
+
+  Future<LoungeModel> refreshLounge(String loungeId) async {
+    final dto = await _repository.fetchLounge(loungeId);
+    final lounge = LoungeCatalogMapper.toLounge(dto);
+    _lounges[loungeId] = lounge;
+    _ratingsByLounge[loungeId] = LoungeCatalogMapper.toStoredReviews(dto);
+    _commentsByLounge[loungeId] = LoungeCatalogMapper.toStoredComments(dto);
+    _isLoaded = true;
+    return lounge;
+  }
+
+  Future<List<LoungeModel>> loadNearbyAndMerge({
+    required double latitude,
+    required double longitude,
+    double radiusKm = 100,
+    bool openNow = false,
+  }) async {
+    final dtos = await _repository.fetchNearbyLounges(
+      latitude: latitude,
+      longitude: longitude,
+      radiusKm: radiusKm,
+      openNow: openNow,
+    );
+
+    final nearby = <LoungeModel>[];
+    for (final dto in dtos) {
+      final lounge = LoungeCatalogMapper.toLounge(dto);
+      _lounges[lounge.id] = lounge;
+      _ratingsByLounge[lounge.id] = LoungeCatalogMapper.toStoredReviews(dto);
+      _commentsByLounge[lounge.id] = LoungeCatalogMapper.toStoredComments(dto);
+      nearby.add(lounge);
+    }
+
+    _isLoaded = true;
+    return nearby;
+  }
 }

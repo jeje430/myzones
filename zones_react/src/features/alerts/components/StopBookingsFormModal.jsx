@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { AlertTriangle, Ban } from "lucide-react";
 import AdminModal from "../../devices-packages/components/AdminModal";
 import { Select, alertFormReadOnlyCls } from "@/components/ui/select";
@@ -7,7 +7,6 @@ import {
   BOOKINGS_STOP_ACTION,
   BOOKINGS_STOP_REASONS,
 } from "../data/bookingsStopMessages";
-import { formatAlertDateTime } from "../data/alertsMeta";
 import {
   formatBookingsStopCode,
   nextBookingsStopId,
@@ -23,18 +22,51 @@ const actionOptions = [
   { value: BOOKINGS_STOP_ACTION.value, label: BOOKINGS_STOP_ACTION.label },
 ];
 
-export default function StopBookingsFormModal({ open, reason, onReasonChange, onClose, onSubmit }) {
-  const previewId = useMemo(() => (open ? nextBookingsStopId(loadBookingsStopRecords()) : null), [open]);
-  const previewStart = useMemo(() => (open ? formatAlertDateTime() : "—"), [open]);
+function todayYmd() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+export default function StopBookingsFormModal({
+  open,
+  mode = "create",
+  initialReasonKey = "",
+  initialStartsOn = "",
+  initialEndsOn = "",
+  recordId = null,
+  onClose,
+  onSubmit,
+}) {
+  const [reasonKey, setReasonKey] = useState(initialReasonKey);
+  const [startsOn, setStartsOn] = useState(initialStartsOn || todayYmd());
+  const [endsOn, setEndsOn] = useState(initialEndsOn);
+
+  useEffect(() => {
+    if (!open) return;
+    setReasonKey(initialReasonKey);
+    setStartsOn(initialStartsOn || todayYmd());
+    setEndsOn(initialEndsOn || "");
+  }, [open, initialReasonKey, initialStartsOn, initialEndsOn]);
+
+  const previewId = useMemo(
+    () => (open && mode === "create" ? nextBookingsStopId(loadBookingsStopRecords()) : recordId),
+    [open, mode, recordId],
+  );
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (!reason.trim()) return;
-    onSubmit();
+    if (!reasonKey.trim()) return;
+    onSubmit({ reasonKey, startsOn, endsOn: endsOn.trim() || null });
   };
 
+  const isEdit = mode === "edit";
+
   return (
-    <AdminModal open={open} onClose={onClose} title="إيقاف الحجوزات" wide>
+    <AdminModal
+      open={open}
+      onClose={onClose}
+      title={isEdit ? "تعديل إيقاف الحجوزات" : "إيقاف الحجوزات"}
+      wide
+    >
       <form className="mt-4 space-y-5" onSubmit={handleSubmit} dir="rtl">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
@@ -46,20 +78,15 @@ export default function StopBookingsFormModal({ open, reason, onReasonChange, on
 
           <div>
             <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">نوع الإجراء</Label>
-            <Select
-              value={BOOKINGS_STOP_ACTION.value}
-              onValueChange={() => {}}
-              options={actionOptions}
-              disabled
-            />
+            <Select value={BOOKINGS_STOP_ACTION.value} onValueChange={() => {}} options={actionOptions} disabled />
           </div>
         </div>
 
         <div>
           <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">سبب الإيقاف</Label>
           <Select
-            value={reason}
-            onValueChange={onReasonChange}
+            value={reasonKey}
+            onValueChange={setReasonKey}
             options={reasonOptions}
             placeholder="اختر سبب الإيقاف..."
           />
@@ -67,23 +94,42 @@ export default function StopBookingsFormModal({ open, reason, onReasonChange, on
 
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
-            <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">تاريخ ووقت البدء</Label>
-            <p className={alertFormReadOnlyCls} dir="ltr">
-              {previewStart}
-            </p>
+            <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">تاريخ البداية *</Label>
+            {isEdit ? (
+              <p className={alertFormReadOnlyCls} dir="ltr">
+                {startsOn}
+              </p>
+            ) : (
+              <input
+                type="date"
+                value={startsOn}
+                onChange={(e) => setStartsOn(e.target.value)}
+                required
+                className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+              />
+            )}
           </div>
 
           <div>
-            <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">تاريخ ووقت الانتهاء (المتوقع)</Label>
-            <p className={alertFormReadOnlyCls} dir="ltr">
-              —
-            </p>
+            <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">
+              تاريخ النهاية (اختياري)
+            </Label>
+            <input
+              type="date"
+              value={endsOn}
+              min={startsOn}
+              onChange={(e) => setEndsOn(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs dark:border-gray-700 dark:bg-gray-900"
+            />
+            <p className="mt-1 text-[10px] text-gray-500">اتركه فارغاً = حتى إشعار آخر</p>
           </div>
         </div>
 
         <p className="flex items-start gap-2 rounded-xl border border-amber-500/25 bg-amber-500/10 px-3 py-2.5 text-[11px] font-semibold leading-relaxed text-amber-700 dark:border-amber-500/20 dark:bg-amber-500/10 dark:text-amber-300">
           <AlertTriangle size={14} className="mt-0.5 shrink-0" strokeWidth={2.25} />
-          عند الإرسال يُبلّغ موظفو الاستقبال والصيانة والزبائن برسالة ثابتة من النظام.
+          {isEdit
+            ? "سيتم تحديث سبب الإيقاف وتاريخ النهاية — الحجوزات تبقى متوقفة حتى الاستئناف أو انتهاء المدة."
+            : "عند التأكيد تُوقف الحجوزات في التطبيق فوراً للزبائن والموظفين."}
         </p>
 
         <div className="flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
@@ -96,11 +142,11 @@ export default function StopBookingsFormModal({ open, reason, onReasonChange, on
           </button>
           <button
             type="submit"
-            disabled={!reason.trim()}
+            disabled={!reasonKey.trim() || (!isEdit && !startsOn)}
             className="inline-flex items-center gap-1.5 rounded-xl bg-red-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-950 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950 dark:hover:bg-red-900"
           >
             <Ban size={14} strokeWidth={2.25} />
-            تأكيد إيقاف الحجوزات
+            {isEdit ? "حفظ التعديل" : "تأكيد إيقاف الحجوزات"}
           </button>
         </div>
       </form>

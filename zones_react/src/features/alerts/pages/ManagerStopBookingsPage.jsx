@@ -1,18 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { Ban, Play } from "lucide-react";
+import { Ban, Pencil, Play, Trash2 } from "lucide-react";
 import { zonesConfirm, zonesToastInfo, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import Button from "../../super-admin/components/ui/Button";
+import IconButton from "../../../shared/components/ui/IconButton";
 import TablePagination from "../../../shared/components/TablePagination";
 import {
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
+import {
   BOOKINGS_STOP_EVENT,
+  deleteBookingsStopRecord,
   formatBookingsStopCode,
   getActiveBookingsStopRecord,
   isBookingsStopped,
   loadBookingsStopRecords,
+  refreshBookingStopsFromApi,
   resumeBookingsStop,
   startBookingsStop,
+  updateBookingsStopRecord,
 } from "../data/bookingsStopStorage";
 import { BOOKINGS_STOP_NAME } from "../data/bookingsStopMessages";
 import StopBookingsFormModal from "../components/StopBookingsFormModal";
@@ -38,12 +48,17 @@ export default function ManagerStopBookingsPage() {
   const [records, setRecords] = useState(() => loadBookingsStopRecords());
   const [stopped, setStopped] = useState(() => isBookingsStopped());
   const [modalOpen, setModalOpen] = useState(false);
-  const [reason, setReason] = useState("");
+  const [modalMode, setModalMode] = useState("create");
+  const [editRecord, setEditRecord] = useState(null);
   const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
 
-  const refresh = useCallback(() => {
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    await refreshBookingStopsFromApi();
     setRecords(loadBookingsStopRecords());
     setStopped(isBookingsStopped());
+    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -58,40 +73,85 @@ export default function ManagerStopBookingsPage() {
 
   const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
   const paged = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: records, pageIds });
   const activeRecord = useMemo(() => getActiveBookingsStopRecord(), [records, stopped]);
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const handleSendStop = () => {
-    const result = startBookingsStop({ reason });
+  const openCreate = () => {
+    setModalMode("create");
+    setEditRecord(null);
+    setModalOpen(true);
+  };
+
+  const openEdit = (row) => {
+    setModalMode("edit");
+    setEditRecord(row);
+    setModalOpen(true);
+  };
+
+  const handleSubmitStop = async ({ reasonKey, startsOn, endsOn }) => {
+    if (modalMode === "edit" && editRecord) {
+      const result = await updateBookingsStopRecord(editRecord.id, { reasonKey, endsOn });
+      if (!result.ok) {
+        zonesToastInfo(result.error);
+        return;
+      }
+      setModalOpen(false);
+      setEditRecord(null);
+      await refresh();
+      zonesToastSuccess("تم تحديث إيقاف الحجوزات");
+      return;
+    }
+
+    const result = await startBookingsStop({ reasonKey, startsOn, endsOn });
     if (!result.ok) {
       zonesToastInfo(result.error);
       return;
     }
     setModalOpen(false);
-    setReason("");
-    refresh();
-    zonesToastSuccess("وصل الإشعار للموظفين والزبائن.", "تم إيقاف الحجوزات");
+    await refresh();
+    zonesToastSuccess("تم إيقاف الحجوزات — سيتم تحديث تطبيق الزبائن تلقائياً.");
   };
 
-  const handleResume = async () => {
+  const handleResume = async (row) => {
     const confirmed = await zonesConfirm({
-      title: "بدء الحجوزات؟",
-      text: "سيتم فتح الحجز وإرسال إشعار للموظفين والزبائن.",
-      confirmText: "بدء الحجوزات",
+      title: "استئناف الحجوزات؟",
+      text: "سيتم فتح الحجز للزبائن والموظفين فوراً.",
+      confirmText: "استئناف الحجوزات",
       cancelText: "إلغاء",
     });
     if (!confirmed) return;
 
-    const result = resumeBookingsStop();
+    const result = await resumeBookingsStop(row?.id);
     if (!result.ok) {
       zonesToastInfo(result.error);
       return;
     }
-    refresh();
-    zonesToastSuccess("تم بدء الحجوزات");
+    await refresh();
+    zonesToastSuccess("تم استئناف الحجوزات");
+  };
+
+  const handleDelete = async (row) => {
+    const confirmed = await zonesConfirm({
+      title: "حذف السجل؟",
+      text: "سيتم حذف سجل الإيقاف نهائياً.",
+      confirmText: "حذف",
+      cancelText: "إلغاء",
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    const result = await deleteBookingsStopRecord(row.id);
+    if (!result.ok) {
+      zonesToastInfo(result.error);
+      return;
+    }
+    await refresh();
+    zonesToastSuccess("تم حذف السجل");
   };
 
   return (
@@ -99,7 +159,7 @@ export default function ManagerStopBookingsPage() {
       <div className="space-y-4" dir="rtl">
         <PageHeader
           title="إيقاف الحجوزات"
-          description="إدارة إيقاف وبدء الحجوزات — مع إشعار تلقائي للموظفين والزبائن."
+          description="إدارة إيقاف واستئناف الحجوزات — يُحدَّث تطبيق Flutter تلقائياً من Laravel."
         />
 
         <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -107,26 +167,23 @@ export default function ManagerStopBookingsPage() {
             <div>
               <h2 className="text-sm font-extrabold text-gray-900 dark:text-white">سجل إيقاف الحجوزات</h2>
               <p className="mt-0.5 text-[11px] text-gray-500">
-                {stopped ? "الحجوزات متوقفة حالياً — لا يمكن للاستقبال حجز زبون." : "الحجوزات متاحة للحجز."}
+                {loading
+                  ? "جاري التحديث..."
+                  : stopped
+                    ? "الحجوزات متوقفة حالياً — لا يمكن للاستقبال حجز زبون."
+                    : "الحجوزات متاحة للحجز."}
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {!stopped ? (
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    setReason("");
-                    setModalOpen(true);
-                  }}
-                  className="bg-red-600 hover:bg-red-700"
-                >
+                <Button size="sm" onClick={openCreate} className="bg-red-600 hover:bg-red-700">
                   <Ban className="h-4 w-4" />
                   إيقاف الحجوزات
                 </Button>
               ) : (
-                <Button size="sm" onClick={handleResume}>
+                <Button size="sm" onClick={() => handleResume(activeRecord)}>
                   <Play className="h-4 w-4" />
-                  بدء الحجوزات
+                  استئناف الحجوزات
                 </Button>
               )}
             </div>
@@ -135,40 +192,40 @@ export default function ManagerStopBookingsPage() {
           {activeRecord ? (
             <div className="border-b border-red-100 bg-red-50/60 px-5 py-3 dark:border-red-900/30 dark:bg-red-950/20">
               <p className="text-xs font-bold text-red-700 dark:text-red-300">
-                إيقاف نشط — {formatBookingsStopCode(activeRecord.id)} — السبب: {activeRecord.reason}
+                إيقاف نشط — {formatBookingsStopCode(activeRecord.id)} — {activeRecord.reason}
               </p>
             </div>
           ) : null}
 
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[860px] text-right text-xs">
+            <table className="w-full min-w-[960px] text-right text-xs">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  <TableSelectHeaderCell {...selection} />
                   <th className="px-3 py-2.5 font-bold">الرقم</th>
                   <th className="px-3 py-2.5 font-bold">الاسم</th>
                   <th className="px-3 py-2.5 font-bold">السبب</th>
                   <th className="px-3 py-2.5 font-bold">تاريخ البداية</th>
                   <th className="px-3 py-2.5 font-bold">تاريخ النهاية</th>
                   <th className="px-3 py-2.5 font-bold">الحالة</th>
+                  <th className="px-3 py-2.5 font-bold">الإجراءات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center">
+                    <td colSpan={8} className="px-3 py-10 text-center">
                       <p className="text-gray-400">لا توجد سجلات إيقاف حجوزات بعد.</p>
-                      {!stopped ? (
-                        <p className="mt-2 text-[11px] font-semibold text-gray-500">
-                          اضغط زر{" "}
-                          <span className="text-red-600 dark:text-red-400">«إيقاف الحجوزات»</span>{" "}
-                          أعلاه لملء النموذج وإرسال الإشعار.
-                        </p>
-                      ) : null}
                     </td>
                   </tr>
                 ) : (
                   paged.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                      <TableSelectRowCell
+                        id={row.id}
+                        ariaLabel={`تحديد ${formatBookingsStopCode(row.id)}`}
+                        {...selection}
+                      />
                       <td className="px-3 py-3 font-bold text-[#6B5478]" dir="ltr">
                         {formatBookingsStopCode(row.id)}
                       </td>
@@ -177,13 +234,42 @@ export default function ManagerStopBookingsPage() {
                       </td>
                       <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{row.reason || "—"}</td>
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500" dir="ltr">
-                        {row.startDate}
+                        {row.startsOn || row.startDate || "—"}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500" dir="ltr">
-                        {row.endDate || "—"}
+                        {row.endsOn || row.endDate || "حتى إشعار آخر"}
                       </td>
                       <td className="px-3 py-3">
                         <StatusBadge active={row.status === "active"} />
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="flex items-center justify-end gap-1">
+                          {row.status === "active" ? (
+                            <>
+                              <IconButton
+                                icon={Pencil}
+                                label="تعديل"
+                                tone="neutral"
+                                size={15}
+                                onClick={() => openEdit(row)}
+                              />
+                              <IconButton
+                                icon={Play}
+                                label="استئناف الحجوزات"
+                                tone="success"
+                                size={15}
+                                onClick={() => handleResume(row)}
+                              />
+                            </>
+                          ) : null}
+                          <IconButton
+                            icon={Trash2}
+                            label="حذف"
+                            tone="danger"
+                            size={15}
+                            onClick={() => handleDelete(row)}
+                          />
+                        </div>
                       </td>
                     </tr>
                   ))
@@ -203,10 +289,16 @@ export default function ManagerStopBookingsPage() {
 
         <StopBookingsFormModal
           open={modalOpen}
-          reason={reason}
-          onReasonChange={setReason}
-          onClose={() => setModalOpen(false)}
-          onSubmit={handleSendStop}
+          mode={modalMode}
+          recordId={editRecord?.id}
+          initialReasonKey={editRecord?.reasonKey || ""}
+          initialStartsOn={editRecord?.startsOn || editRecord?.startDate?.slice(0, 10) || ""}
+          initialEndsOn={editRecord?.endsOn || editRecord?.endDate?.slice(0, 10) || ""}
+          onClose={() => {
+            setModalOpen(false);
+            setEditRecord(null);
+          }}
+          onSubmit={handleSubmitStop}
         />
       </div>
     </ManagerLayout>

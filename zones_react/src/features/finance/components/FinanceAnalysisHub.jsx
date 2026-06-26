@@ -1,13 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
-import {
-  CalendarDays,
-  Coins,
-  Download,
-  Gamepad2,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { useMemo, useState } from "react";
+import { Coins, Download, TrendingUp, Wallet } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -19,17 +11,15 @@ import {
   YAxis,
 } from "recharts";
 import { useTheme } from "../../../shared/theme/useTheme";
-import { MONTHS_AR, formatCurrency, formatPct, yearOptions } from "../utils/financeData";
+import { MONTHS_AR, derivePackageUsage, formatCurrency, formatPct, yearOptions } from "../utils/financeData";
 import {
   buildOverviewChartSeries,
-  deriveOverviewInsights,
   deriveOverviewTotals,
   overviewChartPalette,
   overviewTooltipBox,
 } from "../utils/financeOverviewHelpers";
-import { BOOKING_REVENUE_EVENT } from "../../employees/data/bookingRevenueStorage";
-import { RECEPTION_CALENDAR_EVENT } from "../../employees/data/receptionCalendarStorage";
-import { EXPENSES_STORAGE_EVENT } from "../data/expensesStorage";
+import { useFinancePrefetch } from "../hooks/useFinancePrefetch";
+import PackageUsageChart from "./PackageUsageChart";
 import "../pages/FinancialManagementPage.css";
 
 function FinanceTooltip({ active, payload, label, isLight }) {
@@ -62,30 +52,17 @@ export default function FinanceAnalysisHub({ onSelectView, onOpenReports }) {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [granularity, setGranularity] = useState("daily");
-  const [refreshKey, setRefreshKey] = useState(0);
-
-  useEffect(() => {
-    const sync = () => setRefreshKey((k) => k + 1);
-    window.addEventListener(EXPENSES_STORAGE_EVENT, sync);
-    window.addEventListener(BOOKING_REVENUE_EVENT, sync);
-    window.addEventListener(RECEPTION_CALENDAR_EVENT, sync);
-    window.addEventListener("focus", sync);
-    return () => {
-      window.removeEventListener(EXPENSES_STORAGE_EVENT, sync);
-      window.removeEventListener(BOOKING_REVENUE_EVENT, sync);
-      window.removeEventListener(RECEPTION_CALENDAR_EVENT, sync);
-      window.removeEventListener("focus", sync);
-    };
-  }, []);
+  const [packagePeriod, setPackagePeriod] = useState("monthly");
+  const readyTick = useFinancePrefetch(year, month, granularity, packagePeriod);
 
   const chartSeries = useMemo(
     () => buildOverviewChartSeries(year, month, granularity),
-    [year, month, granularity, refreshKey],
+    [year, month, granularity, readyTick],
   );
-  const totals = useMemo(() => deriveOverviewTotals(year, month), [year, month, refreshKey]);
-  const insights = useMemo(
-    () => deriveOverviewInsights(year, month, chartSeries),
-    [year, month, chartSeries, refreshKey],
+  const totals = useMemo(() => deriveOverviewTotals(year, month), [year, month, readyTick]);
+  const packageUsage = useMemo(
+    () => derivePackageUsage(year, month, packagePeriod, granularity),
+    [year, month, packagePeriod, granularity, readyTick],
   );
   const yearsOptions = useMemo(() => yearOptions(), []);
   const chartPalette = useMemo(() => overviewChartPalette(isChartLight), [isChartLight]);
@@ -241,56 +218,23 @@ export default function FinanceAnalysisHub({ onSelectView, onOpenReports }) {
         </div>
       </section>
 
-      <div className="finance-mini-grid">
-        <article className="finance-mini">
-          <span className="finance-mini__label">أكثر جهاز استخدامًا</span>
-          <div className="finance-mini__row">
-            <div>
-              <div className="finance-mini__value">{insights.topDevice}</div>
-              <div className="finance-mini__sub">{formatCurrency(insights.topDeviceProfit)}</div>
-            </div>
-            <span className="finance-mini__icon" aria-hidden>
-              <Gamepad2 size={22} strokeWidth={2} />
-            </span>
-          </div>
-        </article>
-        <article className="finance-mini">
-          <span className="finance-mini__label">أعلى يوم ربح</span>
-          <div className="finance-mini__row">
-            <div>
-              <div className="finance-mini__value">{insights.bestLabel}</div>
-              <div className="finance-mini__sub">{formatCurrency(insights.bestProfit)}</div>
-            </div>
-            <span className="finance-mini__icon" aria-hidden>
-              <TrendingUp size={22} strokeWidth={2} />
-            </span>
-          </div>
-        </article>
-        <article className="finance-mini">
-          <span className="finance-mini__label">أقل يوم ربح</span>
-          <div className="finance-mini__row">
-            <div>
-              <div className="finance-mini__value">{insights.worstLabel}</div>
-              <div className="finance-mini__sub">{formatCurrency(insights.worstProfit)}</div>
-            </div>
-            <span className="finance-mini__icon" aria-hidden>
-              <TrendingDown size={22} strokeWidth={2} />
-            </span>
-          </div>
-        </article>
-        <article className="finance-mini">
-          <span className="finance-mini__label">متوسط الحجوزات اليومية</span>
-          <div className="finance-mini__row">
-            <div>
-              <div className="finance-mini__value">{insights.dailyBookings}</div>
-              <div className="finance-mini__sub">حجز / يوم (معدّل متحرك)</div>
-            </div>
-            <span className="finance-mini__icon" aria-hidden>
-              <CalendarDays size={22} strokeWidth={2} />
-            </span>
-          </div>
-        </article>
-      </div>
+      <section className="finance-section finance-package-usage-section">
+        <div className="finance-filters finance-package-usage__filters">
+          <label>
+            فترة استخدام الباقات
+            <select
+              className="finance-select"
+              value={packagePeriod}
+              onChange={(e) => setPackagePeriod(e.target.value)}
+            >
+              <option value="daily">يومي</option>
+              <option value="monthly">شهري</option>
+              <option value="yearly">سنوي</option>
+            </select>
+          </label>
+        </div>
+        <PackageUsageChart packageUsage={packageUsage} />
+      </section>
     </div>
   );
 }

@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 
+import { formatDisplayDateEnGb, parseLocalIso } from "../../../shared/utils/localDateUtils";
+
 const WEEKDAYS_AR = ["أحد", "إثن", "ثلا", "أرب", "خمي", "جمع", "سبت"];
 
 function parseIso(iso) {
-  const [y, m, d] = iso.split("-").map(Number);
-  return new Date(y, m - 1, d);
+  return parseLocalIso(iso);
 }
 
 function toIso(date) {
@@ -16,8 +17,7 @@ function toIso(date) {
 }
 
 function formatDisplay(iso) {
-  const d = parseIso(iso);
-  return d.toLocaleDateString("en-GB", { day: "2-digit", month: "2-digit", year: "numeric" });
+  return formatDisplayDateEnGb(iso);
 }
 
 function formatMonthTitle(year, month) {

@@ -1,24 +1,16 @@
 import { useEffect, useState } from "react";
 import { Send, X } from "lucide-react";
 import IconButton from "../../../shared/components/ui/IconButton";
-import { DEFAULT_COMMISSION_RATE } from "../data/superAdminConstants";
-import { getSuperAdminState, MAX_COMMISSION_RATE } from "../data/superAdminStorage";
 
 const inputCls =
   "w-full rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-xs text-gray-800 outline-none focus:border-[#6B5478] focus:ring-2 focus:ring-[#6B5478]/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100";
 
 export default function AcceptHallRequestModal({ request, onClose, onSubmit }) {
-  const [commissionRate, setCommissionRate] = useState("");
   const [adminNotes, setAdminNotes] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const globalRate =
-    request?.commissionRate ??
-    getSuperAdminState().systemSettings.globalCommissionRate ??
-    DEFAULT_COMMISSION_RATE;
 
   useEffect(() => {
     if (!request) return;
-    setCommissionRate("");
     setAdminNotes("");
     setSubmitting(false);
   }, [request]);
@@ -28,13 +20,8 @@ export default function AcceptHallRequestModal({ request, onClose, onSubmit }) {
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (submitting) return;
-    const rateNum = commissionRate === "" ? null : Number(commissionRate);
-    if (rateNum != null && (Number.isNaN(rateNum) || rateNum < 0 || rateNum > MAX_COMMISSION_RATE)) {
-      return;
-    }
     setSubmitting(true);
     await onSubmit({
-      commissionRate: commissionRate === "" ? null : rateNum,
       adminNotes: adminNotes.trim(),
     });
     setSubmitting(false);
@@ -60,25 +47,6 @@ export default function AcceptHallRequestModal({ request, onClose, onSubmit }) {
           <div>
             <label className="mb-1 block text-[11px] font-bold text-gray-500 dark:text-gray-400">اسم المدير</label>
             <input type="text" value={request.managerName} readOnly className={`${inputCls} opacity-80`} />
-          </div>
-
-          <div>
-            <label className="mb-1 block text-[11px] font-bold text-gray-500 dark:text-gray-400">
-              نسبة العمولة % <span className="font-normal text-gray-400">(اختياري)</span>
-            </label>
-            <input
-              type="number"
-              min={0}
-              max={MAX_COMMISSION_RATE}
-              step={0.5}
-              value={commissionRate}
-              onChange={(e) => setCommissionRate(e.target.value)}
-              placeholder={`افتراضي ${globalRate}%`}
-              className={inputCls}
-            />
-            <p className="mt-1 text-[10px] text-gray-400">
-              الحد الأقصى {MAX_COMMISSION_RATE}% — اتركه فارغاً لاستخدام نسبة النظام الحالية ({globalRate}%)
-            </p>
           </div>
 
           <div>

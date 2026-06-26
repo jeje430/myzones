@@ -1,6 +1,7 @@
 import AdminModal from "../../devices-packages/components/AdminModal";
 import Button from "../../super-admin/components/ui/Button";
-import { customerInitials, formatRelativeTime } from "../data/customerCommentsStorage";
+import UserAvatar from "../../../shared/components/UserAvatar";
+import { formatRelativeTime } from "../data/customerCommentsStorage";
 
 const textareaCls =
   "w-full resize-none rounded-xl border border-gray-300 bg-white px-3 py-2.5 text-xs leading-relaxed text-gray-800 outline-none focus:border-[#6B5478] focus:ring-2 focus:ring-[#6B5478]/20 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100";
@@ -19,9 +20,12 @@ export default function CommentReplyModal({ open, comment, replyText, onChange, 
         <div className="mt-4 space-y-4">
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/40">
             <div className="flex items-start gap-3">
-              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#6B5478]/15 text-sm font-extrabold text-[#6B5478]">
-                {customerInitials(comment.customerName)}
-              </span>
+              <UserAvatar
+                src={comment.profileImage}
+                name={comment.customerName}
+                size="sm"
+                ring
+              />
               <div className="min-w-0 flex-1">
                 <div className="flex flex-wrap items-center gap-2">
                   <p className="text-sm font-extrabold text-gray-900 dark:text-white">

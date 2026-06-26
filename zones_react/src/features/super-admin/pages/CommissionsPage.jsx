@@ -1,88 +1,88 @@
 import { useEffect, useMemo, useState } from "react";
-import { BarChart3, CheckCircle2, Percent } from "lucide-react";
-import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import { BarChart3, Loader2, Percent, Save, Smartphone } from "lucide-react";
+import { zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import KpiCard from "../components/ui/KpiCard";
 import PageHeader from "../components/ui/PageHeader";
-import SearchBar from "../components/ui/SearchBar";
 import {
-  COMMISSION_PAYMENT,
-  COMMISSION_PAYMENT_LABELS,
-} from "../data/commissionPaymentStatus";
-import {
-  getCommissionRows,
-  getSuperAdminState,
-  markHallCommissionPaid,
-} from "../data/superAdminStorage";
+  fetchPlatformCommissionSettings,
+  fetchPlatformCommissionSummary,
+  updatePlatformCommissionSettings,
+} from "../data/commissionSettingsApi";
+import { Input } from "../../../components/ui/input";
 
-const STATUS_FILTERS = [
-  { key: "all", label: "كل الحالات" },
-  { key: COMMISSION_PAYMENT.paid, label: COMMISSION_PAYMENT_LABELS.paid },
-  { key: COMMISSION_PAYMENT.pending, label: COMMISSION_PAYMENT_LABELS.pending },
-];
-
-function paymentBadge(row) {
-  if (row.paymentStatus === COMMISSION_PAYMENT.paid) {
-    return {
-      label: COMMISSION_PAYMENT_LABELS.paid,
-      cls: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
-    };
-  }
-
-  return {
-    label: COMMISSION_PAYMENT_LABELS.pending,
-    cls: row.isOverdue
-      ? "bg-red-500/15 text-red-600 dark:text-red-400"
-      : "bg-amber-500/15 text-amber-600 dark:text-amber-400",
-  };
-}
+const MAX_COMMISSION_RATE = 100;
 
 export default function CommissionsPage() {
-  const [rate, setRate] = useState(3);
-  const [rows, setRows] = useState([]);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const now = new Date();
+  const [year] = useState(now.getFullYear());
+  const [month] = useState(now.getMonth() + 1);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [editing, setEditing] = useState(false);
+  const [rate, setRate] = useState(0);
+  const [draftRate, setDraftRate] = useState(0);
+  const [summary, setSummary] = useState({
+    totalCommissions: 0,
+    totalAppGrossRevenue: 0,
+    totalAppBookings: 0,
+  });
 
-  const refresh = () => {
-    const state = getSuperAdminState();
-    setRate(state.systemSettings.globalCommissionRate);
-    setRows(getCommissionRows());
+  const monthLabel = useMemo(
+    () => now.toLocaleDateString("ar-LY", { month: "long", year: "numeric" }),
+    [now],
+  );
+
+  const load = async () => {
+    setLoading(true);
+    const [settingsResult, summaryResult] = await Promise.all([
+      fetchPlatformCommissionSettings(),
+      fetchPlatformCommissionSummary(year, month),
+    ]);
+
+    if (settingsResult.ok) {
+      setRate(settingsResult.rate);
+      setDraftRate(settingsResult.rate);
+    }
+
+    if (summaryResult.ok && summaryResult.summary) {
+      setSummary(summaryResult.summary);
+      if (settingsResult.ok) {
+        setRate(summaryResult.summary.globalRate || settingsResult.rate);
+      }
+    }
+
+    setLoading(false);
   };
 
   useEffect(() => {
-    refresh();
-    window.addEventListener("super-admin-data-updated", refresh);
-    return () => window.removeEventListener("super-admin-data-updated", refresh);
-  }, []);
+    load();
+  }, [year, month]);
 
-  const onMarkPaid = async (row) => {
-    const ok = await zonesConfirm({
-      title: "تسجيل الدفع؟",
-      text: `تأكدت مع مدير «${row.hallName}» أن عمولة ${row.commission.toLocaleString("ar-LY")} د.ل دُفعت؟`,
-      confirmText: "نعم، تم الدفع",
-    });
-    if (!ok) return;
-
-    const result = markHallCommissionPaid(row.hallId);
-    if (!result.ok) {
-      zonesToastError(result.error || "تعذّر تسجيل الدفع.");
-      return;
-    }
-    refresh();
-    zonesToastSuccess("تم تسجيل الدفع");
+  const clampRate = (raw) => {
+    let value = Number(raw);
+    if (Number.isNaN(value)) value = 0;
+    if (value < 0) value = 0;
+    if (value > MAX_COMMISSION_RATE) value = MAX_COMMISSION_RATE;
+    return Math.round(value * 100) / 100;
   };
 
-  const totalIncome = rows.reduce((s, r) => s + r.monthlyIncome, 0);
-  const totalCommission = rows.reduce((s, r) => s + r.commission, 0);
+  const onSave = async () => {
+    const nextRate = clampRate(draftRate);
+    setSaving(true);
+    const result = await updatePlatformCommissionSettings(nextRate);
+    setSaving(false);
 
-  const filteredRows = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return rows.filter((r) => {
-      const matchSearch = !q || r.hallName.toLowerCase().includes(q);
-      const matchStatus = statusFilter === "all" || r.paymentStatus === statusFilter;
-      return matchSearch && matchStatus;
-    });
-  }, [rows, search, statusFilter]);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر حفظ نسبة العمولة.");
+      return;
+    }
+
+    setRate(result.rate);
+    setDraftRate(result.rate);
+    setEditing(false);
+    zonesToastSuccess("تم تحديث عمولة المنصة لجميع الصالات.");
+    await load();
+  };
 
   return (
     <div>
@@ -90,104 +90,109 @@ export default function CommissionsPage() {
 
       <div className="grid gap-4 sm:grid-cols-3">
         <KpiCard
-          label="إجمالي الدخل الشهري"
-          value={`${totalIncome.toLocaleString("ar-LY")} د.ل`}
-          icon={BarChart3}
+          label="إجمالي عمولات المنصة"
+          value={`${summary.totalCommissions.toLocaleString("ar-LY")} د.ل`}
+          icon={Percent}
+          tone="amber"
+        />
+        <KpiCard
+          label="إيرادات تطبيق الزبون (إجمالي)"
+          value={`${summary.totalAppGrossRevenue.toLocaleString("ar-LY")} د.ل`}
+          icon={Smartphone}
           tone="green"
         />
         <KpiCard
-          label="إجمالي العمولة"
-          value={`${totalCommission.toLocaleString("ar-LY")} د.ل`}
-          icon={Percent}
+          label="حجوزات التطبيق هذا الشهر"
+          value={String(summary.totalAppBookings)}
+          icon={BarChart3}
         />
-        <KpiCard label="نسبة العمولة الحالية" value={`${rate}%`} icon={Percent} tone="amber" />
       </div>
 
-      <div className="mt-6 overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <div className="flex flex-wrap items-center gap-3 border-b border-gray-100 p-4 dark:border-gray-800">
-          <SearchBar
-            containerClassName="min-w-48 flex-1 max-w-none"
-            value={search}
-            onChange={setSearch}
-            placeholder="ابحث عن صالة..."
-          />
-          <select
-            value={statusFilter}
-            onChange={(e) => setStatusFilter(e.target.value)}
-            className="rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-xs font-bold text-gray-700 outline-none dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-          >
-            {STATUS_FILTERS.map((f) => (
-              <option key={f.key} value={f.key}>
-                {f.label}
-              </option>
-            ))}
-          </select>
+      <section className="mt-6 rounded-2xl border border-gray-200 bg-white p-6 shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-base font-extrabold text-gray-900 dark:text-white">عمولة المنصة الموحّدة</h2>
+            <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+              نسبة واحدة تُطبَّق تلقائياً على جميع الصالات — الحالية والمستقبلية — لحجوزات تطبيق الزبون فقط.
+            </p>
+            <p className="mt-2 text-[11px] font-semibold text-[#6B5478]">{monthLabel}</p>
+          </div>
+          {!editing ? (
+            <button
+              type="button"
+              onClick={() => {
+                setDraftRate(rate);
+                setEditing(true);
+              }}
+              className="rounded-xl border border-[#6B5478]/30 bg-[#6B5478]/10 px-4 py-2 text-xs font-bold text-[#6B5478] transition hover:bg-[#6B5478]/15"
+            >
+              تعديل
+            </button>
+          ) : null}
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-right text-xs">
-            <thead>
-              <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                <th className="px-3 py-3 font-bold">اسم الصالة</th>
-                <th className="px-3 py-3 font-bold">إجمالي الدخل الشهري</th>
-                <th className="px-3 py-3 font-bold">نسبة العمولة</th>
-                <th className="px-3 py-3 font-bold">قيمة العمولة</th>
-                <th className="px-3 py-3 font-bold">موعد تحصيل العمولة</th>
-                <th className="px-3 py-3 font-bold">حالة الدفع</th>
-                <th className={TABLE_ACTIONS_TH}>الإجراء</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {filteredRows.map((r) => {
-                const badge = paymentBadge(r);
-                const isPaid = r.paymentStatus === COMMISSION_PAYMENT.paid;
-
-                return (
-                  <tr key={r.hallId} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
-                    <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{r.hallName}</td>
-                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
-                      {r.monthlyIncome.toLocaleString("ar-LY")} د.ل
-                    </td>
-                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{r.rate}%</td>
-                    <td className="px-3 py-3 font-extrabold text-[#6B5478]">
-                      {r.commission.toLocaleString("ar-LY")} د.ل
-                    </td>
-                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
-                      {r.dueDate}
-                    </td>
-                    <td className="px-3 py-3">
-                      <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${badge.cls}`}>
-                        {badge.label}
-                      </span>
-                    </td>
-                    <td className={TABLE_ACTIONS_TD}>
-                      {isPaid ? (
-                        <span className="text-[11px] font-semibold text-gray-400">—</span>
-                      ) : (
-                        <button
-                          type="button"
-                          onClick={() => onMarkPaid(r)}
-                          className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-[11px] font-bold text-white transition hover:bg-emerald-700"
-                        >
-                          <CheckCircle2 size={13} />
-                          تسجيل الدفع
-                        </button>
-                      )}
-                    </td>
-                  </tr>
-                );
-              })}
-              {filteredRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
-                    لا توجد بيانات مطابقة.
-                  </td>
-                </tr>
-              ) : null}
-            </tbody>
-          </table>
-        </div>
-      </div>
+        {loading ? (
+          <div className="mt-8 flex items-center justify-center gap-2 py-10 text-sm font-bold text-[#6B5478]">
+            <Loader2 size={18} className="animate-spin" />
+            جاري التحميل...
+          </div>
+        ) : (
+          <div className="mt-6 flex flex-col items-center justify-center rounded-2xl border border-dashed border-[#6B5478]/35 bg-gradient-to-br from-[#6B5478]/5 via-transparent to-cyan-500/5 px-6 py-10 text-center dark:from-[#6B5478]/10 dark:to-cyan-500/10">
+            {!editing ? (
+              <>
+                <p className="text-sm font-bold text-gray-500 dark:text-gray-400">عمولة المنصة الحالية</p>
+                <p className="mt-3 text-5xl font-black tracking-tight text-[#6B5478]">{rate}%</p>
+                <p className="mt-3 max-w-md text-xs leading-relaxed text-gray-500 dark:text-gray-400">
+                  تُحتسب على الحجوزات القادمة من تطبيق Flutter (الدفع الإلكتروني أو الدفع عند الوصول)، ولا تُطبَّق على
+                  الحجوزات اليدوية من الاستقبال.
+                </p>
+              </>
+            ) : (
+              <div className="w-full max-w-xs">
+                <label className="mb-2 block text-right text-[11px] font-extrabold text-gray-600 dark:text-gray-300">
+                  نسبة العمولة %
+                </label>
+                <div className="relative">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={MAX_COMMISSION_RATE}
+                    step={0.5}
+                    dir="ltr"
+                    className="text-center text-2xl font-black"
+                    value={draftRate}
+                    onChange={(e) => setDraftRate(clampRate(e.target.value))}
+                  />
+                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-gray-400">
+                    %
+                  </span>
+                </div>
+                <div className="mt-5 flex justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDraftRate(rate);
+                      setEditing(false);
+                    }}
+                    className="rounded-xl border border-gray-200 px-4 py-2 text-xs font-bold text-gray-600 dark:border-gray-700 dark:text-gray-300"
+                  >
+                    إلغاء
+                  </button>
+                  <button
+                    type="button"
+                    disabled={saving}
+                    onClick={onSave}
+                    className="inline-flex items-center gap-2 rounded-xl bg-[#6B5478] px-5 py-2 text-xs font-extrabold text-white transition hover:bg-[#5a4665] disabled:opacity-60"
+                  >
+                    {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                    حفظ
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

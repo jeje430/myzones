@@ -1,4 +1,7 @@
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:latlong2/latlong.dart';
+
+import 'lounge_model.dart';
 
 enum LoungeCategory { ps5, pc, mixed }
 
@@ -14,6 +17,10 @@ class MapLounge {
     required this.devices,
     required this.price,
     required this.locationLabel,
+    this.imageUrl,
+    this.services = const [],
+    this.workHoursLabel,
+    this.distanceMeters,
   });
 
   final String id;
@@ -26,6 +33,10 @@ class MapLounge {
   final int devices;
   final int price;
   final String locationLabel;
+  final String? imageUrl;
+  final List<String> services;
+  final String? workHoursLabel;
+  final int? distanceMeters;
 
   bool matchesFilters({
     required bool ps5Filter,
@@ -43,32 +54,92 @@ class MapLounge {
 
     return matchesPs5 || matchesPc;
   }
+
+  static MapLounge? fromLoungeModel(LoungeModel lounge) {
+    if (lounge.latitude == null || lounge.longitude == null) {
+      return null;
+    }
+
+    return MapLounge(
+      id: lounge.id,
+      name: lounge.name,
+      rating: lounge.loungeAverageRating,
+      reviews: lounge.reviewCount,
+      position: LatLng(lounge.latitude!, lounge.longitude!),
+      category: _categoryFromDevices(lounge),
+      isOpen: lounge.isOpen,
+      devices: lounge.totalDevices,
+      price: lounge.startingPrice,
+      locationLabel: lounge.location,
+      imageUrl: lounge.imageUrl,
+      services: lounge.services,
+      workHoursLabel:
+          lounge.workHoursLabel.isNotEmpty ? lounge.workHoursLabel : null,
+      distanceMeters: lounge.distanceMeters,
+    );
+  }
+
+  static LoungeCategory _categoryFromDevices(LoungeModel lounge) {
+    final hasPs5 = lounge.offersDeviceType(DeviceType.ps5);
+    final hasPc = lounge.offersDeviceType(DeviceType.pc);
+    if (hasPs5 && hasPc) return LoungeCategory.mixed;
+    if (hasPc) return LoungeCategory.pc;
+    return LoungeCategory.ps5;
+  }
 }
 
-/// Sample lounges near Tripoli, Libya — used on the explore map.
-const kSampleMapLounges = [
-  MapLounge(
-    id: 'game-zone-arena',
-    name: 'Game Zone Arena',
-    rating: 4.8,
-    reviews: 128,
-    position: LatLng(32.8924, 13.1848),
-    category: LoungeCategory.ps5,
-    isOpen: true,
-    devices: 12,
-    price: 25,
-    locationLabel: 'سوق الجمعة',
-  ),
-  MapLounge(
-    id: 'pro-gaming-lounge',
-    name: 'Pro Gaming Lounge',
-    rating: 4.6,
-    reviews: 95,
-    position: LatLng(32.8806, 13.1982),
-    category: LoungeCategory.pc,
-    isOpen: true,
-    devices: 8,
-    price: 20,
-    locationLabel: 'قرقارش',
-  ),
-];
+/// Builds map markers from API-backed lounge catalog, preserving distance order.
+List<MapLounge> mapLoungesFromCatalog(List<LoungeModel> lounges) {
+  return lounges
+      .map(MapLounge.fromLoungeModel)
+      .whereType<MapLounge>()
+      .toList();
+}
+
+/// Client-side fallback when the nearby API is unreachable.
+List<MapLounge> mapLoungesNearOrigin(
+  List<LoungeModel> lounges,
+  LatLng origin, {
+  double radiusKm = 100,
+}) {
+  final withDistance = <MapLounge>[];
+
+  for (final lounge in lounges) {
+    final base = MapLounge.fromLoungeModel(lounge);
+    if (base == null) continue;
+
+    final meters = Geolocator.distanceBetween(
+      origin.latitude,
+      origin.longitude,
+      base.position.latitude,
+      base.position.longitude,
+    );
+
+    if (meters > radiusKm * 1000) continue;
+
+    withDistance.add(
+      MapLounge(
+        id: base.id,
+        name: base.name,
+        rating: base.rating,
+        reviews: base.reviews,
+        position: base.position,
+        category: base.category,
+        isOpen: base.isOpen,
+        devices: base.devices,
+        price: base.price,
+        locationLabel: base.locationLabel,
+        imageUrl: base.imageUrl,
+        services: base.services,
+        workHoursLabel: base.workHoursLabel,
+        distanceMeters: meters.round(),
+      ),
+    );
+  }
+
+  withDistance.sort(
+    (a, b) => (a.distanceMeters ?? 0).compareTo(b.distanceMeters ?? 0),
+  );
+
+  return withDistance;
+}

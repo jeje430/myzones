@@ -3,10 +3,33 @@ import {
   suggestDeviceName,
   typeLabelFromType,
 } from "./deviceNaming";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+import { getActiveStaffSession, isApiStaffSession, refreshHallCatalogFromApi } from "./hallCatalogSync";
+import {
+  createManagerDevice,
+  deleteManagerDevice,
+  updateManagerDevice,
+} from "./managerDevicesApi";
 
-const STORAGE_KEY = "zones-devices-v2";
-export const DEVICES_STORAGE_KEY = STORAGE_KEY;
-const LEGACY_STORAGE_KEY = "zones-devices-v1";
+const BASE_KEY = "zones-devices-v4";
+/** المفتاح الأساس (بدون لاحقة الصالة) — يُستخدم لمطابقة أحداث التخزين عبر التبويبات */
+export const DEVICES_STORAGE_KEY = BASE_KEY;
+const storageKey = () => hallScopedKey(BASE_KEY);
+
+const LEGACY_DEVICE_KEYS = ["zones-devices-v1", "zones-devices-v2", "zones-devices-v3", "zones-devices-v4"];
+const LEGACY_PURGE_FLAG = "zones-devices-legacy-purged-v5";
+
+/** يمسح بيانات الأجهزة العامة القديمة (قبل العزل حسب الصالة) — مرة واحدة */
+function purgeLegacyDeviceStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_DEVICE_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
+}
+
+purgeLegacyDeviceStorage();
 
 /** يُبث عند أي تغيير على قائمة الأجهزة (مدير أو صيانة) */
 export const DEVICES_STORAGE_EVENT = "zones-devices-updated";
@@ -16,99 +39,7 @@ function notifyDevicesUpdated() {
   window.dispatchEvent(new CustomEvent(DEVICES_STORAGE_EVENT));
 }
 
-export const DEFAULT_DEVICES = [
-  {
-    id: 1,
-    name: "PS5-01",
-    type: "ps5",
-    typeLabel: "PlayStation 5",
-    packageId: 1,
-    isActive: true,
-    hasFault: false,
-    isArchived: false,
-    price: "15 د.ل",
-    createdAt: "2026/05/10 — 14:32",
-    updated: "2026/05/10 — 14:32",
-  },
-  {
-    id: 2,
-    name: "XBOX-01",
-    type: "xbox",
-    typeLabel: "Xbox",
-    packageId: 3,
-    isActive: true,
-    hasFault: false,
-    isArchived: false,
-    price: "12 د.ل",
-    createdAt: "2026/05/10 — 13:05",
-    updated: "2026/05/10 — 13:05",
-  },
-  {
-    id: 3,
-    name: "PS5-02",
-    type: "ps5",
-    typeLabel: "PlayStation 5",
-    packageId: 1,
-    isActive: true,
-    hasFault: true,
-    isArchived: false,
-    price: "18 د.ل",
-    createdAt: "2026/05/09 — 22:18",
-    updated: "2026/05/09 — 22:18",
-  },
-  {
-    id: 4,
-    name: "PC-01",
-    type: "pc",
-    typeLabel: "PC Gaming",
-    packageId: 4,
-    isActive: false,
-    hasFault: false,
-    isArchived: false,
-    price: "10 د.ل",
-    createdAt: "2026/05/08 — 09:40",
-    updated: "2026/05/08 — 09:40",
-  },
-  {
-    id: 5,
-    name: "PS5-03",
-    type: "ps5",
-    typeLabel: "PlayStation 5",
-    packageId: 2,
-    isActive: false,
-    hasFault: false,
-    isArchived: false,
-    price: "8 د.ل",
-    createdAt: "2026/05/01 — 11:00",
-    updated: "2026/05/01 — 11:00",
-  },
-  {
-    id: 6,
-    name: "XBOX-02",
-    type: "xbox",
-    typeLabel: "Xbox",
-    packageId: 3,
-    isActive: true,
-    hasFault: false,
-    isArchived: false,
-    price: "11 د.ل",
-    createdAt: "2026/05/10 — 16:20",
-    updated: "2026/05/10 — 16:20",
-  },
-  {
-    id: 7,
-    name: "VR-01",
-    type: "vr",
-    typeLabel: "VR",
-    packageId: 2,
-    isActive: true,
-    hasFault: false,
-    isArchived: false,
-    price: "20 د.ل",
-    createdAt: "2026/05/11 — 10:00",
-    updated: "2026/05/11 — 10:00",
-  },
-];
+export const DEFAULT_DEVICES = [];
 
 function normalizeDevice(row) {
   const packageId =
@@ -118,7 +49,9 @@ function normalizeDevice(row) {
     packageId: Number.isFinite(packageId) ? packageId : null,
     hasFault: Boolean(row.hasFault),
     maintenanceInProgress: Boolean(row.maintenanceInProgress),
-    isActive: row.isActive !== false,
+    operationalStatus: row.operationalStatus || row.operational_status || (row.isActive !== false ? "active" : "inactive"),
+    isActive: row.isActive !== false && (row.operationalStatus || row.operational_status || "active") === "active",
+    isMaintenance: Boolean(row.isMaintenance ?? row.is_maintenance ?? (row.operationalStatus || row.operational_status) === "maintenance"),
     isArchived: Boolean(row.isArchived),
     archivedAt: row.archivedAt || null,
     image: row.image || null,
@@ -149,21 +82,14 @@ export function getPrimaryDeviceNameForPackage(packageId, devices) {
 }
 
 function readRawDeviceList() {
-  let raw = localStorage.getItem(STORAGE_KEY);
-  if (!raw) {
-    raw = localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (raw) {
-      try {
-        localStorage.setItem(STORAGE_KEY, raw);
-        localStorage.removeItem(LEGACY_STORAGE_KEY);
-      } catch {
-        /* ignore */
-      }
-    }
-  }
+  const raw = localStorage.getItem(storageKey());
   if (!raw) return null;
-  const parsed = JSON.parse(raw);
-  return Array.isArray(parsed) && parsed.length ? parsed : null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) && parsed.length ? parsed : null;
+  } catch {
+    return null;
+  }
 }
 
 function applyDeviceNameMigration(list) {
@@ -171,8 +97,7 @@ function applyDeviceNameMigration(list) {
   const { devices, idToName, changed } = migrateDevicesToCodeNames(normalized);
   if (changed) {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(devices.map(normalizeDevice)));
-      localStorage.removeItem(LEGACY_STORAGE_KEY);
+      localStorage.setItem(storageKey(), JSON.stringify(devices.map(normalizeDevice)));
     } catch {
       /* ignore */
     }
@@ -204,10 +129,10 @@ function syncFaultRecordsDeviceNames(idToName) {
 export function loadDevices() {
   try {
     const stored = readRawDeviceList();
-    if (!stored) return DEFAULT_DEVICES.map(normalizeDevice);
+    if (!stored) return [];
     return applyDeviceNameMigration(stored);
   } catch {
-    return DEFAULT_DEVICES.map(normalizeDevice);
+    return [];
   }
 }
 
@@ -229,9 +154,9 @@ export function loadArchivedDevices() {
 export function saveDevices(list) {
   try {
     const serialized = JSON.stringify(list.map(normalizeDevice));
-    const prev = localStorage.getItem(STORAGE_KEY);
+    const prev = localStorage.getItem(storageKey());
     if (prev === serialized) return;
-    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.setItem(storageKey(), serialized);
     notifyDevicesUpdated();
   } catch {
     /* ignore */
@@ -297,6 +222,93 @@ export function endDeviceMaintenance(deviceId) {
   );
   saveDevices(next);
   return next;
+}
+
+function getManagerSession() {
+  return getActiveStaffSession();
+}
+
+/** يجلب الأجهزة من Laravel للمدير أو موظف الاستقبال/الصيانة */
+export async function refreshDevicesFromApi() {
+  const session = getManagerSession();
+  if (!isApiStaffSession(session)) {
+    return { ok: false, skipped: true };
+  }
+
+  const result = await refreshHallCatalogFromApi();
+  if (!result.ok) return result;
+  return { ok: true, devices: loadDevices() };
+}
+
+function isApiManagerSession(session) {
+  return isApiStaffSession(session) && session?.role === "manager";
+}
+
+export async function persistDeviceCreate(patch) {
+  const session = getManagerSession();
+  if (!isApiManagerSession(session)) {
+    const list = loadDevices();
+    const created = normalizeDevice({
+      ...patch,
+      id: nextDeviceId(list),
+      createdAt: new Date().toISOString(),
+    });
+    saveDevices([...list, created]);
+    return { ok: true, device: created };
+  }
+
+  const result = await createManagerDevice({
+    ...patch,
+    deviceCode: patch.name,
+  });
+  if (!result.ok) return result;
+  await refreshDevicesFromApi();
+  return { ok: true, device: result.device, message: result.message };
+}
+
+export async function persistDeviceUpdate(id, patch) {
+  const session = getManagerSession();
+  if (!isApiManagerSession(session)) {
+    const list = loadDevices();
+    saveDevices(list.map((d) => (d.id === id ? normalizeDevice({ ...d, ...patch }) : d)));
+    return { ok: true };
+  }
+
+  const result = await updateManagerDevice(id, patch);
+  if (!result.ok) return result;
+  await refreshDevicesFromApi();
+  return { ok: true, device: result.device, message: result.message };
+}
+
+export async function persistDeviceArchive(id) {
+  const session = getManagerSession();
+  if (!isApiManagerSession(session)) {
+    const list = loadDevices();
+    saveDevices(
+      list.map((d) =>
+        d.id === id
+          ? normalizeDevice({
+              ...d,
+              isArchived: true,
+              isActive: false,
+              archivedAt: new Date().toISOString(),
+            })
+          : d,
+      ),
+    );
+    return { ok: true };
+  }
+
+  const result = await deleteManagerDevice(id);
+  if (!result.ok) return result;
+  await refreshDevicesFromApi();
+  return { ok: true, message: result.message };
+}
+
+export async function persistDeviceToggleActive(id, isActive, extra = {}) {
+  const row = loadDevices().find((d) => d.id === id);
+  if (!row) return { ok: false, error: "الجهاز غير موجود" };
+  return persistDeviceUpdate(id, { ...row, isActive, ...extra });
 }
 
 export { suggestDeviceName, typeLabelFromType };

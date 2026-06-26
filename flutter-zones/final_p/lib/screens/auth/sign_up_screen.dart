@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/zonez_colors.dart';
-import '../../models/auth_exception.dart';
-import '../../providers/auth_provider.dart';
+import '../../features/auth/bloc/auth_bloc.dart';
+import '../../features/auth/bloc/auth_event.dart';
+import '../../features/auth/bloc/auth_state.dart';
 import '../../screens/auth/login_screen.dart';
 import '../../widgets/auth_logo_hero.dart';
 import '../../widgets/circuit_background.dart';
@@ -122,49 +123,51 @@ class _SignUpScreenState extends State<SignUpScreen> {
   Future<void> _signUp() async {
     if (!(_formKey.currentState?.validate() ?? false)) return;
 
-    final auth = context.read<AuthProvider>();
     final email = _emailController.text.trim();
-
-    try {
-      await auth.registerAccount(
-        name: _nameController.text.trim(),
-        phone: _phoneController.text.trim(),
-        email: email,
-        password: _passwordController.text,
-      );
-
-      if (!mounted) return;
-
-      Navigator.pushReplacementNamed(
-        context,
-        AppRoutes.login,
-        arguments: LoginScreenArgs(
-          prefillEmail: email,
-          successMessage:
-              'تم إنشاء حسابك بنجاح. يرجى تسجيل الدخول للمتابعة.',
-        ),
-      );
-    } on AuthException catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.message,
-            style: GoogleFonts.cairo(),
-            textAlign: TextAlign.center,
+    context.read<AuthBloc>().add(
+          AuthRegisterRequested(
+            name: _nameController.text.trim(),
+            phone: _phoneController.text.trim(),
+            email: email,
+            password: _passwordController.text,
           ),
-          backgroundColor: ZonezColors.neonRed,
-        ),
-      );
-    }
+        );
   }
 
   @override
   Widget build(BuildContext context) {
     final onSurface = Theme.of(context).colorScheme.onSurface;
-    final auth = context.watch<AuthProvider>();
 
-    return Scaffold(
+    return BlocConsumer<AuthBloc, AuthState>(
+      listener: (context, state) {
+        if (state is AuthRegistrationSuccess) {
+          Navigator.pushReplacementNamed(
+            context,
+            AppRoutes.login,
+            arguments: LoginScreenArgs(
+              prefillEmail: state.email,
+              successMessage:
+                  'تم إنشاء حسابك بنجاح. يرجى تسجيل الدخول للمتابعة.',
+            ),
+          );
+        }
+        if (state is AuthFailure) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                state.message,
+                style: GoogleFonts.cairo(),
+                textAlign: TextAlign.center,
+              ),
+              backgroundColor: ZonezColors.neonRed,
+            ),
+          );
+        }
+      },
+      builder: (context, state) {
+        final isBusy = state is AuthLoading;
+
+        return Scaffold(
       body: Stack(
         children: [
           const CircuitBackground(),
@@ -269,7 +272,7 @@ class _SignUpScreenState extends State<SignUpScreen> {
                       onFieldSubmitted: (_) => _signUp(),
                     ),
                     const SizedBox(height: 28),
-                    auth.isBusy
+                    isBusy
                         ? const Center(
                             child: CircularProgressIndicator(
                               color: ZonezColors.neonPurple,
@@ -315,6 +318,8 @@ class _SignUpScreenState extends State<SignUpScreen> {
           ),
         ],
       ),
+        );
+      },
     );
   }
 }

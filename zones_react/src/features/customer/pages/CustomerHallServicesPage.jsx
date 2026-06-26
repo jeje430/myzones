@@ -1,11 +1,26 @@
 import { Link } from "react-router-dom";
-import { ArrowRight, Building2, MapPin } from "lucide-react";
+import { ArrowRight, Building2, Clock, MapPin, Phone } from "lucide-react";
 import { fetchCustomerHallServices } from "../../lounge/data/managerHallStorage";
 import { HallServicesCustomerPreview } from "../../lounge/components/HallServicesCustomerCircles";
 import CustomerAlertBanner from "../../alerts/components/CustomerAlertBanner";
 import CustomerFeedbackForm from "../../interaction/components/CustomerFeedbackForm";
 import CustomerCommentsPreview from "../../interaction/components/CustomerCommentsPreview";
 import CustomerLoyaltyBalanceCard from "../../loyalty/components/CustomerLoyaltyBalanceCard";
+
+function DetailRow({ icon: Icon, label, value, ltr }) {
+  if (!value) return null;
+  return (
+    <div className="flex items-start justify-between gap-3 border-b border-gray-100 py-2.5 text-xs last:border-0 dark:border-gray-800">
+      <span className="flex shrink-0 items-center gap-1.5 font-semibold text-gray-500 dark:text-gray-400">
+        <Icon size={13} className="text-[#6B5478]" />
+        {label}
+      </span>
+      <span className="text-left font-bold text-gray-800 dark:text-gray-100" dir={ltr ? "ltr" : undefined}>
+        {value}
+      </span>
+    </div>
+  );
+}
 
 export default function CustomerHallServicesPage() {
   const hall = fetchCustomerHallServices();
@@ -17,7 +32,7 @@ export default function CustomerHallServicesPage() {
     >
       <div className="mx-auto max-w-lg">
         <Link
-          to="/auth/login"
+          to="/manager/login"
           className="mb-6 inline-flex items-center gap-1 text-xs font-bold text-[#6B5478]"
         >
           <ArrowRight size={14} />
@@ -25,21 +40,33 @@ export default function CustomerHallServicesPage() {
         </Link>
 
         <div className="overflow-hidden rounded-3xl border border-gray-200 bg-white shadow-xl shadow-gray-200/50 dark:border-gray-800 dark:bg-gray-900 dark:shadow-black/30">
-          <img
-            src={hall.image}
-            alt={hall.hallName}
-            className="h-40 w-full object-cover"
-          />
+          <img src={hall.image} alt={hall.hallName} className="h-44 w-full object-cover" />
           <div className="p-5">
             <p className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[#6B5478]">
               <Building2 size={14} />
-              تطبيق الزبون
+              تطبيق الزبون — تفاصيل الصالة
             </p>
-            <h1 className="text-lg font-extrabold text-gray-900 dark:text-white">{hall.hallName}</h1>
-            <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
-              <MapPin size={12} className="text-[#6B5478]" />
-              {hall.city}
-            </p>
+            <h1 className="text-lg font-extrabold text-gray-900 dark:text-white">{hall.hallName || "صالة"}</h1>
+            {hall.city ? (
+              <p className="mt-1 flex items-center gap-1 text-xs text-gray-500">
+                <MapPin size={12} className="text-[#6B5478]" />
+                {hall.city}
+              </p>
+            ) : null}
+
+            <div className="mt-4 rounded-2xl border border-gray-100 bg-gray-50/80 px-4 py-2 dark:border-gray-800 dark:bg-gray-950/40">
+              <DetailRow icon={MapPin} label="العنوان" value={hall.address} />
+              <DetailRow icon={Phone} label="الهاتف" value={hall.phone} ltr />
+              <DetailRow icon={Clock} label="ساعات العمل" value={hall.workHoursLabel} ltr />
+              {hall.latitude != null && hall.longitude != null ? (
+                <DetailRow
+                  icon={MapPin}
+                  label="GPS"
+                  value={`${hall.latitude}, ${hall.longitude}`}
+                  ltr
+                />
+              ) : null}
+            </div>
 
             <CustomerAlertBanner />
 
@@ -53,7 +80,7 @@ export default function CustomerHallServicesPage() {
             <CustomerCommentsPreview />
 
             <p className="mt-4 text-center text-[10px] text-gray-400">
-              تُعرض للزبون الخدمات والملحقات المفعّلة فقط.
+              معاينة لما يظهر في تطبيق Flutter — كارد الصالة + صفحة التفاصيل.
             </p>
           </div>
         </div>

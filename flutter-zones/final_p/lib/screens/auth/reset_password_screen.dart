@@ -1,7 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/zonez_colors.dart';
+import '../../data/repositories/auth_repository.dart';
+import '../../models/auth_exception.dart';
 import '../../widgets/circuit_background.dart';
 import '../../widgets/neon_gradient_border.dart';
 import '../../widgets/neon_gradient_button.dart';
@@ -19,6 +22,21 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
   final _passwordController = TextEditingController();
   final _confirmController = TextEditingController();
 
+  bool _isLoading = false;
+  String? _error;
+
+  String get _email {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) return args['email'] as String? ?? '';
+    return '';
+  }
+
+  String get _code {
+    final args = ModalRoute.of(context)?.settings.arguments;
+    if (args is Map) return args['code'] as String? ?? '';
+    return '';
+  }
+
   @override
   void dispose() {
     _passwordController.dispose();
@@ -26,12 +44,49 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
     super.dispose();
   }
 
-  void _savePassword() {
-    Navigator.pushNamedAndRemoveUntil(
-      context,
-      AppRoutes.login,
-      (route) => false,
-    );
+  Future<void> _savePassword() async {
+    final password = _passwordController.text;
+    final confirm = _confirmController.text;
+
+    if (password.length < 6) {
+      setState(() => _error = 'كلمة المرور يجب أن تكون 6 أحرف على الأقل');
+      return;
+    }
+    if (password != confirm) {
+      setState(() => _error = 'كلمتا المرور غير متطابقتين');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _error = null;
+    });
+
+    try {
+      await AuthRepository.instance.resetPassword(
+        email: _email,
+        code: _code,
+        password: password,
+      );
+      if (!mounted) return;
+      Navigator.pushNamedAndRemoveUntil(
+        context,
+        AppRoutes.login,
+        (route) => false,
+        arguments: {
+          'successMessage': 'تم تغيير كلمة المرور بنجاح. سجّل الدخول الآن.',
+          'email': _email,
+        },
+      );
+    } on AuthException catch (e) {
+      if (!mounted) return;
+      setState(() => _error = e.message);
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _error = 'حدث خطأ غير متوقع');
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -140,6 +195,17 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                 prefixIcon: Icons.lock_outline,
                                 showVisibilityToggle: true,
                               ),
+                              if (_error != null) ...[
+                                const SizedBox(height: 12),
+                                Text(
+                                  _error!,
+                                  style: GoogleFonts.cairo(
+                                    color: ZonezColors.deleteRed,
+                                    fontSize: 13,
+                                  ),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
                               const SizedBox(height: 16),
                               Row(
                                 children: [
@@ -151,7 +217,7 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                                   const SizedBox(width: 8),
                                   Expanded(
                                     child: Text(
-                                      'يجب أن تتكون كلمة المرور من 8 أحرف على الأقل وتشمل حروفاً وأرقاماً ورموزاً.',
+                                      '6 أحرف على الأقل.',
                                       style: GoogleFonts.cairo(
                                         fontSize: 11,
                                         color: ZonezColors.textMuted,
@@ -163,9 +229,9 @@ class _ResetPasswordScreenState extends State<ResetPasswordScreen> {
                               ),
                               const SizedBox(height: 28),
                               NeonGradientButton(
-                                label: 'حفظ كلمة المرور',
+                                label: _isLoading ? 'جاري الحفظ...' : 'حفظ كلمة المرور',
                                 icon: Icons.lock,
-                                onPressed: _savePassword,
+                                onPressed: _isLoading ? null : _savePassword,
                               ),
                             ],
                           ),

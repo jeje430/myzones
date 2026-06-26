@@ -7,19 +7,76 @@ import '../../models/lounge_model.dart';
 import '../../providers/lounge_booking_provider.dart';
 import '../../widgets/circuit_background.dart';
 import '../../widgets/glass_container.dart';
+import '../../services/lounge_api_extension.dart';
 import 'steps/booking_step_availability.dart';
 import 'steps/booking_step_confirmation.dart';
 import 'steps/booking_step_date.dart';
 import 'steps/booking_step_package.dart';
 import 'steps/booking_step_payment.dart';
 
-class LoungeBookingFlowScreen extends StatelessWidget {
+class LoungeBookingFlowScreen extends StatefulWidget {
   const LoungeBookingFlowScreen({super.key, required this.lounge});
 
   final LoungeModel lounge;
 
   @override
+  State<LoungeBookingFlowScreen> createState() => _LoungeBookingFlowScreenState();
+}
+
+class _LoungeBookingFlowScreenState extends State<LoungeBookingFlowScreen> {
+  LoungeModel? _lounge;
+  bool _loading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _refreshPackages();
+  }
+
+  Future<void> _refreshPackages() async {
+    try {
+      final fresh = await LoungeDataStore.instance.refreshLounge(widget.lounge.id);
+      if (!mounted) return;
+      if (fresh.bookingsBlocked) {
+        final message = fresh.bookingStop?.message ?? 'الحجوزات متوقفة مؤقتاً';
+        await showDialog<void>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: ZonezColors.cardDark,
+            title: Text('الحجز غير متاح', style: ZonezTypography.title(size: 16)),
+            content: Text(message, style: ZonezTypography.body(size: 13)),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('حسناً')),
+            ],
+          ),
+        );
+        if (mounted) Navigator.pop(context);
+        return;
+      }
+      setState(() {
+        _lounge = fresh;
+        _loading = false;
+      });
+    } catch (_) {
+      setState(() {
+        _lounge = widget.lounge;
+        _loading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    if (_loading) {
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(color: ZonezColors.neonPurple),
+        ),
+      );
+    }
+
+    final lounge = _lounge ?? widget.lounge;
+
     return ChangeNotifierProvider(
       create: (_) => LoungeBookingProvider()..init(lounge),
       child: const _LoungeBookingFlowBody(),
@@ -52,24 +109,28 @@ class _LoungeBookingFlowBody extends StatelessWidget {
         ),
         backgroundColor: Colors.transparent,
       ),
-      body: Stack(
-        children: [
-          const CircuitBackground(),
-          Column(
-            children: [
-              SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight),
-              _StepIndicator(currentStep: flow.currentStep),
-              Expanded(
-                child: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 250),
-                  child: _buildStep(context, flow),
+      body: SafeArea(
+        top: false,
+        child: Stack(
+          children: [
+            const CircuitBackground(),
+            Column(
+              children: [
+                SizedBox(height: MediaQuery.paddingOf(context).top + kToolbarHeight),
+                _StepIndicator(currentStep: flow.currentStep),
+                Expanded(
+                  child: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 250),
+                    child: _buildStep(context, flow),
+                  ),
                 ),
-              ),
-              if (flow.currentStep != BookingFlowStep.confirmation)
-                _BottomNavBar(flow: flow),
-            ],
-          ),
-        ],
+                if (flow.currentStep != BookingFlowStep.confirmation &&
+                    flow.currentStep != BookingFlowStep.payment)
+                  _BottomNavBar(flow: flow),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }

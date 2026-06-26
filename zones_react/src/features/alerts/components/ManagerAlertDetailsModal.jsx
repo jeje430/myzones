@@ -1,5 +1,6 @@
 import AdminModal from "../../devices-packages/components/AdminModal";
 import Button from "../../super-admin/components/ui/Button";
+import NotificationCard from "./NotificationCard";
 import {
   alertSeverityLabel,
   alertSeverityMeta,
@@ -8,26 +9,11 @@ import {
   formatAlertRecordCode,
 } from "../data/alertsMeta";
 
-function DetailRow({ label, value, dir, children }) {
+function MetaChip({ label, children }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-800/40">
-      <p className="text-[10px] font-bold text-gray-400">{label}</p>
-      {children ?? (
-        <p className="mt-1 text-xs font-bold text-gray-800 dark:text-gray-100" dir={dir}>
-          {value || "—"}
-        </p>
-      )}
-    </div>
-  );
-}
-
-function TextBlock({ label, value }) {
-  return (
-    <div className="rounded-xl border border-gray-100 bg-gray-50/80 px-3 py-2.5 dark:border-gray-800 dark:bg-gray-800/40">
-      <p className="text-[10px] font-bold text-gray-400">{label}</p>
-      <p className="mt-1 text-xs leading-relaxed text-gray-700 dark:text-gray-200">
-        {value || "—"}
-      </p>
+    <div className="rounded-lg border border-gray-100 bg-gray-50/60 px-2.5 py-1.5 dark:border-gray-800 dark:bg-gray-800/40">
+      <p className="text-[9px] font-bold text-gray-400">{label}</p>
+      <div className="mt-0.5 text-[11px] font-bold text-gray-700 dark:text-gray-200">{children}</div>
     </div>
   );
 }
@@ -40,35 +26,41 @@ export default function ManagerAlertDetailsModal({ open, alert, onClose }) {
 
   return (
     <AdminModal open={open} onClose={onClose} title="تفاصيل التنبيه" wide>
-      <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <DetailRow label="رقم السجل" value={formatAlertRecordCode(alert.id)} dir="ltr" />
-        <DetailRow label="اسم التنبيه" value={alert.name} />
-        <DetailRow
-          label="فئة مستهدفة"
-          value={alertTargetLabel(alert.targetCategories ?? alert.targetCategory)}
+      <div className="mt-4 space-y-4" dir="rtl">
+        <NotificationCard
+          title={alert.name}
+          dateTime={alert.startDate}
+          description={alert.situationDescription || alert.message}
+          instructions={alert.alternativeInstructions}
+          severity={alert.severity}
+          badge={
+            <span
+              className={`inline-flex shrink-0 rounded-full px-2 py-0.5 text-[9px] font-bold ${severity.badgeClass}`}
+            >
+              {alertSeverityLabel(alert.severity)}
+            </span>
+          }
         />
-        <DetailRow label="مستوى الخطورة">
-          <span
-            className={`mt-1 inline-flex rounded-full px-2.5 py-0.5 text-[11px] font-bold ${severity.badgeClass}`}
-          >
-            {alertSeverityLabel(alert.severity)}
-          </span>
-        </DetailRow>
-        <DetailRow label="الحالة" value={alertStatusLabel(alert.status)} />
-        <DetailRow label="تاريخ البداية" value={alert.startDate} dir="ltr" />
-        <DetailRow label="تاريخ النهاية" value={alert.endDate || "—"} dir="ltr" />
-      </div>
 
-      <div className="mt-3 space-y-3">
-        <TextBlock label="وصف للحالة" value={alert.situationDescription} />
-        <TextBlock label="إجراء بديل أو تعليمات" value={alert.alternativeInstructions} />
-      </div>
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <MetaChip label="رقم السجل">
+            <span dir="ltr">{formatAlertRecordCode(alert.id)}</span>
+          </MetaChip>
+          <MetaChip label="المستهدف">
+            {alertTargetLabel(alert.targetAudience ?? alert.targetCategories ?? alert.targetCategory)}
+          </MetaChip>
+          <MetaChip label="الحالة">{alertStatusLabel(alert.status)}</MetaChip>
+          <MetaChip label="تاريخ النهاية">
+            <span dir="ltr">{alert.endDate || "—"}</span>
+          </MetaChip>
+        </div>
 
-      {active ? (
-        <p className="mt-3 text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-          التنبيه نشط — سيُسجَّل تاريخ النهاية تلقائياً عند إيقافه.
-        </p>
-      ) : null}
+        {active ? (
+          <p className="text-[11px] font-semibold text-amber-600 dark:text-amber-400">
+            التنبيه نشط — سيُسجَّل تاريخ النهاية تلقائياً عند إيقافه.
+          </p>
+        ) : null}
+      </div>
 
       <div className="mt-5 flex justify-end">
         <Button variant="outline" onClick={onClose}>

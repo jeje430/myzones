@@ -1,53 +1,28 @@
-export const TOURNAMENTS_LIST_KEY = "zones-tournaments-list-v1";
+import { hallScopedKey } from "../../shared/tenant/hallScopedStorage";
+
+export const TOURNAMENTS_LIST_KEY = "zones-tournaments-list-v2";
+const storageKey = () => hallScopedKey(TOURNAMENTS_LIST_KEY);
 
 export const TOURNAMENTS_LIST_EVENT = "zones-tournaments-list-updated";
+
+const LEGACY_KEYS = ["zones-tournaments-list-v1", "zones-tournaments-list-v2"];
+const LEGACY_PURGE_FLAG = "zones-tournaments-list-legacy-purged-v3";
+
+function purgeLegacyTournamentStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
+}
+
+purgeLegacyTournamentStorage();
 
 function notifyTournamentsUpdated() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(TOURNAMENTS_LIST_EVENT));
 }
-
-const defaultRows = [
-  {
-    id: 1,
-    name: "بطولة فيفا الرمضانية",
-    game: "FIFA 24",
-    participants: 8,
-    startDate: "20-05-2024",
-    endDate: "30-05-2024",
-    prize: "500 د.ل",
-    status: "started",
-    withdrawal: "خسارة",
-    tieRule: "يتم ترحيل المباراة للمراجعة",
-    delayMinutes: 10,
-  },
-  {
-    id: 2,
-    name: "بطولة تحدي الأبطال",
-    game: "FIFA 24",
-    participants: 16,
-    startDate: "25-05-2024",
-    endDate: "10-06-2024",
-    prize: "300 د.ل",
-    status: "upcoming",
-    withdrawal: "خسارة",
-    tieRule: "إعادة المباراة",
-    delayMinutes: 15,
-  },
-  {
-    id: 3,
-    name: "كأس عالم 26",
-    game: "FIFA 24",
-    participants: 8,
-    startDate: "01-06-2024",
-    endDate: "15-06-2024",
-    prize: "400 د.ل",
-    status: "upcoming",
-    withdrawal: "خسارة",
-    tieRule: "إعادة المباراة",
-    delayMinutes: 10,
-  },
-];
 
 function normalizeRow(row) {
   return {
@@ -59,12 +34,12 @@ function normalizeRow(row) {
 
 export function loadTournamentRows() {
   try {
-    const raw = localStorage.getItem(TOURNAMENTS_LIST_KEY);
-    if (!raw) return defaultRows.map(normalizeRow);
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length ? parsed.map(normalizeRow) : defaultRows.map(normalizeRow);
+    return Array.isArray(parsed) && parsed.length ? parsed.map(normalizeRow) : [];
   } catch {
-    return defaultRows.map(normalizeRow);
+    return [];
   }
 }
 
@@ -83,9 +58,9 @@ export function saveTournamentRows(rows) {
   try {
     const encoded = JSON.stringify(rows);
     if (encoded.length > 4_800_000) return false;
-    const prev = localStorage.getItem(TOURNAMENTS_LIST_KEY);
+    const prev = localStorage.getItem(storageKey());
     if (prev === encoded) return true;
-    localStorage.setItem(TOURNAMENTS_LIST_KEY, encoded);
+    localStorage.setItem(storageKey(), encoded);
     notifyTournamentsUpdated();
     return true;
   } catch {

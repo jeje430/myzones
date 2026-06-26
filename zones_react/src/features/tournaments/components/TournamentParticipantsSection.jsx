@@ -3,6 +3,12 @@ import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
+import {
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import { formatParticipantDate, winnerLabel } from "../data/participantMeta";
 import {
   TOURNAMENT_PARTICIPANTS_EVENT,
@@ -83,6 +89,8 @@ export default function TournamentParticipantsSection() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: filtered, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -142,6 +150,7 @@ export default function TournamentParticipantsSection() {
           <table className="w-full min-w-[960px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">#</th>
                 <th className="px-3 py-2.5 font-bold">اسم المشترك</th>
                 <th className="px-3 py-2.5 font-bold">البريد الإلكتروني</th>
@@ -153,7 +162,8 @@ export default function TournamentParticipantsSection() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.map((row) => (
-                <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                  <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
                   <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
                     {row.slotIndex || "—"}
                   </td>
@@ -175,7 +185,7 @@ export default function TournamentParticipantsSection() {
               ))}
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
                     لا يوجد مشتركون مطابقون.
                   </td>
                 </tr>

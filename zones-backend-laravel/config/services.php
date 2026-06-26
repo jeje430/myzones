@@ -35,4 +35,12 @@ return [
         ],
     ],
 
+    'plutu' => [
+        'return_url' => env('PLUTU_RETURN_URL'),
+    ],
+
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+    ],
+
 ];

@@ -1,5 +1,6 @@
 import { loadSyncedActiveDevices, isDeviceBroken } from "../../devices-packages/utils/deviceFaultSync";
 import { formatChartWeekdayLabel } from "../../../shared/utils/chartDayLabels";
+import { formatLocalIsoDate } from "../../../shared/utils/localDateUtils";
 import {
   ATTENDANCE_STATUS,
   BOOKING_SOURCES,
@@ -20,7 +21,7 @@ function last7Days() {
     d.setHours(12, 0, 0, 0);
     d.setDate(d.getDate() - i);
     days.push({
-      iso: d.toISOString().slice(0, 10),
+      iso: formatLocalIsoDate(d),
       label: formatChartWeekdayLabel(d),
     });
   }
@@ -28,7 +29,7 @@ function last7Days() {
 }
 
 function isCalendarBooking(slot) {
-  return slot.status === SLOT_STATUS.reserved || slot.status === SLOT_STATUS.active;
+  return slot.status === SLOT_STATUS.reserved || slot.status === SLOT_STATUS.busy;
 }
 
 function isAppBooking(slot) {
@@ -58,7 +59,7 @@ export function getReceptionDashboardView() {
   const todaySessions = slots.filter(
     (s) =>
       s.date === today &&
-      (s.status === SLOT_STATUS.active || s.attendanceStatus === ATTENDANCE_STATUS.checkedIn),
+      (s.status === SLOT_STATUS.busy || s.attendanceStatus === ATTENDANCE_STATUS.checkedIn),
   ).length;
 
   return {

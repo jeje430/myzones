@@ -1,10 +1,10 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/booking_repository.dart';
 import '../models/booking.dart';
+import '../models/lounge_model.dart';
 import '../models/zones_models.dart';
-import '../services/zones_api_service.dart';
 import '../utils/date_format_utils.dart';
-import '../utils/booking_time_utils.dart';
 
 enum OfferBookingStep {
   dateSelection,
@@ -24,55 +24,56 @@ class OfferBookingProvider extends ChangeNotifier {
   final String loungeName;
   final double finalPrice;
 
-  final ZonesApiService _api = ZonesApiService.instance;
+  final BookingRepository _bookings = BookingRepository.instance;
 
   OfferBookingStep currentStep = OfferBookingStep.dateSelection;
   DateTime? selectedDate;
   bool isCheckingAvailability = false;
   bool isAvailable = false;
   String? availabilityMessage;
-  List<TimeSlotModel> _timeSlots = [];
-  TimeSlotModel? selectedSlot;
+  AvailabilityResult? availabilityResult;
+  HourlyTimeSlot? selectedSlot;
   PaymentStatus paymentMethod = PaymentStatus.payOnArrival;
   bool isConfirming = false;
   String? errorMessage;
-  String? confirmedBookingId;
+  DeviceBookingConfirmation? confirmation;
 
-  /// Wizard steps 2–5; step 1 is [OfferDetailsScreen].
   static const stepLabels = ['التاريخ', 'التحقق', 'الدفع', 'التأكيد'];
   static const stepDisplayOffset = 2;
 
-  List<TimeSlotModel> get availableTimeSlots =>
-      _timeSlots.where((s) => s.isAvailable).toList(growable: false);
+  List<HourlyTimeSlot> get availableTimeSlots =>
+      availabilityResult?.slots.where((s) => s.isAvailable).toList(growable: false) ??
+      const [];
 
   bool get canProceedFromDate =>
       selectedDate != null && !isCheckingAvailability;
   bool get canProceedFromVerification => selectedSlot != null;
   bool get canProceedFromPayment => !isConfirming;
 
-  int get earnedPoints => (finalPrice * 0.5).round();
+  int get stationId => offer.stationId ?? 0;
+  int get packageId => offer.packageId ?? 0;
+
+  double get checkoutBasePrice =>
+      selectedSlot?.totalPrice ?? offer.discountedPrice ?? finalPrice;
+
+  double? get originalTotalPrice =>
+      selectedSlot?.originalTotalPrice ?? offer.originalPrice;
+
+  int? get discountPercent =>
+      selectedSlot?.discountPercent ?? offer.discountPercent;
+
+  String? get selectedDeviceName => selectedSlot?.deviceName;
+
+  int get earnedPoints => (checkoutBasePrice * 0.5).round();
 
   String get formattedDate =>
       selectedDate != null ? formatArabicDate(selectedDate!) : '';
 
-  String get formattedTime => selectedSlot?.timeRange ?? '';
+  String get formattedTime => selectedSlot?.label ?? '';
 
-  DateTime? get slotStartDateTime {
-    if (selectedDate == null || selectedSlot == null) return null;
-    final parsed = _parseSlotStart(selectedSlot!.timeRange);
-    if (parsed == null) return null;
-    return DateTime(
-      selectedDate!.year,
-      selectedDate!.month,
-      selectedDate!.day,
-      parsed.hour,
-      parsed.minute,
-    );
-  }
+  String? get confirmedBookingId => confirmation?.bookingId;
 
-  DateTime? _parseSlotStart(String timeRange) {
-    return parseSlotStartDateTime(timeRange);
-  }
+  DateTime? get slotStartDateTime => selectedSlot?.startDateTime;
 
   void selectDate(DateTime date) {
     final normalized = DateTime(date.year, date.month, date.day);
@@ -81,64 +82,57 @@ class OfferBookingProvider extends ChangeNotifier {
     isAvailable = false;
     availabilityMessage = null;
     selectedSlot = null;
-    _timeSlots = [];
+    availabilityResult = null;
     notifyListeners();
   }
 
   Future<bool> advanceFromDate() async {
-    if (selectedDate == null) return false;
+    if (selectedDate == null || !offer.isBookable) return false;
 
     isCheckingAvailability = true;
     isAvailable = false;
     availabilityMessage = null;
+    availabilityResult = null;
+    selectedSlot = null;
     notifyListeners();
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-
-    if (!offer.isDateInPromoWindow(selectedDate!)) {
-      isCheckingAvailability = false;
-      availabilityMessage = 'التاريخ خارج فترة العرض';
-      notifyListeners();
-      return false;
-    }
-
-    isAvailable = true;
-    availabilityMessage = 'يوجد مكان متاح!';
-    isCheckingAvailability = false;
-    notifyListeners();
-
-    await loadTimeSlots();
-    if (availableTimeSlots.isEmpty) {
-      availabilityMessage = 'لا توجد أوقات متاحة في هذا التاريخ';
-      isAvailable = false;
-      notifyListeners();
-      return false;
-    }
-
-    currentStep = OfferBookingStep.verification;
-    notifyListeners();
-    return true;
-  }
-
-  Future<void> loadTimeSlots() async {
     try {
-      final slots = await _api.fetchTimeSlots(offer.id);
-      _timeSlots = slots.where((s) {
-        if (!s.isAvailable) return false;
-        if (selectedDate == null) return true;
-        final start = parseSlotStartDateTime(s.timeRange, onDate: selectedDate);
-        if (start == null) return true;
-        return start.isAfter(DateTime.now());
-      }).toList();
-      selectedSlot = null;
-      notifyListeners();
+      if (!offer.isDateInPromoWindow(selectedDate!)) {
+        availabilityMessage = 'التاريخ خارج فترة العرض';
+        return false;
+      }
+
+      availabilityResult = await _bookings.checkAvailability(
+        stationId: stationId,
+        packageId: packageId,
+        date: selectedDate!,
+        offerId: offer.id,
+      );
+
+      if (availabilityResult?.isAvailable != true ||
+          availableTimeSlots.isEmpty) {
+        availabilityMessage =
+            availabilityResult?.message ?? 'لا توجد حجوزات متاحة';
+        isAvailable = false;
+        return false;
+      }
+
+      isAvailable = true;
+      availabilityMessage = 'يوجد مكان متاح!';
+      currentStep = OfferBookingStep.verification;
+      return true;
     } catch (e) {
-      errorMessage = e.toString();
+      errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      availabilityMessage = errorMessage;
+      isAvailable = false;
+      return false;
+    } finally {
+      isCheckingAvailability = false;
       notifyListeners();
     }
   }
 
-  void selectSlot(TimeSlotModel slot) {
+  void selectSlot(HourlyTimeSlot slot) {
     if (!slot.isAvailable) return;
     selectedSlot = slot;
     notifyListeners();
@@ -149,7 +143,28 @@ class OfferBookingProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<bool> confirmBooking() async {
+  Future<DeviceBookingConfirmation?> createBookingOnServer({
+    required String paymentMethod,
+  }) async {
+    if (selectedSlot == null ||
+        selectedDate == null ||
+        selectedSlot!.deviceId == null ||
+        selectedSlot!.hour == null) {
+      return null;
+    }
+
+    return _bookings.createBooking(
+      stationId: stationId,
+      packageId: packageId,
+      deviceId: selectedSlot!.deviceId!,
+      date: selectedDate!,
+      hour: selectedSlot!.hour!,
+      paymentMethod: paymentMethod,
+      offerId: offer.id,
+    );
+  }
+
+  Future<bool> confirmBooking({String paymentMethod = 'cash'}) async {
     if (selectedSlot == null || selectedDate == null) return false;
 
     isConfirming = true;
@@ -157,15 +172,55 @@ class OfferBookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final confirmation = await _api.confirmBooking(
-        offerId: offer.id,
-        timeSlotId: selectedSlot!.id,
-        loungeName: loungeName,
-      );
-      confirmedBookingId = confirmation.bookingId;
+      final result = await createBookingOnServer(paymentMethod: paymentMethod);
+      if (result == null) return false;
+
+      confirmation = result;
+      currentStep = OfferBookingStep.confirmation;
       return true;
     } catch (e) {
-      errorMessage = e.toString().replaceFirst('Exception: ', '');
+      errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      return false;
+    } finally {
+      isConfirming = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> refreshConfirmationAfterPayment(
+    int bookingId, {
+    String? invoiceNo,
+    Map<String, String>? callbackParams,
+  }) async {
+    isConfirming = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final record = await _bookings.waitForPaymentConfirmation(
+        bookingId,
+        invoiceNo: invoiceNo,
+        callbackParams: callbackParams,
+      );
+      if (record == null) {
+        throw Exception('تعذر تأكيد الدفع — حاول تحديث حجوزاتي');
+      }
+
+      confirmation = DeviceBookingConfirmation(
+        bookingId: record.bookingNumber,
+        bookingNumber: record.bookingNumber,
+        finalPrice: record.totalPrice,
+        earnedPoints: (record.totalPrice * 0.5).round(),
+        receiptPdfUrl: record.receiptPdfUrl,
+        numericId: record.id,
+      );
+      paymentMethod = PaymentStatus.electronic;
+      currentStep = OfferBookingStep.confirmation;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      notifyListeners();
       return false;
     } finally {
       isConfirming = false;
@@ -190,11 +245,9 @@ class OfferBookingProvider extends ChangeNotifier {
   }
 
   Future<bool> confirmAndAdvance() async {
-    final ok = await confirmBooking();
-    if (!ok) return false;
-    currentStep = OfferBookingStep.confirmation;
-    notifyListeners();
-    return true;
+    final method =
+        paymentMethod == PaymentStatus.electronic ? 'online' : 'cash';
+    return confirmBooking(paymentMethod: method);
   }
 
   void previousStep() {
@@ -204,7 +257,7 @@ class OfferBookingProvider extends ChangeNotifier {
       case OfferBookingStep.verification:
         currentStep = OfferBookingStep.dateSelection;
         selectedSlot = null;
-        _timeSlots = [];
+        availabilityResult = null;
         isAvailable = false;
       case OfferBookingStep.payment:
         currentStep = OfferBookingStep.verification;

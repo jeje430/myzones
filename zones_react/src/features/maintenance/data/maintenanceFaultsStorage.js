@@ -1,35 +1,28 @@
 import { loadDevices } from "../../devices-packages/data/devicesStorage";
 import { formatFaultDateTime } from "./faultMeta";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 
-const STORAGE_KEY = "zones-maintenance-faults-v5";
+const BASE_KEY = "zones-maintenance-faults-v6";
+const storageKey = () => hallScopedKey(BASE_KEY);
 export const MAINTENANCE_FAULTS_EVENT = "zones-maintenance-faults-updated";
 
-function pad2(n) {
-  return String(n).padStart(2, "0");
+const LEGACY_KEYS = [
+  "zones-maintenance-faults-v4",
+  "zones-maintenance-faults-v5",
+  "zones-maintenance-faults-v6",
+];
+const LEGACY_PURGE_FLAG = "zones-maintenance-faults-legacy-purged-v7";
+
+function purgeLegacyFaultStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
 }
 
-function faultDate(y, m, d, hour = 10, minute = 0) {
-  return `${y}/${pad2(m)}/${pad2(d)} — ${pad2(hour)}:${pad2(minute)}`;
-}
-
-function buildSeedFaults() {
-  const y = new Date().getFullYear();
-  const m = new Date().getMonth() + 1;
-  const prevM = m === 1 ? 12 : m - 1;
-  const prevY = m === 1 ? y - 1 : y;
-
-  return [
-    { id: 1001, deviceId: 3, deviceName: "PS5-02", deviceType: "ps5", deviceTypeLabel: "PlayStation 5", faultType: "controller", status: "pending", createdAt: faultDate(y, m, 4, 20, 15), resolvedAt: "", maintenanceCost: 0, maintenanceEmployeeName: "خالد بوزريدة", archived: false },
-    { id: 1002, deviceId: 1, deviceName: "PS5-01", deviceType: "ps5", deviceTypeLabel: "PlayStation 5", faultType: "screen", status: "resolved", createdAt: faultDate(y, m, 2, 14, 30), resolvedAt: faultDate(y, m, 3, 10, 0), maintenanceCost: 120, maintenanceEmployeeName: "خالد بوزريدة", archived: false },
-    { id: 1003, deviceId: 5, deviceName: "PS5-03", deviceType: "ps5", deviceTypeLabel: "PlayStation 5", faultType: "network", status: "resolved", createdAt: faultDate(y, m, 5, 11, 0), resolvedAt: faultDate(y, m, 6, 9, 30), maintenanceCost: 0, maintenanceEmployeeName: "خالد بوزريدة", archived: false },
-    { id: 1004, deviceId: 2, deviceName: "XBOX-01", deviceType: "xbox", deviceTypeLabel: "Xbox", faultType: "audio", status: "resolved", createdAt: faultDate(y, m, 7, 16, 45), resolvedAt: faultDate(y, m, 8, 11, 0), maintenanceCost: 80, maintenanceEmployeeName: "خالد بوزريدة", archived: false },
-    { id: 1007, deviceId: 7, deviceName: "VR-01", deviceType: "vr", deviceTypeLabel: "VR", faultType: "screen", status: "pending", createdAt: faultDate(y, m, 14, 18, 0), resolvedAt: "", maintenanceCost: 0, maintenanceEmployeeName: "", archived: false },
-    { id: 1008, deviceId: 4, deviceName: "PC-01", deviceType: "pc", deviceTypeLabel: "PC Gaming", faultType: "power", status: "pending", createdAt: faultDate(y, m, 11, 9, 30), resolvedAt: "", maintenanceCost: 0, maintenanceEmployeeName: "خالد بوزريدة", archived: false },
-    { id: 1009, deviceId: 5, deviceName: "PS5-03", deviceType: "ps5", deviceTypeLabel: "PlayStation 5", faultType: "controller", status: "pending", createdAt: faultDate(y, m, 12, 15, 0), resolvedAt: "", maintenanceCost: 0, maintenanceEmployeeName: "خالد بوزريدة", archived: false },
-    { id: 1011, deviceId: 2, deviceName: "XBOX-01", deviceType: "xbox", deviceTypeLabel: "Xbox", faultType: "power", status: "resolved", createdAt: faultDate(prevY, prevM, 8, 9, 0), resolvedAt: faultDate(prevY, prevM, 10, 14, 0), maintenanceCost: 90, maintenanceEmployeeName: "خالد بوزريدة", archived: true, archivedAt: faultDate(prevY, prevM, 12, 10, 0) },
-    { id: 1012, deviceId: 6, deviceName: "XBOX-02", deviceType: "xbox", deviceTypeLabel: "Xbox", faultType: "network", status: "pending", createdAt: faultDate(prevY, prevM, 5, 14, 0), resolvedAt: "", maintenanceCost: 0, maintenanceEmployeeName: "خالد بوزريدة", archived: true, archivedAt: faultDate(prevY, prevM, 20, 11, 0) },
-  ];
-}
+purgeLegacyFaultStorage();
 
 function lookupDeviceTypeLabel(deviceId, deviceName) {
   const devices = loadDevices();
@@ -51,19 +44,19 @@ function normalizeFault(row) {
 
 export function loadFaults() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildSeedFaults().map(normalizeFault);
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return buildSeedFaults().map(normalizeFault);
+    if (!Array.isArray(parsed)) return [];
     return parsed.map(normalizeFault);
   } catch {
-    return buildSeedFaults().map(normalizeFault);
+    return [];
   }
 }
 
 export function saveFaults(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map(normalizeFault)));
+    localStorage.setItem(storageKey(), JSON.stringify(list.map(normalizeFault)));
     window.dispatchEvent(new Event(MAINTENANCE_FAULTS_EVENT));
   } catch {
     /* ignore */
@@ -80,7 +73,89 @@ export function getActiveFaults() {
   return loadFaults().filter((f) => !f.archived);
 }
 
-/** الأعطال الحالية — معلّقة فقط لأجهزة الصالة غير المؤرشفة */
+/** الأعطال الحالية — معلّقة أو قيد الإصلاح لأجهزة الصالة */
+export function isBlockingFault(f) {
+  if (!f || f.archived) return false;
+  if (f.status === "in_progress") return true;
+  if (f.status === "scheduled") return false;
+  if (f.status === "pending") {
+    return f.applyMaintenanceNow !== false;
+  }
+  return false;
+}
+
+const OPEN_FAULT_STATUSES = new Set(["pending", "in_progress", "scheduled"]);
+
+export function isOpenFaultRecord(fault) {
+  if (!fault || fault.archived) return false;
+  return OPEN_FAULT_STATUSES.has(fault.status);
+}
+
+/** تحويل الأرقام العربية إلى غربية لتحليل التواريخ */
+function normalizeDateDigits(str) {
+  const eastern = "٠١٢٣٤٥٦٧٨٩";
+  return String(str).replace(/[٠-٩]/g, (c) => String(eastern.indexOf(c)));
+}
+
+/** تاريخ بداية العطل بصيغة YYYY-MM-DD */
+export function getFaultEffectiveDateIso(fault) {
+  if (!fault) return null;
+  if (fault.faultDate) {
+    const d = String(fault.faultDate).slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  }
+  const raw = normalizeDateDigits(String(fault.createdAt || "").trim());
+  if (!raw) return null;
+  if (/^\d{4}-\d{2}-\d{2}/.test(raw)) return raw.slice(0, 10);
+  const ymd = raw.match(/^(\d{4})[/.-](\d{1,2})[/.-](\d{1,2})/);
+  if (ymd) {
+    const [, year, month, day] = ymd;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  const dmy = raw.match(/^(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})/);
+  if (dmy) {
+    const [, day, month, year] = dmy;
+    return `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+  }
+  return null;
+}
+
+export function getOpenFaultsForDevice(deviceId) {
+  return loadFaults().filter(
+    (f) => String(f.deviceId) === String(deviceId) && isOpenFaultRecord(f),
+  );
+}
+
+/**
+ * هل الجهاز في صيانة/عطل في تاريخ تقويم محدد؟
+ * يشمل الأعطال المجدولة مستقبلاً (من تاريخ العطل حتى الإصلاح).
+ */
+export function isDeviceInMaintenanceOnDate(deviceId, dateIso) {
+  if (deviceId == null || !dateIso) return false;
+
+  const openFaults = getOpenFaultsForDevice(deviceId);
+  if (!openFaults.length) return false;
+
+  for (const fault of openFaults) {
+    const faultStart = getFaultEffectiveDateIso(fault);
+    if (!faultStart) {
+      if (isBlockingFault(fault)) return true;
+      continue;
+    }
+    if (dateIso >= faultStart) return true;
+  }
+
+  return false;
+}
+
+export function getLatestBlockingFaultForDevice(deviceId) {
+  const open = loadFaults().filter(
+    (f) => String(f.deviceId) === String(deviceId) && isBlockingFault(f),
+  );
+  if (!open.length) return null;
+  return open.reduce((a, b) => ((a.id ?? 0) > (b.id ?? 0) ? a : b));
+}
+
 export function getCurrentFaults() {
   const deviceIds = new Set(
     loadDevices()
@@ -88,7 +163,10 @@ export function getCurrentFaults() {
       .map((d) => d.id),
   );
   return loadFaults().filter(
-    (f) => !f.archived && f.status === "pending" && deviceIds.has(f.deviceId),
+    (f) =>
+      !f.archived &&
+      (f.status === "pending" || f.status === "in_progress" || f.status === "scheduled") &&
+      deviceIds.has(f.deviceId),
   );
 }
 
@@ -100,11 +178,14 @@ export function getArchivedFaults() {
 }
 
 export function getLatestPendingFaultForDevice(deviceId) {
-  const pending = loadFaults().filter(
-    (f) => !f.archived && f.deviceId === deviceId && f.status === "pending",
+  const open = loadFaults().filter(
+    (f) =>
+      !f.archived &&
+      String(f.deviceId) === String(deviceId) &&
+      (f.status === "pending" || f.status === "in_progress" || f.status === "scheduled"),
   );
-  if (!pending.length) return null;
-  return pending.reduce((a, b) => ((a.id ?? 0) > (b.id ?? 0) ? a : b));
+  if (!open.length) return null;
+  return open.reduce((a, b) => ((a.id ?? 0) > (b.id ?? 0) ? a : b));
 }
 
 export function addFault(payload) {
@@ -118,6 +199,8 @@ export function addFault(payload) {
     faultType: payload.faultType,
     faultTypeCustom: payload.faultTypeCustom?.trim() || "",
     status: payload.status || "pending",
+    faultDate: payload.faultDate || "",
+    applyMaintenanceNow: payload.applyMaintenanceNow !== false,
     createdAt: payload.createdAt || formatFaultDateTime(),
     resolvedAt: payload.resolvedAt || "",
     maintenanceCost: payload.maintenanceCost ?? 0,
@@ -165,7 +248,10 @@ export function resolveLatestActiveFaultForDevice(deviceId) {
 export function resolveAndArchiveFaultForDevice(deviceId, maintenanceCost = 0) {
   const list = loadFaults();
   const pending = list.filter(
-    (f) => !f.archived && f.deviceId === deviceId && f.status === "pending",
+    (f) =>
+      !f.archived &&
+      f.deviceId === deviceId &&
+      (f.status === "pending" || f.status === "in_progress"),
   );
   if (!pending.length) return null;
   const latest = pending.reduce((a, b) => ((a.id ?? 0) > (b.id ?? 0) ? a : b));

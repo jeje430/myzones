@@ -3,9 +3,9 @@ import 'package:provider/provider.dart';
 
 import '../../../models/zones_models.dart';
 import '../../../providers/zones_data_provider.dart';
-import '../../offers/offer_details_screen.dart';
+import '../../offers/offer_booking_wizard_screen.dart';
 
-/// Opens the offer details landing page (wizard starts via «احجز الآن»).
+/// Opens the offer booking wizard when customer taps «احجز الآن».
 class OfferBookingFlow {
   OfferBookingFlow._();
 
@@ -15,12 +15,19 @@ class OfferBookingFlow {
     required String loungeName,
     required double finalPrice,
   }) {
+    if (!offer.isBookable) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('هذا العرض غير جاهز للحجز حالياً')),
+      );
+      return;
+    }
+
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (_) => OfferDetailsScreen(
+        builder: (_) => OfferBookingWizardScreen(
           offer: offer,
-          loungeName: loungeName,
+          loungeName: loungeName.isNotEmpty ? loungeName : offer.stationName,
           finalPrice: finalPrice,
         ),
       ),

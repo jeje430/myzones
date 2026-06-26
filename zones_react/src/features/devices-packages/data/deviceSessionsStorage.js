@@ -1,4 +1,7 @@
-const STORAGE_KEY = "zones-device-sessions-v1";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+
+const BASE_KEY = "zones-device-sessions-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const DEVICE_SESSIONS_EVENT = "zones-device-sessions-updated";
 
@@ -7,19 +10,7 @@ function notifySessionsUpdated() {
   window.dispatchEvent(new CustomEvent(DEVICE_SESSIONS_EVENT));
 }
 
-/** جلسات تجريبية — يُحدَّث العدد تلقائياً عند إضافة حجوزات جديدة */
-const DEFAULT_SESSIONS = [
-  { id: 1, deviceId: 1, bookedAt: "2026-06-01T14:30:00" },
-  { id: 2, deviceId: 1, bookedAt: "2026-06-03T18:00:00" },
-  { id: 3, deviceId: 1, bookedAt: "2026-06-05T20:15:00" },
-  { id: 4, deviceId: 1, bookedAt: "2026-06-07T16:45:00" },
-  { id: 5, deviceId: 2, bookedAt: "2026-06-02T11:00:00" },
-  { id: 6, deviceId: 2, bookedAt: "2026-06-06T19:30:00" },
-  { id: 7, deviceId: 3, bookedAt: "2026-06-04T22:00:00" },
-  { id: 8, deviceId: 6, bookedAt: "2026-06-08T10:00:00" },
-  { id: 9, deviceId: 6, bookedAt: "2026-06-08T15:20:00" },
-  { id: 10, deviceId: 7, bookedAt: "2026-05-28T12:00:00" },
-];
+const DEFAULT_SESSIONS = [];
 
 function normalizeSession(row) {
   return {
@@ -31,19 +22,19 @@ function normalizeSession(row) {
 
 export function loadDeviceSessions() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_SESSIONS.map(normalizeSession);
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_SESSIONS.map(normalizeSession);
+    if (!Array.isArray(parsed) || !parsed.length) return [];
     return parsed.map(normalizeSession);
   } catch {
-    return DEFAULT_SESSIONS.map(normalizeSession);
+    return [];
   }
 }
 
 export function saveDeviceSessions(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map(normalizeSession)));
+    localStorage.setItem(storageKey(), JSON.stringify(list.map(normalizeSession)));
     notifySessionsUpdated();
   } catch {
     /* ignore */

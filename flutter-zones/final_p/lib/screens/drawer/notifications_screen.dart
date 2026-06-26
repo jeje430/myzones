@@ -9,6 +9,7 @@ import '../../providers/app_state_provider.dart';
 import '../../screens/booking/booking_detail_screen.dart';
 import '../../screens/home/home_screen.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 
 class NotificationsScreen extends StatelessWidget {
   const NotificationsScreen({super.key});
@@ -115,7 +116,9 @@ class NotificationsScreen extends StatelessWidget {
       body: Stack(
         children: [
           const CircuitBackground(),
-          notifications.isEmpty
+          ZonezScreen(
+            top: false,
+            child: notifications.isEmpty
               ? Center(
                   child: Text(
                     'لا توجد إشعارات',
@@ -228,6 +231,7 @@ class NotificationsScreen extends StatelessWidget {
                     );
                   },
                 ),
+          ),
         ],
       ),
     );

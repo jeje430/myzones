@@ -1,11 +1,16 @@
-import { Bell, Menu } from "lucide-react";
+import { Menu } from "lucide-react";
 import DashboardProfileChip from "./DashboardProfileChip";
 import DashboardTopBarActions from "./DashboardTopBarActions";
-import { DASHBOARD_ICON_BTN_CLS, DASHBOARD_NOTIFICATION_BTN_CLS } from "./dashboardTopBarUi";
+import NotificationCenterBell from "../../features/alerts/components/NotificationCenterBell";
+import { DASHBOARD_ICON_BTN_CLS } from "./dashboardTopBarUi";
 import { useDashboardProfile } from "../hooks/useDashboardProfile";
+import { getManagerRoutes } from "../config/managerNavigation";
+import { getActiveAccountIdFromUrl } from "../../features/auth/data/accountSessionStorage";
 
 export default function ManagerTopBar({ onMenuClick }) {
   const profile = useDashboardProfile();
+  const managerId = getActiveAccountIdFromUrl() || profile.id;
+  const profilePath = getManagerRoutes(managerId).profile;
 
   return (
     <header
@@ -27,17 +32,8 @@ export default function ManagerTopBar({ onMenuClick }) {
       </div>
 
       <DashboardTopBarActions
-        profile={<DashboardProfileChip roleLabel="مدير صالة" />}
-        notifications={
-          <button
-            type="button"
-            className={DASHBOARD_NOTIFICATION_BTN_CLS}
-            title="التنبيهات"
-            aria-label="التنبيهات"
-          >
-            <Bell size={18} />
-          </button>
-        }
+        profile={<DashboardProfileChip roleLabel="مدير صالة" profileTo={profilePath} />}
+        notifications={<NotificationCenterBell mode="staff" audience="manager" />}
       />
     </header>
   );

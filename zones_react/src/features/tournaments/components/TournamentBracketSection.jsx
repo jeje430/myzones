@@ -3,10 +3,11 @@ import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import { GitBranch } from "lucide-react";
 import TournamentBracket from "../../../components/TournamentBracket";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
+import Button from "../../super-admin/components/ui/Button";
 import { TournamentBreadcrumb } from "./TournamentDetailUi";
-import { getOrCreateBracketState, isBracketReady } from "../bracket/bracketStorage";
-import { loadTournamentRows, TOURNAMENTS_LIST_EVENT } from "../tournamentsListStorage";
-import { TOURNAMENT_PARTICIPANTS_EVENT } from "../data/tournamentParticipantsStorage";
+import BracketSkeletonLoader from "../bracket/BracketSkeletonLoader";
+import { useBracketData } from "../bracket/useBracketData";
+import { notifyTournamentWinner } from "../data/managerTournamentsApi";
 
 /**
  * @param {object} props
@@ -21,54 +22,72 @@ export default function TournamentBracketSection({ routes, readOnly = false }) {
   const navigate = useNavigate();
   const location = useLocation();
   const numericId = Number(id);
-  const [refreshKey, setRefreshKey] = useState(0);
 
-  useEffect(() => {
-    const sync = () => setRefreshKey((k) => k + 1);
-    window.addEventListener(TOURNAMENTS_LIST_EVENT, sync);
-    window.addEventListener(TOURNAMENT_PARTICIPANTS_EVENT, sync);
-    return () => {
-      window.removeEventListener(TOURNAMENTS_LIST_EVENT, sync);
-      window.removeEventListener(TOURNAMENT_PARTICIPANTS_EVENT, sync);
-    };
-  }, []);
+  const {
+    tournament: apiTournament,
+    bracket,
+    isLoading,
+    error,
+    apiSync,
+    bracketReady,
+    setBracketState,
+  } = useBracketData(numericId);
 
   const tournament = useMemo(() => {
-    const list = loadTournamentRows();
     const fromState = location.state?.tournament;
-    const fromList = list.find((r) => r.id === numericId);
-    if (fromList) return fromList;
     if (fromState && Number(fromState.id) === numericId) return fromState;
-    return list.find((r) => r.id === numericId) ?? null;
-  }, [numericId, location.key, location.state, refreshKey]);
+    if (apiTournament && Number(apiTournament.id) === numericId) return apiTournament;
+    return null;
+  }, [numericId, location.state, apiTournament]);
 
-  const bracketReady = tournament ? isBracketReady(tournament) : false;
-  const bracket = useMemo(() => {
-    if (!tournament || !bracketReady) return null;
-    return getOrCreateBracketState(tournament);
-  }, [tournament, bracketReady, refreshKey]);
+  const skeletonSize = tournament?.participants ?? 8;
 
-  const participantsPath = routes.participants?.(numericId);
-  const fromParticipants = location.state?.from === "participants";
+  const [notifyBusy, setNotifyBusy] = useState(false);
+  const [broadcastNotice, setBroadcastNotice] = useState("");
 
-  const goBack = () => {
-    if (fromParticipants && participantsPath) {
-      navigate(participantsPath, { state: { tournament, from: "list" } });
+  const finalMatchHasWinner = useMemo(() => {
+    if (!bracket?.rounds?.length) return false;
+    const lastRound = bracket.rounds[bracket.rounds.length - 1];
+    const finalMatch = lastRound?.matches?.[0];
+    return Boolean(finalMatch?.winner);
+  }, [bracket]);
+
+  const resendWinnerNotification = async () => {
+    if (!tournament?.id || notifyBusy) return;
+    setNotifyBusy(true);
+    setBroadcastNotice("");
+    const result = await notifyTournamentWinner(tournament.id);
+    setNotifyBusy(false);
+    if (!result.ok) {
+      setBroadcastNotice(result.error || "تعذر إرسال الإشعار.");
       return;
     }
-    navigate(routes.details(numericId), {
-      state: { tournament, from: location.state?.from },
-    });
+    setBroadcastNotice(result.message || "تم إرسال إشعار الفوز لجميع مستخدمي التطبيق.");
   };
 
-  if (!Number.isFinite(numericId) || !tournament) {
+  const goBack = () => {
+    navigate(routes.tournaments);
+  };
+
+  if (!Number.isFinite(numericId)) {
     return (
       <>
         <PageHeader title="شجرة البطولة" onBack={() => navigate(-1)} backLabel="رجوع" />
         <div className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
-          <p>تعذر تحميل الشجرة.</p>
+          <p>معرّف البطولة غير صالح.</p>
+        </div>
+      </>
+    );
+  }
+
+  if (!isLoading && error && !tournament) {
+    return (
+      <>
+        <PageHeader title="شجرة البطولة" onBack={() => navigate(-1)} backLabel="رجوع" />
+        <div className="rounded-2xl border border-gray-200 bg-white p-6 text-gray-600 shadow-sm dark:border-gray-800 dark:bg-gray-900 dark:text-gray-300">
+          <p>{error}</p>
           <Link to={routes.tournaments} className="mt-2 inline-block text-xs font-bold text-[#6B5478]">
-            العودة لعرض البطولات
+            العودة للبطولات
           </Link>
         </div>
       </>
@@ -79,41 +98,73 @@ export default function TournamentBracketSection({ routes, readOnly = false }) {
     <>
       <PageHeader
         title="شجرة البطولة"
-        description={tournament.name}
+        description={tournament?.name || "..."}
         onBack={goBack}
-        backLabel={fromParticipants ? "رجوع لقائمة المشاركين" : "رجوع لتفاصيل البطولة"}
+        backLabel="رجوع للبطولات"
+        actions={
+          tournament ? (
+            <>
+              {!readOnly && apiSync && finalMatchHasWinner ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={notifyBusy}
+                  onClick={resendWinnerNotification}
+                >
+                  {notifyBusy ? "جاري الإرسال…" : "إرسال إشعار الفوز"}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={() =>
+                  navigate(routes.details(tournament.id), {
+                    state: { tournament, from: "bracket" },
+                  })
+                }
+              >
+                تفاصيل البطولة
+              </Button>
+            </>
+          ) : null
+        }
       />
 
       <section className="space-y-4">
-        <TournamentBreadcrumb tournamentName={tournament.name} view="bracket" />
+        {tournament ? <TournamentBreadcrumb tournamentName={tournament.name} view="bracket" /> : null}
 
-        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-          {!bracketReady || !bracket ? (
+        {broadcastNotice ? (
+          <p className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm font-semibold text-emerald-300">
+            {broadcastNotice}
+          </p>
+        ) : null}
+
+        <div className="overflow-hidden rounded-2xl border border-[#2D2D3D] bg-[#0F0F12] shadow-lg shadow-black/20">
+          {isLoading ? (
+            <div className="overflow-x-auto p-3 sm:p-4">
+              <BracketSkeletonLoader bracketSize={skeletonSize} variant="manager" />
+            </div>
+          ) : !bracketReady || !bracket ? (
             <div className="px-4 py-12 text-center">
-              <GitBranch size={36} className="mx-auto mb-3 text-gray-300" />
-              <p className="text-sm font-bold text-gray-600 dark:text-gray-300">
+              <GitBranch size={36} className="mx-auto mb-3 text-[#374151]" />
+              <p className="text-sm font-bold text-[#F3F4F6]">
                 الشجرة غير متاحة — لم يكتمل عدد المشاركين
               </p>
-              <p className="mt-1 text-xs text-gray-500">
-                أكمل التسجيل من التطبيق ثم ارجع من قائمة المشاركين.
+              <p className="mt-1 text-xs text-[#9CA3AF]">
+                أكمل التسجيل من التطبيق ثم ارجع لعرض الشجرة.
               </p>
-              {participantsPath ? (
-                <Link
-                  to={participantsPath}
-                  state={{ tournament, from: "list" }}
-                  className="mt-4 inline-flex rounded-xl border border-[#6B5478]/30 bg-[#6B5478]/10 px-4 py-2 text-xs font-bold text-[#6B5478]"
-                >
-                  العودة لقائمة المشاركين
-                </Link>
-              ) : null}
             </div>
           ) : (
-            <div className="overflow-x-auto p-4 sm:p-5">
+            <div className="overflow-x-auto p-3 sm:p-4">
               <TournamentBracket
                 tournament={tournament}
                 bracketState={bracket}
                 variant={readOnly ? "view" : "manager"}
                 onBack={goBack}
+                onBracketChange={setBracketState}
+                apiSync={!readOnly && apiSync}
               />
             </div>
           )}

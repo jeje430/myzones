@@ -1,68 +1,38 @@
-import { formatAlertDateTime, normalizeTargetCategories } from "./alertsMeta";
+import { formatAlertDateTime, normalizeTargetCategories, targetAudienceToCategories } from "./alertsMeta";
 import { pushManagerAlertNotification } from "./hallNotificationsStorage";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 
-const STORAGE_KEY = "zones-manager-alerts-v1";
+const BASE_KEY = "zones-manager-alerts-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 export const MANAGER_ALERTS_EVENT = "zones-manager-alerts-updated";
 
-function buildSeedAlerts() {
-  const now = new Date();
-  const yesterday = new Date(now);
-  yesterday.setDate(yesterday.getDate() - 1);
+const LEGACY_KEYS = ["zones-manager-alerts-v1", "zones-manager-alerts-v2", "zones-hall-notifications-v1"];
+const LEGACY_PURGE_FLAG = "zones-manager-alerts-legacy-purged-v3";
 
-  return [
-    {
-      id: 1003,
-      name: "تنبيه نشط — استقبال",
-      targetCategories: ["reception"],
-      severity: "medium",
-      situationDescription: "يرجى التأكد من جاهزية أجهزة الاستقبال قبل بدء الوردية.",
-      alternativeInstructions: "راجع قائمة الأجهزة المتاحة قبل قبول الحجوزات.",
-      message: "يرجى التأكد من جاهزية أجهزة الاستقبال قبل بدء الوردية.",
-      status: "active",
-      source: "manual",
-      startDate: formatAlertDateTime(now),
-      endDate: "",
-    },
-    {
-      id: 1001,
-      name: "تنبيه صيانة الشبكة",
-      targetCategories: ["reception"],
-      severity: "high",
-      situationDescription: "تعطل مؤقت في شبكة الصالة يؤثر على نظام الحجز.",
-      alternativeInstructions: "سجّل الحجوزات يدوياً وأبلغ الزبائن بالتأخير المتوقع.",
-      message: "تعطل مؤقت في شبكة الصالة يؤثر على نظام الحجز.",
-      status: "stopped",
-      source: "manual",
-      startDate: formatAlertDateTime(yesterday),
-      endDate: formatAlertDateTime(now),
-    },
-    {
-      id: 1002,
-      name: "تنبيه عام للموظفين",
-      targetCategories: ["reception", "maintenance"],
-      severity: "medium",
-      situationDescription: "تذكير بالالتزام بإجراءات السلامة داخل الصالة.",
-      alternativeInstructions: "راجع لائحة السلامة المعلّقة عند مدخل الصالة.",
-      message: "تذكير بالالتزام بإجراءات السلامة داخل الصالة.",
-      status: "stopped",
-      source: "manual",
-      startDate: formatAlertDateTime(yesterday),
-      endDate: formatAlertDateTime(yesterday),
-    },
-  ];
+function purgeLegacyAlertStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
 }
+
+purgeLegacyAlertStorage();
 
 function normalizeAlert(row) {
   const situationDescription =
     row.situationDescription?.trim() || row.message?.trim() || "";
+  const targetAudience = row.targetAudience || row.target_audience || null;
   const targetCategories = normalizeTargetCategories(
-    row.targetCategories ?? row.targetCategory,
+    targetAudience ? targetAudienceToCategories(targetAudience) : row.targetCategories ?? row.targetCategory,
   );
   return {
     ...row,
     status: row.status === "active" ? "active" : "stopped",
     endDate: row.endDate || "",
     severity: row.severity || "medium",
+    targetAudience: targetAudience || null,
     targetCategories,
     targetCategory: targetCategories.includes("all") ? "all" : targetCategories[0] || "all",
     situationDescription,
@@ -74,19 +44,19 @@ function normalizeAlert(row) {
 
 export function loadAlerts() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildSeedAlerts().map(normalizeAlert);
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) return buildSeedAlerts().map(normalizeAlert);
+    if (!Array.isArray(parsed) || !parsed.length) return [];
     return parsed.map(normalizeAlert);
   } catch {
-    return buildSeedAlerts().map(normalizeAlert);
+    return [];
   }
 }
 
 export function saveAlerts(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map(normalizeAlert)));
+    localStorage.setItem(storageKey(), JSON.stringify(list.map(normalizeAlert)));
     window.dispatchEvent(new Event(MANAGER_ALERTS_EVENT));
   } catch {
     /* ignore */
@@ -102,12 +72,17 @@ export function addAlert(payload) {
   const list = loadAlerts();
   const situationDescription =
     payload.situationDescription?.trim() || payload.message?.trim() || "";
+  const targetAudience = payload.targetAudience || null;
+  const targetCategories = normalizeTargetCategories(
+    targetAudience
+      ? targetAudienceToCategories(targetAudience)
+      : payload.targetCategories ?? payload.targetCategory ?? "customers_only",
+  );
   const alert = normalizeAlert({
     id: nextAlertId(list),
     name: payload.name?.trim() || "تنبيه",
-    targetCategories: normalizeTargetCategories(
-      payload.targetCategories ?? payload.targetCategory ?? "all",
-    ),
+    targetAudience,
+    targetCategories,
     severity: payload.severity || "medium",
     situationDescription,
     alternativeInstructions: payload.alternativeInstructions?.trim() || "",

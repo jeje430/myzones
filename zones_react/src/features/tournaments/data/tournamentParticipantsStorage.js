@@ -1,8 +1,24 @@
 import { loadTournamentRows } from "../tournamentsListStorage";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 
-const STORAGE_KEY = "zones-tournament-participants-v1";
+const BASE_KEY = "zones-tournament-participants-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const TOURNAMENT_PARTICIPANTS_EVENT = "zones-tournament-participants-updated";
+
+const LEGACY_KEYS = ["zones-tournament-participants-v1", "zones-tournament-participants-v2"];
+const LEGACY_PURGE_FLAG = "zones-tournament-participants-legacy-purged-v3";
+
+function purgeLegacyParticipantsStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
+}
+
+purgeLegacyParticipantsStorage();
 
 function notifyUpdated() {
   if (typeof window === "undefined") return;
@@ -17,184 +33,24 @@ function normalizeParticipant(row, fallbackSlot) {
   };
 }
 
-/** مشتركون تجريبيون — يُضافون تلقائياً عند الاشتراك من التطبيق */
-const DEFAULT_PARTICIPANTS = [
-  {
-    id: 1,
-    fullName: "أحمد المنصوري",
-    email: "ahmed.m@gmail.com",
-    phone: "0912345678",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 1,
-    registeredAt: "2026-05-18T10:30:00",
-    isWinner: false,
-  },
-  {
-    id: 2,
-    fullName: "محمد العريفي",
-    email: "mohamed.a@gmail.com",
-    phone: "0923456789",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 2,
-    registeredAt: "2026-05-19T14:15:00",
-    isWinner: false,
-  },
-  {
-    id: 3,
-    fullName: "خالد الزاوي",
-    email: "khaled.z@gmail.com",
-    phone: "0934567890",
-    tournamentId: 2,
-    tournamentName: "بطولة تحدي الأبطال",
-    slotIndex: 1,
-    registeredAt: "2026-05-20T09:00:00",
-    isWinner: false,
-  },
-  {
-    id: 4,
-    fullName: "عمر بن حسين",
-    email: "omar.h@gmail.com",
-    phone: "0945678901",
-    tournamentId: 2,
-    tournamentName: "بطولة تحدي الأبطال",
-    slotIndex: 2,
-    registeredAt: "2026-05-21T16:45:00",
-    isWinner: false,
-  },
-  {
-    id: 5,
-    fullName: "يوسف القاضي",
-    email: "youssef.q@gmail.com",
-    phone: "0956789012",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 3,
-    registeredAt: "2026-05-22T11:20:00",
-    isWinner: false,
-  },
-  {
-    id: 6,
-    fullName: "سالم بوزريبة",
-    email: "salem.b@gmail.com",
-    phone: "0967890123",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 4,
-    registeredAt: "2026-05-23T08:50:00",
-    isWinner: false,
-  },
-  {
-    id: 7,
-    fullName: "طارق المصراتي",
-    email: "tariq.m@gmail.com",
-    phone: "0978901234",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 5,
-    registeredAt: "2026-05-24T13:10:00",
-    isWinner: false,
-  },
-  {
-    id: 8,
-    fullName: "إبراهيم الشريف",
-    email: "ibrahim.s@gmail.com",
-    phone: "0989012345",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 6,
-    registeredAt: "2026-05-25T17:30:00",
-    isWinner: false,
-  },
-  {
-    id: 9,
-    fullName: "حسام الفيتوري",
-    email: "hussam.f@gmail.com",
-    phone: "0990123456",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 7,
-    registeredAt: "2026-05-26T12:00:00",
-    isWinner: false,
-  },
-  {
-    id: 10,
-    fullName: "نادر الجهاني",
-    email: "nader.j@gmail.com",
-    phone: "0911223344",
-    tournamentId: 1,
-    tournamentName: "بطولة فيفا الرمضانية",
-    slotIndex: 8,
-    registeredAt: "2026-05-27T19:25:00",
-    isWinner: false,
-  },
-  {
-    id: 11,
-    fullName: "فهد العكاري",
-    email: "fahd.a@gmail.com",
-    phone: "0912334455",
-    tournamentId: 2,
-    tournamentName: "بطولة تحدي الأبطال",
-    slotIndex: 3,
-    registeredAt: "2026-05-28T10:00:00",
-    isWinner: false,
-  },
-  {
-    id: 12,
-    fullName: "مازن الشريف",
-    email: "mazen.s@gmail.com",
-    phone: "0923445566",
-    tournamentId: 2,
-    tournamentName: "بطولة تحدي الأبطال",
-    slotIndex: 4,
-    registeredAt: "2026-05-28T11:00:00",
-    isWinner: false,
-  },
-  {
-    id: 13,
-    fullName: "رامي بوخزام",
-    email: "rami.b@gmail.com",
-    phone: "0934556677",
-    tournamentId: 3,
-    tournamentName: "كأس عالم 26",
-    slotIndex: 1,
-    registeredAt: "2026-06-01T09:00:00",
-    isWinner: false,
-  },
-  {
-    id: 14,
-    fullName: "وليد المنفي",
-    email: "walid.m@gmail.com",
-    phone: "0945667788",
-    tournamentId: 3,
-    tournamentName: "كأس عالم 26",
-    slotIndex: 2,
-    registeredAt: "2026-06-01T10:00:00",
-    isWinner: false,
-  },
-];
-
 export function loadTournamentParticipants() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_PARTICIPANTS.map((p, i) => normalizeParticipant(p, i + 1));
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) {
-      return DEFAULT_PARTICIPANTS.map((p, i) => normalizeParticipant(p, i + 1));
-    }
+    if (!Array.isArray(parsed) || !parsed.length) return [];
     return parsed.map((p, i) => normalizeParticipant(p, i + 1));
   } catch {
-    return DEFAULT_PARTICIPANTS.map((p, i) => normalizeParticipant(p, i + 1));
+    return [];
   }
 }
 
 export function saveTournamentParticipants(list) {
   try {
     const encoded = JSON.stringify(list);
-    const prev = localStorage.getItem(STORAGE_KEY);
+    const prev = localStorage.getItem(storageKey());
     if (prev === encoded) return;
-    localStorage.setItem(STORAGE_KEY, encoded);
+    localStorage.setItem(storageKey(), encoded);
     notifyUpdated();
   } catch {
     /* ignore */

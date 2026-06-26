@@ -67,7 +67,7 @@ export function useProfileAccount(roleHint) {
       active = restoreManagerSessionFromStore();
     }
     if (!active) {
-      navigate("/auth/login", {
+      navigate("/manager/login", {
         replace: true,
         state: { from: window.location.pathname },
       });
@@ -205,7 +205,7 @@ export function useProfileAccount(roleHint) {
       return;
     }
     clearAuthSession();
-    navigate("/auth/login", {
+    navigate("/manager/login", {
       replace: true,
       state: { message: "تم حذف حسابك." },
     });

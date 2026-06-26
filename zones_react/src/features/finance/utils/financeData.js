@@ -1,18 +1,4 @@
-import {
-  buildStoredCategoryBreakdown,
-  buildStoredDailyExpenseSeries,
-  sumExpensesInMonth,
-  sumExpensesInPrevMonth,
-} from "../data/expensesStorage";
-import {
-  buildBookingCategoryBreakdown,
-  buildBookingRevenueDailySeries,
-  buildBookingRevenueMonthlySeries,
-  buildBookingRevenueWeeklySeries,
-  countCompletedSessionsInMonth,
-  deriveBookingProfitHighlights,
-  sumRevenueInMonth,
-} from "../../employees/data/bookingRevenueStorage";
+import { getCachedExpenses, getCachedOverview } from "../data/financeApiCache";
 
 export const MONTHS_AR = [
   "يناير",
@@ -44,11 +30,7 @@ export const EXPENSE_CATEGORIES = [
   { key: "other", label: "أخرى", color: "#94a3b8" },
 ];
 
-export function mix(n) {
-  const x = Math.sin(n) * 43758.5453123;
-  return x - Math.floor(x);
-}
-
+// بيانات مالية مبنية بالكامل على السجلات الحقيقية (لا أرقام وهمية)
 export function daysInMonth(y, m) {
   return new Date(y, m, 0).getDate();
 }
@@ -72,19 +54,42 @@ function prevMonth(year, month) {
   return { year, month: month - 1 };
 }
 
-/** سلسلة إيرادات من جلسات الاستقبال المكتملة */
+function emptyDailySeries(year, month, valueKey) {
+  const days = daysInMonth(year, month);
+  return Array.from({ length: days }, (_, index) => ({
+    label: String(index + 1),
+    [valueKey]: 0,
+  }));
+}
+
+function overviewFor(year, month, granularity = "daily") {
+  return getCachedOverview(year, month, granularity);
+}
+
+/** سلسلة إيرادات من الحجوزات المحققة في Laravel */
 export function buildRevenueSeries(year, month, granularity) {
-  if (granularity === "daily") return buildBookingRevenueDailySeries(year, month);
-  if (granularity === "weekly") return buildBookingRevenueWeeklySeries(year, month);
-  return buildBookingRevenueMonthlySeries(year);
+  const overview = overviewFor(year, month, granularity);
+  if (overview?.revenueSeries?.length) {
+    return overview.revenueSeries;
+  }
+  return emptyDailySeries(year, month, "revenue");
+}
+
+export function sumRevenueInMonth(year, month) {
+  const overview = overviewFor(year, month, "daily");
+  return overview?.summary?.revenue ?? 0;
 }
 
 export function deriveRevenueTotals(year, month) {
-  const total = sumRevenueInMonth(year, month);
-  const prev = prevMonth(year, month);
-  const prevTotal = sumRevenueInMonth(prev.year, prev.month);
-  const revDelta = prevTotal > 0 ? ((total - prevTotal) / prevTotal) * 100 : total > 0 ? 100 : 0;
-  return { total, revDelta };
+  const overview = overviewFor(year, month, "daily");
+  if (overview?.summary) {
+    return {
+      total: overview.summary.revenue,
+      revDelta: overview.summary.revenueDelta,
+    };
+  }
+
+  return { total: 0, revDelta: 0 };
 }
 
 export function deriveRevenueInsights(series, granularity) {
@@ -123,81 +128,72 @@ export function deriveRevenueInsights(series, granularity) {
 
 /** توزيع الإيرادات حسب مصدر الحجز الفعلي */
 export function buildCategoryBreakdown(year, month) {
-  const totalRevenue = deriveRevenueTotals(year, month).total;
-  return buildBookingCategoryBreakdown(year, month, totalRevenue);
-}
-
-/** سلسلة مصروفات حسب الفترة */
-function aggregateExpenseSeries(daily, granularity, year, month) {
-  if (granularity === "daily") return daily;
-  if (granularity === "weekly") {
-    const out = [];
-    for (let w = 0; w < 4; w += 1) {
-      const slice = daily.slice(w * 7, (w + 1) * 7);
-      out.push({
-        label: `الأسبوع ${w + 1}`,
-        expenses: slice.reduce((s, p) => s + p.expenses, 0),
-      });
-    }
-    return out;
+  const overview = overviewFor(year, month, "daily");
+  if (overview?.revenueBreakdown?.length) {
+    return overview.revenueBreakdown;
   }
-  const monthTotal = daily.reduce((s, p) => s + p.expenses, 0);
-  return MONTHS_AR.map((name, m) => ({
-    label: name.slice(0, 3),
-    expenses: m + 1 === month ? monthTotal : 0,
-  }));
+
+  return [
+    { name: "تطبيق الزبون", key: "app", value: 0, color: "#a78bfa" },
+    { name: "حجز يدوي", key: "manual", value: 0, color: "#fbbf24" },
+  ];
 }
 
 export function buildExpenseSeries(year, month, granularity) {
-  const daily = buildStoredDailyExpenseSeries(year, month);
-  if (daily.some((d) => d.expenses > 0)) {
-    return aggregateExpenseSeries(daily, granularity, year, month);
+  const overview = overviewFor(year, month, granularity);
+  if (overview?.expenseSeries?.length) {
+    return overview.expenseSeries;
+  }
+  return emptyDailySeries(year, month, "expenses");
+}
+
+function sumExpensesInMonth(year, month) {
+  const overview = overviewFor(year, month, "daily");
+  if (overview?.summary) {
+    return {
+      total: overview.summary.expenses,
+      count: getCachedExpenses().filter((row) => expenseInMonth(row, year, month)).length,
+      items: getCachedExpenses().filter((row) => expenseInMonth(row, year, month)),
+    };
   }
 
-  const seed = year * 520 + month * 19 + (granularity === "daily" ? 5 : granularity === "weekly" ? 9 : 13);
-  const out = [];
+  return { total: 0, count: 0, items: [] };
+}
 
-  if (granularity === "daily") {
-    const n = daysInMonth(year, month);
-    for (let d = 1; d <= n; d += 1) {
-      const t = seed + d * 2.1;
-      const wave = mix(t) * 0.5 + mix(t + 3) * 0.5;
-      const expenses = 1400 + wave * 2800 + mix(t + 1) * 1200;
-      out.push({ label: String(d), expenses });
-    }
-    return out;
-  }
+function sumExpensesInPrevMonth(year, month) {
+  const prev = prevMonth(year, month);
+  return sumExpensesInMonth(prev.year, prev.month);
+}
 
-  if (granularity === "weekly") {
-    for (let w = 1; w <= 4; w += 1) {
-      const t = seed + w * 13;
-      const expenses = 9000 + mix(t) * 14000 + mix(t + 2) * 5000;
-      out.push({ label: `الأسبوع ${w}`, expenses });
-    }
-    return out;
-  }
+function expenseInMonth(row, year, month) {
+  if (!row.isPaid) return false;
+  const ref = row.paidAt || row.addedAt;
+  if (!ref) return false;
+  const [y, m] = String(ref).split("-").map(Number);
+  return y === year && m === month;
+}
 
-  for (let m = 0; m < 12; m += 1) {
-    const t = seed + m * 21 + year;
-    const expenses = 48000 + mix(t) * 38000 + mix(t + 4) * 22000;
-    out.push({ label: MONTHS_AR[m].slice(0, 3), expenses });
+export function buildStoredCategoryBreakdown(year, month) {
+  const overview = overviewFor(year, month, "daily");
+  if (overview?.expenseBreakdown?.length) {
+    return overview.expenseBreakdown;
   }
-  return out;
+  return [];
 }
 
 export function deriveExpenseTotals(year, month) {
-  const current = sumExpensesInMonth(year, month);
-  if (current.count > 0) {
-    const prev = sumExpensesInPrevMonth(year, month);
-    const expDelta = prev.total > 0 ? ((current.total - prev.total) / prev.total) * 100 : 0;
-    return { total: current.total, expDelta };
+  const overview = overviewFor(year, month, "daily");
+  if (overview?.summary) {
+    return {
+      total: overview.summary.expenses,
+      expDelta: overview.summary.expenseDelta,
+    };
   }
 
-  const seed = year * 520 + month * 27;
-  const total = 62000 + mix(seed) * 48000 + mix(seed + 2) * 24000;
-  const prev = total / (1 + (mix(seed + 4) - 0.5) * 0.12);
-  const expDelta = ((total - prev) / prev) * 100;
-  return { total, expDelta };
+  const current = sumExpensesInMonth(year, month);
+  const prev = sumExpensesInPrevMonth(year, month);
+  const expDelta = prev.total > 0 ? ((current.total - prev.total) / prev.total) * 100 : 0;
+  return { total: current.total, expDelta };
 }
 
 export function deriveExpenseInsights(series, granularity) {
@@ -234,15 +230,28 @@ export function deriveExpenseInsights(series, granularity) {
 
 /** سلسلة صافي الربح (إيرادات − مصروفات) */
 export function buildNetProfitSeries(year, month, granularity) {
+  const overview = overviewFor(year, month, granularity);
+  if (overview?.profitSeries?.length) {
+    return overview.profitSeries;
+  }
+
   const revenueSeries = buildRevenueSeries(year, month, granularity);
   const expenseSeries = buildExpenseSeries(year, month, granularity);
   return revenueSeries.map((r, i) => ({
     label: r.label,
-    netProfit: Math.max(0, r.revenue - (expenseSeries[i]?.expenses ?? r.revenue * 0.35)),
+    netProfit: r.revenue - (expenseSeries[i]?.expenses ?? 0),
   }));
 }
 
 export function deriveNetProfitTotals(year, month) {
+  const overview = overviewFor(year, month, "daily");
+  if (overview?.summary) {
+    return {
+      total: overview.summary.netProfit,
+      netDelta: overview.summary.profitDelta,
+    };
+  }
+
   const rev = deriveRevenueTotals(year, month);
   const exp = deriveExpenseTotals(year, month);
   const total = rev.total - exp.total;
@@ -293,30 +302,44 @@ export const PROFIT_CATEGORIES = [
   { key: "offers", label: "العروض", color: "#a78bfa" },
 ];
 
-/** توزيع الأرباح حسب المصدر */
+/**
+ * توزيع الأرباح حسب المصدر — مبني على إيرادات الحجوزات الفعلية.
+ * لا توجد بيانات وهمية: عند غياب الأرباح تكون كل القيم صفراً.
+ */
 export function buildProfitCategoryBreakdown(year, month) {
-  const seed = year * 600 + month * 37;
-  const raw = PROFIT_CATEGORIES.map((cat, i) => {
-    const t = seed + i * 17;
-    const weight = 0.12 + mix(t) * 0.38;
-    return { ...cat, value: weight };
-  });
-  const sum = raw.reduce((a, b) => a + b.value, 0);
   const totalProfit = deriveNetProfitTotals(year, month).total;
-  return raw.map((r) => ({
-    name: r.label,
-    key: r.key,
-    value: Math.round((r.value / sum) * totalProfit),
-    color: r.color,
+  const revenueBreakdown = buildCategoryBreakdown(year, month);
+  const revenueSum = revenueBreakdown.reduce((a, b) => a + (b.value || 0), 0);
+
+  if (totalProfit <= 0 || revenueSum <= 0) {
+    return PROFIT_CATEGORIES.map((cat) => ({
+      name: cat.label,
+      key: cat.key,
+      value: 0,
+      color: cat.color,
+    }));
+  }
+
+  // وزّع صافي الربح بنسبة مصادر الإيراد الفعلية
+  return revenueBreakdown.map((row, i) => ({
+    name: row.name,
+    key: row.key,
+    value: Math.round((row.value / revenueSum) * totalProfit),
+    color: PROFIT_CATEGORIES[i % PROFIT_CATEGORIES.length].color,
   }));
 }
 
-export function deriveProfitHighlights(year, month) {
-  const highlights = deriveBookingProfitHighlights(year, month);
-  const sessions = countCompletedSessionsInMonth(year, month);
+export function derivePackageUsage(year, month, packagePeriod = "monthly", granularity = "daily") {
+  const overview = getCachedOverview(year, month, granularity, packagePeriod);
+  if (overview?.packageUsage) {
+    return overview.packageUsage;
+  }
+
   return {
-    ...highlights,
-    dailyBookings: sessions > 0 ? highlights.dailyBookings : 0,
+    period: packagePeriod,
+    periodLabel: "—",
+    totalSessions: 0,
+    breakdown: [],
   };
 }
 
@@ -388,7 +411,7 @@ export function buildReportPayload(reportType, from, to) {
 
   const profitSeriesRaw = buildNetProfitSeries(year, month, "daily").slice(0, Math.min(daySpan, 31));
   const insights = deriveNetProfitInsights(profitSeriesRaw, "daily");
-  const highlights = deriveProfitHighlights(year, month);
+  const packageUsage = derivePackageUsage(year, month, "monthly", "daily");
 
   const loungeName =
     (typeof localStorage !== "undefined" && localStorage.getItem("zones-lounge-name")) ||
@@ -414,9 +437,8 @@ export function buildReportPayload(reportType, from, to) {
       expenses: expenseSeries,
     },
     stats: {
-      topDevice: highlights.topDevice,
-      topPackage: highlights.topPackage,
-      dailyBookings: highlights.dailyBookings,
+      totalSessions: packageUsage.totalSessions,
+      packageUsageBreakdown: packageUsage.breakdown,
       bestProfitDay: insights.bestLabel,
       bestProfitValue: insights.bestProfit,
     },
@@ -427,18 +449,11 @@ export function buildExpenseCategoryBreakdown(year, month) {
   const stored = buildStoredCategoryBreakdown(year, month);
   if (stored.length > 0) return stored;
 
-  const seed = year * 600 + month * 37;
-  const raw = EXPENSE_CATEGORIES.map((cat, i) => {
-    const t = seed + i * 17;
-    const weight = 0.12 + mix(t) * 0.32;
-    return { ...cat, value: weight };
-  });
-  const sum = raw.reduce((a, b) => a + b.value, 0);
-  const totalExpenses = deriveExpenseTotals(year, month).total;
-  return raw.map((r) => ({
-    name: r.label,
-    key: r.key,
-    value: Math.round((r.value / sum) * totalExpenses),
-    color: r.color,
+  // لا مصروفات مسجّلة — حالة فارغة بدون أرقام وهمية
+  return EXPENSE_CATEGORIES.map((cat) => ({
+    name: cat.label,
+    key: cat.key,
+    value: 0,
+    color: cat.color,
   }));
 }

@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import {
   getAccountBlockCode,
   LOGIN_BLOCK_CODES,
@@ -14,21 +14,24 @@ import {
 /** يخرج المستخدم إذا عُطّل حسابه أو صالة مديره من لوحة الأدمن */
 export default function useActiveSessionGuard() {
   const navigate = useNavigate();
+  const { managerId, employeeId } = useParams();
+  const accountId = managerId ?? employeeId;
 
   useEffect(() => {
-    const session = getAuthSession();
+    const session = getAuthSession(accountId);
     if (!session?.id) return;
+    if (session.source === "api") return;
 
     const user = getUserById(session.id);
     const blockCode = getAccountBlockCode(user);
     if (!blockCode) return;
 
-    clearAuthSession();
+    clearAuthSession(accountId ?? session.id);
     const message =
       blockCode === LOGIN_BLOCK_CODES.MANAGER_DISABLED
         ? LOGIN_BLOCK_MESSAGES[LOGIN_BLOCK_CODES.MANAGER_DISABLED]
         : LOGIN_BLOCK_MESSAGES[LOGIN_BLOCK_CODES.EMPLOYEE_DISABLED];
 
-    navigate("/auth/login", { replace: true, state: { loginError: message } });
-  }, [navigate]);
+    navigate("/manager/login", { replace: true, state: { loginError: message } });
+  }, [navigate, accountId]);
 }

@@ -3,6 +3,17 @@ import { ArchiveRestore, Eye, Gamepad2, Package } from "lucide-react";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
 import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
@@ -72,7 +83,7 @@ export default function HallArchivePage() {
         kind: "package",
         kindLabel: "باقة",
         name: p.name,
-        subLabel: p.hours || p.price,
+        subLabel: p.price,
         archivedAt: p.archivedAt,
         raw: p,
       }));
@@ -94,6 +105,9 @@ export default function HallArchivePage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const selectionItems = useMemo(() => filtered.map((row) => ({ ...row, id: row.key })), [filtered]);
+  const pageIds = useMemo(() => paged.map((row) => row.key), [paged]);
+  const selection = useTableSelection({ items: selectionItems, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -109,34 +123,50 @@ export default function HallArchivePage() {
     setPackageDetailOpen(true);
   };
 
-  const restoreRow = async (row) => {
-    const ok = await zonesConfirm({
-      title: "استعادة العنصر؟",
-      text: `سيتم إرجاع «${row.name}» إلى القائمة النشطة.`,
+  const runRestore = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(selectionItems, targetIds);
+
+    const confirmed = await zonesConfirm({
+      title: isBulk ? `استعادة ${targetIds.length} عناصر؟` : "استعادة العنصر؟",
+      text: isBulk
+        ? `سيتم إرجاع ${targetIds.length} عناصر إلى القائمة النشطة.`
+        : `سيتم إرجاع «${rowForMessage.name}» إلى القائمة النشطة.`,
       confirmText: "استعادة",
       cancelText: "إلغاء",
     });
-    if (!ok) return;
+    if (!confirmed) return;
 
-    if (row.kind === "device") {
-      setDevicesList((list) =>
-        list.map((d) =>
-          d.id === row.raw.id ? { ...d, isArchived: false, archivedAt: null, isActive: true } : d,
-        ),
-      );
-      setDeviceDetailOpen(false);
-      setDetailDevice(null);
-    } else {
-      setPackagesList((list) =>
-        list.map((p) =>
-          p.id === row.raw.id ? { ...p, isArchived: false, archivedAt: null, isActive: true } : p,
-        ),
-      );
-      setPackageDetailOpen(false);
-      setDetailPackage(null);
+    for (const row of targets) {
+      if (row.kind === "device") {
+        setDevicesList((list) =>
+          list.map((d) =>
+            d.id === row.raw.id ? { ...d, isArchived: false, archivedAt: null, isActive: true } : d,
+          ),
+        );
+      } else {
+        setPackagesList((list) =>
+          list.map((p) =>
+            p.id === row.raw.id ? { ...p, isArchived: false, archivedAt: null, isActive: true } : p,
+          ),
+        );
+      }
     }
 
-    zonesToastSuccess("تمت الاستعادة");
+    setDeviceDetailOpen(false);
+    setDetailDevice(null);
+    setPackageDetailOpen(false);
+    setDetailPackage(null);
+    selection.clearSelection();
+    zonesToastSuccess(isBulk ? `تمت استعادة ${targets.length} عناصر` : "تمت الاستعادة");
+  };
+
+  const restoreRow = (row) => runRestore(resolveBulkActionIds(row.key, selection.selectedIds), row);
+
+  const handleBulkRestore = () => {
+    const targets = filterItemsByIds(selectionItems, selection.selectedIds);
+    if (!targets.length) return;
+    runRestore(selection.selectedIds, targets[0]);
   };
 
   return (
@@ -158,10 +188,17 @@ export default function HallArchivePage() {
           <SearchBar value={search} onChange={setSearch} placeholder="بحث في الأرشيف..." />
         </div>
 
+        <TableBulkActionBar
+          count={selection.count}
+          onClear={selection.clearSelection}
+          actions={[{ label: "استعادة المحدد", icon: ArchiveRestore, onClick: handleBulkRestore }]}
+        />
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[880px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">النوع</th>
                 <th className="px-3 py-2.5 font-bold">الاسم</th>
                 <th className="px-3 py-2.5 font-bold">التفاصيل</th>
@@ -171,7 +208,8 @@ export default function HallArchivePage() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.map((row) => (
-                <tr key={row.key} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <tr key={row.key} className={selectableRowClass(selection.isSelected(row.key))}>
+                  <TableSelectRowCell id={row.key} ariaLabel={`تحديد ${row.name}`} {...selection} />
                   <td className="px-3 py-3">
                     <span
                       className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
@@ -198,7 +236,7 @@ export default function HallArchivePage() {
               ))}
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
                     لا توجد عناصر مؤرشفة حالياً.
                   </td>
                 </tr>

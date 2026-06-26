@@ -22,19 +22,19 @@ export const ROLE_PERMISSIONS = {
 };
 
 export const SHIFTS = [
-  { value: "morning", label: "فترة صباحية", hours: "من 2 مساءً إلى 8 مساءً" },
-  { value: "evening", label: "فترة مسائية", hours: "من 8 مساءً إلى 2 صباحاً" },
-  { value: "full_time", label: "دوام كامل", hours: "من 2 مساءً إلى 2 صباحاً" },
+  { value: "morning", label: "الفترة الأولى", hours: "من 2 مساءً إلى 8 مساءً" },
+  { value: "evening", label: "الفترة الثانية", hours: "من 8 مساءً إلى 2 صباحاً" },
 ];
 
 const LEGACY_SHIFT_MAP = {
   night: "evening",
   flexible: "morning",
-  fulltime: "full_time",
+  fulltime: "evening",
+  full_time: "evening",
 };
 
 export function normalizeShift(value) {
-  if (value === "morning" || value === "evening" || value === "full_time") return value;
+  if (value === "morning" || value === "evening") return value;
   return LEGACY_SHIFT_MAP[value] ?? "morning";
 }
 

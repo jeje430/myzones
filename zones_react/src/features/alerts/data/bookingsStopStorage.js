@@ -1,36 +1,50 @@
 import { formatAlertDateTime } from "./alertsMeta";
-import { addAlert, loadAlerts, stopAlert } from "./managerAlertsStorage";
-import {
-  BOOKINGS_STOP_NAME,
-  getHallDisplayName,
-} from "./bookingsStopMessages";
 import {
   pushBookingsStartNotification,
   pushBookingsStopNotification,
 } from "./hallNotificationsStorage";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+import { getActiveStaffSession, isApiStaffSession } from "../../devices-packages/data/hallCatalogSync";
+import {
+  BOOKING_STOPS_EVENT,
+  createManagerBookingStop,
+  deleteManagerBookingStop,
+  fetchManagerBookingStops,
+  resumeManagerBookingStop,
+  updateManagerBookingStop,
+} from "./managerBookingStopsApi";
+import { BOOKINGS_STOP_NAME, reasonLabelForKey } from "./bookingsStopMessages";
 
-const STORAGE_KEY = "zones-bookings-stop-v1";
-export const BOOKINGS_STOP_EVENT = "zones-bookings-stop-updated";
+const BASE_KEY = "zones-bookings-stop-v1";
+const storageKey = () => hallScopedKey(BASE_KEY);
+export const BOOKINGS_STOP_EVENT = BOOKING_STOPS_EVENT;
+
+let cachedActive = null;
+let cachedRecords = null;
 
 function notifyUpdated() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(BOOKINGS_STOP_EVENT));
 }
 
+function useApi() {
+  const session = getActiveStaffSession();
+  return isApiStaffSession(session) && session?.role === "manager";
+}
+
 function normalizeRecord(row) {
   return {
     ...row,
     name: BOOKINGS_STOP_NAME,
-    reason: row.reason?.trim() || "",
-    endDate: row.endDate || "",
+    reason: row.reason?.trim() || reasonLabelForKey(row.reasonKey) || "",
+    endDate: row.endDate || row.endsOn || "",
     status: row.status === "active" ? "active" : "ended",
-    hallName: row.hallName || getHallDisplayName(),
   };
 }
 
 function readStoredRecords() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -40,89 +54,36 @@ function readStoredRecords() {
   }
 }
 
-function getLegacyBookingsStopAlerts() {
-  return loadAlerts().filter((row) => row.source === "bookings_stop");
-}
-
-function getLegacyActiveBookingsStopAlert() {
-  return (
-    getLegacyBookingsStopAlerts().find((row) => row.status === "active") ?? null
-  );
-}
-
-/** ينقل سجلات إيقاف الحجوزات القديمة من سجل التنبيهات إلى التخزين الجديد */
-function migrateLegacyBookingsStopRecords() {
-  const current = readStoredRecords();
-  if (current.length > 0) return current;
-
-  const legacy = getLegacyBookingsStopAlerts();
-  if (legacy.length === 0) return [];
-
-  const hallName = getHallDisplayName();
-  let nextId = 2001;
-  const migrated = legacy.map((alert) =>
-    normalizeRecord({
-      id: nextId++,
-      name: BOOKINGS_STOP_NAME,
-      reason: alert.situationDescription || alert.message || "",
-      hallName,
-      status: alert.status === "active" ? "active" : "ended",
-      startDate: alert.startDate || formatAlertDateTime(),
-      endDate: alert.endDate || "",
-      alertId: alert.id,
-    }),
-  );
-
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(migrated.map(normalizeRecord)));
-    notifyUpdated();
-  } catch {
-    /* ignore */
-  }
-
-  return migrated.map(normalizeRecord);
-}
-
-export function loadBookingsStopRecords() {
-  const migrated = migrateLegacyBookingsStopRecords();
-  if (migrated.length > 0) return migrated;
-  return readStoredRecords();
-}
-
 function saveBookingsStopRecords(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map(normalizeRecord)));
+    localStorage.setItem(storageKey(), JSON.stringify(list.map(normalizeRecord)));
     notifyUpdated();
   } catch {
     /* ignore */
   }
-}
-
-export function nextBookingsStopId(list = loadBookingsStopRecords()) {
-  return list.reduce((max, row) => Math.max(max, row.id ?? 0), 2000) + 1;
 }
 
 export function formatBookingsStopCode(id) {
   return `H-${String(id ?? 0).padStart(4, "0")}`;
 }
 
+export function loadBookingsStopRecords() {
+  if (cachedRecords) return cachedRecords;
+  return readStoredRecords();
+}
+
 export function getActiveBookingsStopRecord() {
-  const active =
-    loadBookingsStopRecords().find((row) => row.status === "active") ?? null;
-  if (active) return active;
-
-  const legacy = getLegacyActiveBookingsStopAlert();
-  if (!legacy) return null;
-
-  return normalizeRecord({
-    id: legacy.id,
-    name: BOOKINGS_STOP_NAME,
-    reason: legacy.situationDescription || legacy.message || "",
-    status: "active",
-    startDate: legacy.startDate || formatAlertDateTime(),
-    endDate: "",
-    alertId: legacy.id,
-  });
+  if (cachedActive) {
+    return normalizeRecord({
+      id: cachedActive.id,
+      reasonKey: cachedActive.reasonKey,
+      reason: cachedActive.reason,
+      status: "active",
+      startDate: cachedActive.startsOn,
+      endDate: cachedActive.endsOn || "",
+    });
+  }
+  return readStoredRecords().find((row) => row.status === "active") ?? null;
 }
 
 export function isBookingsStopped() {
@@ -130,84 +91,114 @@ export function isBookingsStopped() {
 }
 
 export function getBookingsStopBlockMessage() {
-  const hallName = getHallDisplayName();
-  return `الحجوزات متوقفة حالياً في صالة ${hallName}. لا يمكن إضافة حجز جديد حتى يُعلن المدير عن بدء الحجوزات.`;
+  const active = getActiveBookingsStopRecord();
+  if (active?.message) return active.message;
+  return "الحجوزات متوقفة مؤقتاً. لا يمكن إضافة حجز جديد حتى يُستأنف الحجز.";
 }
 
-export function startBookingsStop({ reason = "" } = {}) {
-  const existing = getActiveBookingsStopRecord();
-  if (existing) {
-    return { ok: false, error: "الحجوزات متوقفة بالفعل.", record: existing };
+export async function refreshBookingStopsFromApi() {
+  if (!useApi()) return { ok: false, skipped: true };
+  const result = await fetchManagerBookingStops();
+  if (!result.ok) return result;
+
+  cachedRecords = result.records.map(normalizeRecord);
+  cachedActive = result.active;
+  saveBookingsStopRecords(cachedRecords);
+  notifyUpdated();
+  return result;
+}
+
+export async function startBookingsStop({
+  reasonKey = "",
+  startsOn = "",
+  endsOn = null,
+} = {}) {
+  if (useApi()) {
+    const result = await createManagerBookingStop({
+      reasonKey,
+      startsOn: startsOn || new Date().toISOString().slice(0, 10),
+      endsOn: endsOn || null,
+    });
+    if (result.ok) await refreshBookingStopsFromApi();
+    return result.ok
+      ? { ok: true, record: result.record }
+      : { ok: false, error: result.error };
   }
 
-  const hallName = getHallDisplayName();
-  const trimmedReason = reason.trim();
+  const trimmedReason = reasonLabelForKey(reasonKey);
   if (!trimmedReason) {
     return { ok: false, error: "يرجى اختيار سبب إيقاف الحجوزات." };
   }
 
-  const list = loadBookingsStopRecords();
+  const list = readStoredRecords();
   const record = normalizeRecord({
-    id: nextBookingsStopId(list),
-    name: BOOKINGS_STOP_NAME,
+    id: list.reduce((max, row) => Math.max(max, row.id ?? 0), 2000) + 1,
+    reasonKey,
     reason: trimmedReason,
-    hallName,
     status: "active",
     startDate: formatAlertDateTime(),
-    endDate: "",
-    alertId: null,
+    endDate: endsOn || "",
   });
 
-  const notification = pushBookingsStopNotification({ hallName, reason: trimmedReason });
-
-  const alert = addAlert({
-    name: BOOKINGS_STOP_NAME,
-    targetCategories: ["reception", "maintenance", "customer"],
-    severity: "high",
-    situationDescription: trimmedReason,
-    alternativeInstructions: notification.message,
-    source: "bookings_stop",
-  });
-
-  record.alertId = alert.id;
+  pushBookingsStopNotification({ hallName: trimmedReason, reason: trimmedReason });
   saveBookingsStopRecords([record, ...list]);
-
   return { ok: true, record };
 }
 
-export function resumeBookingsStop() {
+export async function resumeBookingsStop(recordId) {
+  if (useApi()) {
+    const active = getActiveBookingsStopRecord();
+    const id = recordId ?? active?.id;
+    if (!id) return { ok: false, error: "لا يوجد إيقاف نشط للحجوزات." };
+    const result = await resumeManagerBookingStop(id);
+    if (result.ok) {
+      cachedActive = null;
+      await refreshBookingStopsFromApi();
+      pushBookingsStartNotification({});
+    }
+    return result.ok ? { ok: true } : { ok: false, error: result.error };
+  }
+
   const active = getActiveBookingsStopRecord();
-  if (!active) {
-    return { ok: false, error: "لا يوجد إيقاف نشط للحجوزات." };
-  }
+  if (!active) return { ok: false, error: "لا يوجد إيقاف نشط للحجوزات." };
 
-  const hallName = active.hallName || getHallDisplayName();
   const endDate = formatAlertDateTime();
-  const list = loadBookingsStopRecords().map((row) =>
-    row.id === active.id ? { ...row, status: "ended", endDate } : row,
+  saveBookingsStopRecords(
+    readStoredRecords().map((row) =>
+      row.id === active.id ? { ...row, status: "ended", endDate } : row,
+    ),
   );
-  saveBookingsStopRecords(list);
-
-  if (active.alertId) {
-    stopAlert(active.alertId);
-  }
-
-  pushBookingsStartNotification({ hallName });
-  return { ok: true, record: { ...active, status: "ended", endDate } };
+  pushBookingsStartNotification({});
+  return { ok: true };
 }
 
-/** توافق مع التخزين القديم */
+export async function updateBookingsStopRecord(id, { reasonKey, endsOn }) {
+  if (useApi()) {
+    const result = await updateManagerBookingStop(id, { reasonKey, endsOn: endsOn || null });
+    if (result.ok) await refreshBookingStopsFromApi();
+    return result.ok ? { ok: true, record: result.record } : { ok: false, error: result.error };
+  }
+  return { ok: false, error: "يتطلب جلسة مدير API" };
+}
+
+export async function deleteBookingsStopRecord(id) {
+  if (useApi()) {
+    const result = await deleteManagerBookingStop(id);
+    if (result.ok) await refreshBookingStopsFromApi();
+    return result;
+  }
+  saveBookingsStopRecords(readStoredRecords().filter((row) => row.id !== id));
+  return { ok: true };
+}
+
 export function getActiveBookingsStopAlert() {
-  const record = getActiveBookingsStopRecord();
-  if (!record) return null;
-  return {
-    id: record.alertId || record.id,
-    name: record.name,
-    startDate: record.startDate,
-    reason: record.reason,
-  };
+  return getActiveBookingsStopRecord();
 }
 
 export function endBookingsStop() {
   return resumeBookingsStop();
+}
+
+export function nextBookingsStopId(list = loadBookingsStopRecords()) {
+  return list.reduce((max, row) => Math.max(max, row.id ?? 0), 2000) + 1;
 }

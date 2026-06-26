@@ -8,11 +8,11 @@ import '../../../core/theme/zonez_typography.dart';
 import '../../../models/booking.dart';
 import '../../../providers/app_state_provider.dart';
 import '../../../services/booking_notification_service.dart';
+import '../../../services/booking_receipt_service.dart';
 import '../../../utils/booking_cancellation_utils.dart';
-import '../../../widgets/booking/booking_receipt_sheet.dart';
 import '../../../widgets/glass_container.dart';
 
-/// Lounge device bookings only — tournament participations live in [TournamentHistoryScreen].
+/// Lounge device bookings only — tournament participations live in participation records.
 class BookingsTab extends StatefulWidget {
   const BookingsTab({super.key});
 
@@ -172,7 +172,26 @@ class _LoungeBookingCardState extends State<_LoungeBookingCard> {
     );
 
     if (confirmed == true && mounted) {
-      context.read<AppStateProvider>().cancelBooking(widget.booking.id);
+      final error = await context
+          .read<AppStateProvider>()
+          .cancelBookingViaApi(widget.booking.id);
+
+      if (!mounted) return;
+
+      if (error != null) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              error,
+              style: ZonezTypography.body(),
+              textAlign: TextAlign.center,
+            ),
+            backgroundColor: ZonezColors.neonRed,
+          ),
+        );
+        return;
+      }
+
       BookingNotificationService.instance.cancelReminder(widget.booking.id);
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -188,17 +207,24 @@ class _LoungeBookingCardState extends State<_LoungeBookingCard> {
 
   void _showReceipt() {
     final b = widget.booking;
-    showBookingReceiptSheet(
+    final serverId = b.serverId;
+    if (serverId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'الإيصال غير متوفر لهذا الحجز',
+            style: ZonezTypography.body(),
+            textAlign: TextAlign.center,
+          ),
+        ),
+      );
+      return;
+    }
+
+    BookingReceiptService.instance.openReceiptViewer(
       context,
-      data: BookingReceiptData(
-        bookingId: b.id,
-        loungeName: b.loungeName ?? b.title,
-        dateLabel: b.day,
-        timeLabel: b.time,
-        packageName: b.deviceName ?? b.title,
-        finalPrice: b.price,
-        earnedPoints: b.earnedPoints,
-      ),
+      bookingId: serverId,
+      bookingNumber: b.id,
     );
   }
 

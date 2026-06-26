@@ -8,20 +8,27 @@ import "./index.css";
 import "./shared/utils/zonesAlerts.css";
 import App from "./App.jsx";
 import { runDemoBootstrap } from "./shared/demo/demoBootstrap";
+import { setupApiAuthInterceptor } from "./shared/api/setupApiAuthInterceptor";
+import { purgeLegacyFinanceData } from "./features/finance/data/financeApiCache";
 import { ThemeProvider } from "./shared/theme/ThemeProvider";
+import { TenantProvider } from "./shared/tenant/TenantProvider";
 import { ZonesToastProvider } from "./shared/context/ZonesToastContext";
 import { toastOptions } from "./shared/utils/zonesAlerts";
 
 runDemoBootstrap();
+setupApiAuthInterceptor();
+purgeLegacyFinanceData();
 
 createRoot(document.getElementById("root")).render(
   <StrictMode>
     <ThemeProvider>
       <BrowserRouter>
-        <ZonesToastProvider>
-          <App />
-          <ToastContainer {...toastOptions} newestOnTop limit={4} />
-        </ZonesToastProvider>
+        <TenantProvider>
+          <ZonesToastProvider>
+            <App />
+            <ToastContainer {...toastOptions} newestOnTop limit={4} />
+          </ZonesToastProvider>
+        </TenantProvider>
       </BrowserRouter>
     </ThemeProvider>
   </StrictMode>,

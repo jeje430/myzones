@@ -4,11 +4,12 @@ import {
   getParticipantNamesForTournament,
   isTournamentParticipantsFull,
 } from "../data/tournamentParticipantsStorage";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 
 const PREFIX = "zones-bracket-v1-";
 
 function bracketKey(tournamentId) {
-  return PREFIX + tournamentId;
+  return hallScopedKey(PREFIX + tournamentId);
 }
 
 function migrateBracketFromSession(tournamentId) {

@@ -87,17 +87,17 @@ export default function FinanceReportPdfView({ data }) {
         <h2 className="finance-pdf-section__title">إحصائيات</h2>
         <ul className="finance-pdf-stats">
           <li>
-            <span>أكثر جهاز استخداماً</span>
-            <strong>{data.stats.topDevice}</strong>
+            <span>إجمالي الجلسات المكتملة</span>
+            <strong>{data.stats.totalSessions}</strong>
           </li>
-          <li>
-            <span>أكثر باقة حجزاً</span>
-            <strong>{data.stats.topPackage}</strong>
-          </li>
-          <li>
-            <span>متوسط الحجوزات اليومية</span>
-            <strong>{data.stats.dailyBookings}</strong>
-          </li>
+          {(data.stats.packageUsageBreakdown || []).map((row) => (
+            <li key={row.key}>
+              <span>{row.name}</span>
+              <strong>
+                {row.percentage}% — {row.sessionsCount} جلسة
+              </strong>
+            </li>
+          ))}
           <li>
             <span>أعلى يوم ربح</span>
             <strong>

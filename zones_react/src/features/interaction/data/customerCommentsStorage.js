@@ -1,57 +1,26 @@
-const STORAGE_KEY = "zones-customer-comments-v1";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+
+const BASE_KEY = "zones-customer-comments-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 export const CUSTOMER_COMMENTS_EVENT = "zones-customer-comments-updated";
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const LEGACY_KEYS = ["zones-customer-comments-v1", "zones-customer-comments-v2"];
+const LEGACY_PURGE_FLAG = "zones-customer-comments-legacy-purged-v3";
+
+function purgeLegacyCommentStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
+}
+
+purgeLegacyCommentStorage();
 
 function notifyUpdated() {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(CUSTOMER_COMMENTS_EVENT));
-}
-
-function buildSeedComments() {
-  const now = Date.now();
-  return [
-    {
-      id: 1,
-      customerName: "أحمد العقيبي",
-      text: "الصالة نظيفة والأجهزة ممتازة. شكراً على الاستقبال الراقي.",
-      rating: 5,
-      createdAt: now - 2 * DAY_MS,
-      source: "customer_app",
-      managerReply: null,
-    },
-    {
-      id: 2,
-      customerName: "سارة محمد",
-      text: "الإنترنت سريع والدعم الفني متعاون جداً. أنصح بزيارة الصالة.",
-      rating: 5,
-      createdAt: now - 5 * DAY_MS,
-      source: "customer_app",
-      managerReply: {
-        text: "شكراً سارة — سعداء بتجربتك وننتظرك دائماً.",
-        repliedAt: now - 4 * DAY_MS,
-        managerName: "مدير الصالة",
-      },
-    },
-    {
-      id: 3,
-      customerName: "فيصل الحربي",
-      text: "الأسعار مناسبة والعروض جميلة. ياريت تزيدون بطولات PS5.",
-      rating: 4,
-      createdAt: now - 7 * DAY_MS,
-      source: "customer_app",
-      managerReply: null,
-    },
-    {
-      id: 4,
-      customerName: "نور الهادي",
-      text: "تجربة ممتازة لكن انتظار الجهاز كان طويلاً قليلاً مساءً.",
-      rating: 3,
-      createdAt: now - 12 * DAY_MS,
-      source: "customer_app",
-      managerReply: null,
-    },
-  ];
 }
 
 function normalizeComment(row) {
@@ -74,19 +43,19 @@ function normalizeComment(row) {
 
 export function loadComments() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildSeedComments().map(normalizeComment);
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) return buildSeedComments().map(normalizeComment);
+    if (!Array.isArray(parsed) || !parsed.length) return [];
     return parsed.map(normalizeComment);
   } catch {
-    return buildSeedComments().map(normalizeComment);
+    return [];
   }
 }
 
 export function saveComments(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list.map(normalizeComment)));
+    localStorage.setItem(storageKey(), JSON.stringify(list.map(normalizeComment)));
     notifyUpdated();
   } catch {
     /* ignore */

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Outlet, useLocation } from "react-router-dom";
+import { Outlet, useLocation, useParams } from "react-router-dom";
 import { zonesClose } from "../utils/zonesAlerts";
 import ReceptionEmployeeSidebar from "../../features/employees/components/ReceptionEmployeeSidebar";
 import ReceptionEmployeeTopBar from "../../features/employees/components/ReceptionEmployeeTopBar";
@@ -16,7 +16,8 @@ function clearBlockingOverlays() {
 
 export default function EmployeeReceptionLayout() {
   useActiveSessionGuard();
-  const session = getAuthSession();
+  const { employeeId } = useParams();
+  const session = getAuthSession(employeeId);
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 

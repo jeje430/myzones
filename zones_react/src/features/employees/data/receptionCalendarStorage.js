@@ -8,24 +8,56 @@ import {
   awardPointsForCompletedSession,
   redeemPointsForBooking,
 } from "../../loyalty/data/loyaltyPointsStorage";
-import { recordCompletedSessionRevenue } from "./bookingRevenueStorage";
+import { invalidateFinanceCache } from "../../finance/data/financeApiCache";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+import { localTodayIso } from "../../../shared/utils/localDateUtils";
+import { getActiveStaffSession, isApiStaffSession } from "../../devices-packages/data/hallCatalogSync";
 import {
-  getAppCustomerBanBlockMessage,
-  isAppCustomerBanned,
-  registerNoShowFromSlot,
-} from "./customerBanStorage";
+  apiBookCalendarSlot,
+  apiCancelCalendarBooking,
+  apiCheckInCalendarBooking,
+  apiEndCalendarSession,
+  apiStartCalendarSession,
+  fetchActiveReceptionCalendar,
+  fetchReceptionCalendarByDate,
+} from "./receptionCalendarApi";
 
-const STORAGE_KEY = "zones-reception-calendar-v1";
+const BASE_KEY = "zones-reception-calendar-v3";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const RECEPTION_CALENDAR_EVENT = "zones-reception-calendar-updated";
+
+const LEGACY_CALENDAR_KEYS = [
+  "zones-reception-calendar-v1",
+  "zones-reception-calendar-v2",
+];
+const LEGACY_CALENDAR_PURGE_FLAG = "zones-reception-calendar-legacy-purged-v4";
+
+function purgeLegacyCalendarStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_CALENDAR_PURGE_FLAG)) return;
+  for (const key of LEGACY_CALENDAR_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_CALENDAR_PURGE_FLAG, "1");
+}
+
+purgeLegacyCalendarStorage();
 
 /** فترة سماح 14 دقيقة بعد وقت الحجز — ثم No-Show */
 export const NO_SHOW_GRACE_MS = 14 * 60 * 1000;
 
 export const SLOT_STATUS = {
   reserved: "reserved",
-  active: "active",
+  busy: "busy",
 };
+
+/** توافق مع بيانات محلية قديمة */
+export function normalizeSlotStatus(status) {
+  if (status === "active") return SLOT_STATUS.busy;
+  if (status === SLOT_STATUS.busy || status === SLOT_STATUS.reserved) return status;
+  return SLOT_STATUS.reserved;
+}
 
 export const ATTENDANCE_STATUS = {
   awaiting: "awaiting",
@@ -39,16 +71,18 @@ export const BOOKING_STATUS = {
 };
 
 export const PAYMENT_TYPES = {
-  cash: { value: "cash", label: "كاش" },
+  cash: { value: "cash", label: "الدفع عند الوصول" },
   paid: { value: "paid", label: "مدفوع مسبقاً" },
-  points: { value: "points", label: "نقاط ولاء" },
+  loyalty_reward: { value: "loyalty_reward", label: "مكافأة ولاء" },
+  /** @deprecated use loyalty_reward */
+  points: { value: "loyalty_reward", label: "مكافأة ولاء" },
 };
 
 /** خيارات نوع الدفع عند حجز موعد من الاستقبال */
 export const BOOKING_PAYMENT_OPTIONS = [
   PAYMENT_TYPES.cash,
   PAYMENT_TYPES.paid,
-  PAYMENT_TYPES.points,
+  PAYMENT_TYPES.loyalty_reward,
 ];
 
 export const BOOKING_SOURCES = {
@@ -86,7 +120,6 @@ function applyNoShowPolicy(slots) {
     }
 
     if (now >= startMs + NO_SHOW_GRACE_MS) {
-      registerNoShowFromSlot(slot);
       continue;
     }
 
@@ -102,12 +135,14 @@ function notifyUpdated() {
 }
 
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return localTodayIso();
 }
 
 function normalizeSlot(row) {
   return {
     ...row,
+    deviceId: row.deviceId == null ? null : String(row.deviceId),
+    status: normalizeSlotStatus(row.status),
     visitorName: row.visitorName || "",
     phone: row.phone || "",
     email: row.email || "",
@@ -125,8 +160,13 @@ function normalizeSlot(row) {
         ? PAYMENT_TYPES.cash.value
         : row.paymentType || (row.isPaid ? PAYMENT_TYPES.paid.value : PAYMENT_TYPES.cash.value),
     attendanceStatus: row.attendanceStatus || ATTENDANCE_STATUS.awaiting,
+    sessionStatus: row.sessionStatus || null,
+    startedAt: row.startedAt || null,
+    endedAt: row.endedAt || null,
+    sessionDurationSeconds: row.sessionDurationSeconds ?? null,
     isPaid: Boolean(row.isPaid) || row.paymentType === PAYMENT_TYPES.points.value,
     source: row.source || "manual",
+    receiptPdfUrl: row.receiptPdfUrl || null,
   };
 }
 
@@ -146,7 +186,7 @@ export function getDevicePackageInfo(device) {
   if (!pkg) {
     return { packageId: device.packageId, packageName: "—", packagePrice: "—", hours: 1 };
   }
-  const hours = Number.parseInt(String(pkg.hours).replace(/\D/g, ""), 10) || 1;
+  const hours = Number(pkg.minimumHours ?? pkg.minimum_hours ?? 1) || 1;
   return {
     packageId: pkg.id,
     packageName: pkg.name,
@@ -167,92 +207,12 @@ function nextBookingCode(slots, source = "manual") {
   return `${prefix}-${String(max + 1).padStart(3, "0")}`;
 }
 
-function buildSeedSlots() {
-  const date = todayIso();
-  const devices = loadDevices();
-  const pkg1 = getDevicePackageInfo(devices.find((d) => d.id === 1));
-  const pkg3 = getDevicePackageInfo(devices.find((d) => d.id === 2));
-
-  return [
-    {
-      id: 1,
-      deviceId: 1,
-      date,
-      hour: "15:00",
-      hourTo: calcHourTo("15:00", pkg1.hours),
-      status: SLOT_STATUS.reserved,
-      bookingCode: "APP-001",
-      visitorNumber: "APP-001",
-      visitorName: "محمد الزليطني",
-      phone: "0912345678",
-      email: "",
-      notes: "حجز من التطبيق",
-      packageId: pkg1.packageId,
-      packageName: pkg1.packageName,
-      packagePrice: pkg1.packagePrice,
-      paymentType: PAYMENT_TYPES.paid.value,
-      isPaid: true,
-      source: "app",
-      bookingType: BOOKING_SOURCES.app.label,
-      attendanceStatus: ATTENDANCE_STATUS.awaiting,
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 2,
-      deviceId: 1,
-      date,
-      hour: "14:00",
-      hourTo: calcHourTo("14:00", pkg1.hours),
-      status: SLOT_STATUS.active,
-      bookingCode: "BK-001",
-      visitorNumber: "BK-001",
-      visitorName: "أحمد الفيتوري",
-      phone: "0923456789",
-      email: "",
-      notes: "",
-      packageId: pkg1.packageId,
-      packageName: pkg1.packageName,
-      packagePrice: pkg1.packagePrice,
-      paymentType: PAYMENT_TYPES.cash.value,
-      isPaid: true,
-      source: "manual",
-      bookingType: BOOKING_SOURCES.manual.label,
-      attendanceStatus: ATTENDANCE_STATUS.checkedIn,
-      startedAt: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-    },
-    {
-      id: 3,
-      deviceId: 2,
-      date,
-      hour: "18:00",
-      hourTo: calcHourTo("18:00", pkg3.hours),
-      status: SLOT_STATUS.reserved,
-      bookingCode: "APP-002",
-      visitorNumber: "APP-002",
-      visitorName: "سالم بوعزيزة",
-      phone: "0934567890",
-      email: "",
-      notes: "يريد جهاز مع يد إضافية",
-      packageId: pkg3.packageId,
-      packageName: pkg3.packageName,
-      packagePrice: pkg3.packagePrice,
-      paymentType: PAYMENT_TYPES.cash.value,
-      isPaid: false,
-      source: "app",
-      bookingType: BOOKING_SOURCES.app.label,
-      attendanceStatus: ATTENDANCE_STATUS.awaiting,
-      createdAt: new Date().toISOString(),
-    },
-  ];
-}
-
 function persistCalendarSlots(slots) {
   try {
     const encoded = JSON.stringify(slots.map(normalizeSlot));
-    const prev = localStorage.getItem(STORAGE_KEY);
+    const prev = localStorage.getItem(storageKey());
     if (prev === encoded) return;
-    localStorage.setItem(STORAGE_KEY, encoded);
+    localStorage.setItem(storageKey(), encoded);
     notifyUpdated();
   } catch {
     /* ignore */
@@ -261,21 +221,17 @@ function persistCalendarSlots(slots) {
 
 export function loadCalendarSlots() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    let slots;
-    if (!raw) {
-      slots = buildSeedSlots().map(normalizeSlot);
-    } else {
-      const parsed = JSON.parse(raw);
-      slots = Array.isArray(parsed) ? parsed.map(normalizeSlot) : buildSeedSlots().map(normalizeSlot);
-    }
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    const slots = Array.isArray(parsed) ? parsed.map(normalizeSlot) : [];
     const processed = applyNoShowPolicy(slots);
     if (processed.length !== slots.length) {
       persistCalendarSlots(processed);
     }
     return processed;
   } catch {
-    return buildSeedSlots().map(normalizeSlot);
+    return [];
   }
 }
 
@@ -292,7 +248,86 @@ export function saveCalendarSlots(slots) {
   persistCalendarSlots(slots.map(normalizeSlot));
 }
 
-export function cancelCalendarBooking(slotId) {
+function slotKey(slot) {
+  return `${slot.deviceId}|${slot.date}|${slot.hour}`;
+}
+
+export function mergeCalendarSlotsForDate(date, newSlots) {
+  const others = loadCalendarSlots().filter((s) => s.date !== date);
+  saveCalendarSlots([...others, ...newSlots.map(normalizeSlot)]);
+}
+
+export function mergeActiveCalendarSlots(newSlots) {
+  const incoming = newSlots.map(normalizeSlot);
+  const incomingKeys = new Set(incoming.map(slotKey));
+  const incomingIds = new Set(incoming.map((s) => s.id));
+
+  const kept = loadCalendarSlots().filter((slot) => {
+    if (incomingIds.has(slot.id)) return false;
+    if (incomingKeys.has(slotKey(slot))) return false;
+    return true;
+  });
+
+  saveCalendarSlots([...kept, ...incoming]);
+}
+
+export async function syncCalendarFromApi(date) {
+  const session = getActiveStaffSession();
+  if (!isApiStaffSession(session)) return { ok: false, skipped: true };
+
+  const result = await fetchReceptionCalendarByDate(date);
+  if (!result.ok) return result;
+  mergeCalendarSlotsForDate(date, result.slots);
+  return { ok: true };
+}
+
+export async function syncActiveCalendarFromApi() {
+  const session = getActiveStaffSession();
+  if (!isApiStaffSession(session)) return { ok: false, skipped: true };
+
+  const result = await fetchActiveReceptionCalendar();
+  if (!result.ok) return result;
+  mergeActiveCalendarSlots(result.slots);
+  return { ok: true };
+}
+
+/** Polls date + active calendar APIs and notifies all reception listeners. */
+export async function syncReceptionLiveState(selectedDate = todayIso()) {
+  const session = getActiveStaffSession();
+  if (!isApiStaffSession(session)) return { ok: false, skipped: true };
+
+  const [dateResult, activeResult] = await Promise.all([
+    fetchReceptionCalendarByDate(selectedDate),
+    fetchActiveReceptionCalendar(),
+  ]);
+
+  if (dateResult.ok) {
+    mergeCalendarSlotsForDate(selectedDate, dateResult.slots);
+  }
+  if (activeResult.ok) {
+    mergeActiveCalendarSlots(activeResult.slots);
+  }
+
+  if (dateResult.ok || activeResult.ok) {
+    notifyUpdated();
+  }
+
+  return { ok: dateResult.ok || activeResult.ok };
+}
+
+export async function cancelCalendarBooking(slotId) {
+  const session = getActiveStaffSession();
+  if (isApiStaffSession(session)) {
+    const apiRes = await apiCancelCalendarBooking(slotId);
+    if (!apiRes.ok) return apiRes;
+    await syncActiveCalendarFromApi();
+    return { ok: true };
+  }
+
+  return cancelCalendarBookingLocal(slotId);
+}
+
+function cancelCalendarBookingLocal(slotId) {
   const slots = loadCalendarSlots();
   if (!findSlotById(slotId, slots)) {
     return { ok: false, error: "الحجز غير موجود." };
@@ -302,7 +337,8 @@ export function cancelCalendarBooking(slotId) {
 }
 
 export function findCalendarSlot(deviceId, date, hour, slots = loadCalendarSlots()) {
-  return slots.find((s) => s.deviceId === deviceId && s.date === date && s.hour === hour) ?? null;
+  const id = String(deviceId);
+  return slots.find((s) => String(s.deviceId) === id && s.date === date && s.hour === hour) ?? null;
 }
 
 export function findSlotById(id, slots = loadCalendarSlots()) {
@@ -310,10 +346,13 @@ export function findSlotById(id, slots = loadCalendarSlots()) {
 }
 
 export function paymentTypeLabel(value) {
+  if (value === "online_pending") return "إلكتروني (قيد الدفع)";
+  if (value === "online") return "إلكتروني";
+  if (value === "loyalty_reward" || value === "points") return PAYMENT_TYPES.loyalty_reward.label;
   return Object.values(PAYMENT_TYPES).find((p) => p.value === value)?.label ?? value ?? "—";
 }
 
-export function bookCalendarSlot({
+export async function bookCalendarSlot({
   deviceId,
   date,
   hour,
@@ -334,10 +373,71 @@ export function bookCalendarSlot({
     return { ok: false, error: getBookingsStopBlockMessage() };
   }
 
-  if (source === "app" && phone.trim() && isAppCustomerBanned(phone.trim())) {
-    return { ok: false, error: getAppCustomerBanBlockMessage(phone.trim()) };
+  const session = getActiveStaffSession();
+  if (isApiStaffSession(session)) {
+    const slots = loadCalendarSlots();
+    const code = bookingCode || nextBookingCode(slots, source);
+
+    const apiRes = await apiBookCalendarSlot({
+      deviceId,
+      date,
+      hour,
+      hourTo,
+      visitorName,
+      phone,
+      email,
+      notes,
+      packageId,
+      packageName,
+      packagePrice,
+      paymentType,
+      isPaid,
+      source,
+      bookingCode: code,
+    });
+
+    if (!apiRes.ok) return apiRes;
+    await syncCalendarFromApi(date);
+    await syncActiveCalendarFromApi();
+    return { ok: true, slot: apiRes.slot };
   }
 
+  return bookCalendarSlotLocal({
+    deviceId,
+    date,
+    hour,
+    hourTo,
+    visitorName,
+    phone,
+    email,
+    notes,
+    packageId,
+    packageName,
+    packagePrice,
+    paymentType,
+    isPaid,
+    source,
+    bookingCode,
+  });
+}
+
+function bookCalendarSlotLocal({
+  deviceId,
+  date,
+  hour,
+  hourTo,
+  visitorName = "",
+  phone = "",
+  email = "",
+  notes = "",
+  packageId = null,
+  packageName = "—",
+  packagePrice = "—",
+  paymentType = PAYMENT_TYPES.cash.value,
+  isPaid = false,
+  source = "manual",
+  bookingCode,
+}) {
   const slots = loadCalendarSlots();
   const existing = findCalendarSlot(deviceId, date, hour, slots);
   if (existing) return { ok: false, error: "هذا الموعد محجوز مسبقاً." };
@@ -375,8 +475,7 @@ export function bookCalendarSlot({
     isPaid: Boolean(isPaid) || paymentType === PAYMENT_TYPES.paid.value || paymentType === PAYMENT_TYPES.points.value,
     source,
     bookingType: source === "app" ? BOOKING_SOURCES.app.label : BOOKING_SOURCES.manual.label,
-    attendanceStatus:
-      source === "app" ? ATTENDANCE_STATUS.awaiting : ATTENDANCE_STATUS.checkedIn,
+    attendanceStatus: ATTENDANCE_STATUS.awaiting,
     createdAt: new Date().toISOString(),
   });
 
@@ -384,10 +483,21 @@ export function bookCalendarSlot({
   return { ok: true, slot };
 }
 
-export function checkInBooking(slotId) {
+export async function checkInBooking(slotId) {
   const slots = loadCalendarSlots();
   const idx = slots.findIndex((s) => s.id === slotId);
   if (idx < 0) return { ok: false, error: "الحجز غير موجود." };
+
+  const session = getActiveStaffSession();
+  if (isApiStaffSession(session)) {
+    const apiRes = await apiCheckInCalendarBooking(slotId);
+    if (!apiRes.ok) return apiRes;
+    invalidateFinanceCache();
+    await syncCalendarFromApi(slots[idx]?.date ?? todayIso());
+    await syncActiveCalendarFromApi();
+    return { ok: true };
+  }
+
   const next = slots.map((s, i) =>
     i === idx ? { ...s, attendanceStatus: ATTENDANCE_STATUS.checkedIn } : s,
   );
@@ -404,16 +514,33 @@ export function updateCalendarSlot(slotId, patch) {
   return { ok: true, slot: next[idx] };
 }
 
-export function startCalendarSession(deviceId, date, hour) {
+export async function startCalendarSession(deviceId, date, hour) {
   const slots = loadCalendarSlots();
-  const idx = slots.findIndex((s) => s.deviceId === deviceId && s.date === date && s.hour === hour);
-  if (idx < 0) return { ok: false, error: "لا يوجد حجز لهذا الموعد." };
+  const slot = slots.find((s) => s.deviceId === deviceId && s.date === date && s.hour === hour);
+  if (!slot) return { ok: false, error: "لا يوجد حجز لهذا الموعد." };
 
+  const session = getActiveStaffSession();
+  if (isApiStaffSession(session)) {
+    const apiRes = await apiStartCalendarSession(slot.id);
+    if (!apiRes.ok) return apiRes;
+    if (apiRes.slot?.startedAt) {
+      updateCalendarSlot(slot.id, {
+        status: SLOT_STATUS.busy,
+        startedAt: apiRes.slot.startedAt,
+        sessionStatus: "playing",
+      });
+    }
+    await syncActiveCalendarFromApi();
+    await syncCalendarFromApi(date);
+    return { ok: true };
+  }
+
+  const idx = slots.findIndex((s) => s.deviceId === deviceId && s.date === date && s.hour === hour);
   const next = slots.map((s, i) =>
     i === idx
       ? {
           ...s,
-          status: SLOT_STATUS.active,
+          status: SLOT_STATUS.busy,
           attendanceStatus: ATTENDANCE_STATUS.checkedIn,
           startedAt: new Date().toISOString(),
         }
@@ -423,18 +550,31 @@ export function startCalendarSession(deviceId, date, hour) {
   return { ok: true };
 }
 
-export function endCalendarSession(deviceId, date, hour) {
+export async function endCalendarSession(deviceId, date, hour) {
   const slots = loadCalendarSlots();
   const slot = slots.find((s) => s.deviceId === deviceId && s.date === date && s.hour === hour) ?? null;
+
+  const session = getActiveStaffSession();
+  if (isApiStaffSession(session) && slot?.id) {
+    let pointsResult = null;
+    if (slot?.status === SLOT_STATUS.busy) {
+      pointsResult = awardPointsForCompletedSession(slot);
+    }
+    const apiRes = await apiEndCalendarSession(slot.id);
+    if (!apiRes.ok) return { ok: false, error: apiRes.error };
+    invalidateFinanceCache();
+    await syncActiveCalendarFromApi();
+    await syncCalendarFromApi(date);
+    return { ok: true, pointsResult, slot };
+  }
+
   let pointsResult = null;
-  let revenueEntry = null;
-  if (slot?.status === SLOT_STATUS.active) {
-    revenueEntry = recordCompletedSessionRevenue(slot);
+  if (slot?.status === SLOT_STATUS.busy) {
     pointsResult = awardPointsForCompletedSession(slot);
   }
   const next = slots.filter((s) => !(s.deviceId === deviceId && s.date === date && s.hour === hour));
   saveCalendarSlots(next);
-  return { ok: true, pointsResult, revenueEntry, slot };
+  return { ok: true, pointsResult, slot };
 }
 
 export function getAwaitingBookings(slots = loadCalendarSlots()) {
@@ -455,7 +595,7 @@ export function getSessionBookings(slots = loadCalendarSlots()) {
     .filter(
       (s) =>
         s.attendanceStatus === ATTENDANCE_STATUS.checkedIn &&
-        (s.status === SLOT_STATUS.reserved || s.status === SLOT_STATUS.active),
+        (s.status === SLOT_STATUS.reserved || s.status === SLOT_STATUS.busy),
     )
     .sort((a, b) => {
       const d = a.date.localeCompare(b.date);
@@ -464,7 +604,7 @@ export function getSessionBookings(slots = loadCalendarSlots()) {
 }
 
 export function getActiveCalendarSessions(slots = loadCalendarSlots()) {
-  return slots.filter((s) => s.status === SLOT_STATUS.active);
+  return slots.filter((s) => normalizeSlotStatus(s.status) === SLOT_STATUS.busy);
 }
 
 export function getTodayBookedSlots(slots = loadCalendarSlots()) {
@@ -473,7 +613,7 @@ export function getTodayBookedSlots(slots = loadCalendarSlots()) {
     .filter(
       (s) =>
         s.date === today &&
-        (s.status === SLOT_STATUS.reserved || s.status === SLOT_STATUS.active),
+        (s.status === SLOT_STATUS.reserved || s.status === SLOT_STATUS.busy),
     )
     .sort((a, b) => a.hour.localeCompare(b.hour));
 }
@@ -483,7 +623,7 @@ export function getCalendarStatsForDate(date, devices, slots = loadCalendarSlots
   const maintenanceCount = devices.filter((d) => d._maintenance).length;
   return {
     reserved: daySlots.filter((s) => s.status === SLOT_STATUS.reserved).length,
-    active: daySlots.filter((s) => s.status === SLOT_STATUS.active).length,
+    busy: daySlots.filter((s) => normalizeSlotStatus(s.status) === SLOT_STATUS.busy).length,
     totalDevices: devices.length,
     maintenance: maintenanceCount,
   };

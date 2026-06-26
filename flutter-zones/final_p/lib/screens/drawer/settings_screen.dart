@@ -1,13 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/routes/app_routes.dart';
 import '../../core/theme/zonez_colors.dart';
+import '../../features/auth/bloc/auth_bloc.dart';
+import '../../features/auth/bloc/auth_event.dart';
+import '../../features/auth/bloc/auth_state.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/theme_provider.dart';
 import '../../providers/zones_data_provider.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -98,13 +103,7 @@ class SettingsScreen extends StatelessWidget {
     );
 
     if (confirmed == true && context.mounted) {
-      context.read<AppStateProvider>().deleteAccount();
-      context.read<ZonesDataProvider>().loadUserProfile();
-      Navigator.pushNamedAndRemoveUntil(
-        context,
-        AppRoutes.login,
-        (route) => false,
-      );
+      context.read<AuthBloc>().add(const AuthDeleteAccountRequested());
     }
   }
 
@@ -115,7 +114,30 @@ class SettingsScreen extends StatelessWidget {
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    return Scaffold(
+    return BlocListener<AuthBloc, AuthState>(
+      listenWhen: (previous, current) =>
+          previous is AuthLoading && current is AuthUnauthenticated,
+      listener: (context, state) {
+        context.read<AppStateProvider>().deleteAccount();
+        context.read<ZonesDataProvider>().loadUserProfile();
+        Navigator.pushNamedAndRemoveUntil(
+          context,
+          AppRoutes.login,
+          (route) => false,
+        );
+      },
+      child: BlocListener<AuthBloc, AuthState>(
+        listenWhen: (previous, current) => current is AuthFailure,
+        listener: (context, state) {
+          if (state is AuthFailure) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(state.message, style: GoogleFonts.cairo()),
+              ),
+            );
+          }
+        },
+        child: Scaffold(
       appBar: AppBar(
         title: Text(
           'الإعدادات',
@@ -125,7 +147,9 @@ class SettingsScreen extends StatelessWidget {
       body: Stack(
         children: [
           const CircuitBackground(),
-          ListView(
+          ZonezScreen(
+            top: false,
+            child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _SettingsCard(
@@ -196,7 +220,10 @@ class SettingsScreen extends StatelessWidget {
               ),
             ],
           ),
+          ),
         ],
+      ),
+        ),
       ),
     );
   }

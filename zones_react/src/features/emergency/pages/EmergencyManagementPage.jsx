@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import {
   zonesConfirm,
+  zonesToastInfo,
   zonesToastSuccess,
   zonesToastWarning,
 } from "../../../shared/utils/zonesAlerts";
@@ -24,9 +25,51 @@ import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import ManagerHeaderUser from "../../../shared/components/ManagerHeaderUser";
 import IconButton from "../../../shared/components/ui/IconButton";
 import IconGlyph from "../../../shared/components/ui/IconGlyph";
+import { Checkbox } from "@/components/ui/checkbox";
+import { SELECT_COL_TD, SELECT_COL_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+import {
+  BOOKINGS_STOP_EVENT,
+  getActiveBookingsStopRecord,
+  isBookingsStopped,
+  refreshBookingStopsFromApi,
+  resumeBookingsStop,
+  startBookingsStop,
+} from "../../alerts/data/bookingsStopStorage";
+import StopBookingsFormModal from "../../alerts/components/StopBookingsFormModal";
 import "./EmergencyManagementPage.css";
 
-const CUSTOM_TYPES_KEY = "zones-emergency-custom-types";
+const CUSTOM_TYPES_KEY = () => hallScopedKey("zones-emergency-custom-types");
+const LOGS_KEY = () => hallScopedKey("zones-emergency-logs-v1");
+const ARCHIVE_KEY = () => hallScopedKey("zones-emergency-archive-v1");
+
+function loadJsonArray(key) {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function persistJsonArray(key, value) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
 
 const BASE_TYPES = [
   { value: "fire", label: "حريق", icon: Flame },
@@ -37,7 +80,7 @@ const BASE_TYPES = [
 
 function loadCustomTypeLabels() {
   try {
-    const raw = localStorage.getItem(CUSTOM_TYPES_KEY);
+    const raw = localStorage.getItem(CUSTOM_TYPES_KEY());
     if (!raw) return [];
     const j = JSON.parse(raw);
     return Array.isArray(j) ? j.map((x) => String(x).trim()).filter(Boolean) : [];
@@ -48,7 +91,7 @@ function loadCustomTypeLabels() {
 
 function saveCustomTypeLabels(labels) {
   try {
-    localStorage.setItem(CUSTOM_TYPES_KEY, JSON.stringify([...new Set(labels)]));
+    localStorage.setItem(CUSTOM_TYPES_KEY(), JSON.stringify([...new Set(labels)]));
   } catch {
     /* ignore */
   }
@@ -82,37 +125,11 @@ function rowLabel(typeValue) {
 
 const PAGE_SIZE = 4;
 
-const initialLog = [
-  {
-    id: 1,
-    typeValue: "fire",
-    description: "اشتباه حريق في منطقة التخزين — تم التحقق.",
-    occurredAt: "2026-05-10 14:32",
-  },
-  {
-    id: 2,
-    typeValue: "power",
-    description: "انقطاع مؤقت عن التيار في القاعة أ.",
-    occurredAt: "2026-05-09 09:15",
-  },
-  {
-    id: 3,
-    typeValue: "technical",
-    description: "تعطل نظام الحجز لمدة 12 دقيقة.",
-    occurredAt: "2026-05-08 18:40",
-  },
-  {
-    id: 4,
-    typeValue: "other",
-    description: "بلاغ أمني — تمت المعالجة وفق الإجراء.",
-    occurredAt: "2026-05-07 11:05",
-  },
-];
-
 export default function EmergencyManagementPage() {
-  const [bookingsStopped, setBookingsStopped] = useState(false);
-  const [logs, setLogs] = useState(initialLog);
-  const [archived, setArchived] = useState([]);
+  const [bookingsStopped, setBookingsStopped] = useState(() => isBookingsStopped());
+  const [stopModalOpen, setStopModalOpen] = useState(false);
+  const [logs, setLogs] = useState(() => loadJsonArray(LOGS_KEY()));
+  const [archived, setArchived] = useState(() => loadJsonArray(ARCHIVE_KEY()));
   const [logSearch, setLogSearch] = useState("");
   const [customLabels, setCustomLabels] = useState(loadCustomTypeLabels);
 
@@ -130,8 +147,52 @@ export default function EmergencyManagementPage() {
   const [logPage, setLogPage] = useState(1);
 
   useEffect(() => {
+    const sync = async () => {
+      await refreshBookingStopsFromApi();
+      setBookingsStopped(isBookingsStopped());
+    };
+    sync();
+    window.addEventListener(BOOKINGS_STOP_EVENT, sync);
+    return () => window.removeEventListener(BOOKINGS_STOP_EVENT, sync);
+  }, []);
+
+  const handleBookingsToggle = async () => {
+    if (bookingsStopped) {
+      const active = getActiveBookingsStopRecord();
+      const result = await resumeBookingsStop(active?.id);
+      if (!result.ok) {
+        zonesToastInfo(result.error);
+        return;
+      }
+      setBookingsStopped(false);
+      zonesToastSuccess("تم استئناف الحجوزات");
+      return;
+    }
+    setStopModalOpen(true);
+  };
+
+  const handleStopSubmit = async ({ reasonKey, startsOn, endsOn }) => {
+    const result = await startBookingsStop({ reasonKey, startsOn, endsOn });
+    if (!result.ok) {
+      zonesToastInfo(result.error);
+      return;
+    }
+    setStopModalOpen(false);
+    setBookingsStopped(true);
+    zonesToastSuccess("تم إيقاف الحجوزات");
+  };
+
+  useEffect(() => {
     saveCustomTypeLabels(customLabels);
   }, [customLabels]);
+
+  useEffect(() => {
+    persistJsonArray(LOGS_KEY(), logs);
+  }, [logs]);
+
+  useEffect(() => {
+    persistJsonArray(ARCHIVE_KEY(), archived);
+  }, [archived]);
 
   useEffect(() => {
     setLogPage(1);
@@ -163,6 +224,9 @@ export default function EmergencyManagementPage() {
     const start = (logPage - 1) * PAGE_SIZE;
     return filteredLogs.slice(start, start + PAGE_SIZE);
   }, [filteredLogs, logPage]);
+
+  const pageIds = useMemo(() => pagedLogs.map((row) => row.id), [pagedLogs]);
+  const selection = useTableSelection({ items: filteredLogs, pageIds });
 
   const headerExtras = <ManagerHeaderUser />;
 
@@ -202,8 +266,12 @@ export default function EmergencyManagementPage() {
   };
 
   const deleteRow = async (row) => {
+    const targetIds = resolveBulkActionIds(row.id, selection.selectedIds);
+    const targets = filterItemsByIds(logs, targetIds);
+    const isBulk = targets.length > 1;
+
     const confirmed = await zonesConfirm({
-      title: "هل تريد حذف هذه الحالة؟",
+      title: isBulk ? `هل تريد حذف ${targets.length} حالات؟` : "هل تريد حذف هذه الحالة؟",
       html: '<p dir="rtl" style="margin:0;font-size:13px;line-height:1.6">سيتم نقل السجل إلى <b>الأرشيف</b>.</p>',
       icon: "warning",
       confirmText: "نعم، احذف",
@@ -211,9 +279,21 @@ export default function EmergencyManagementPage() {
       danger: true,
     });
     if (!confirmed) return;
-    setArchived((a) => [...a, { ...row, archivedAt: new Date().toISOString() }]);
-    setLogs((list) => list.filter((x) => x.id !== row.id));
-    zonesToastSuccess("تم النقل إلى الأرشيف");
+
+    const idSet = new Set(targets.map((t) => t.id));
+    setArchived((a) => [
+      ...a,
+      ...targets.map((t) => ({ ...t, archivedAt: new Date().toISOString() })),
+    ]);
+    setLogs((list) => list.filter((x) => !idSet.has(x.id)));
+    selection.clearSelection();
+    zonesToastSuccess(isBulk ? `تم نقل ${targets.length} سجلات إلى الأرشيف` : "تم النقل إلى الأرشيف");
+  };
+
+  const handleBulkDelete = () => {
+    const targets = filterItemsByIds(logs, selection.selectedIds);
+    if (!targets.length) return;
+    deleteRow(targets[0]);
   };
 
   const submitNotify = () => {
@@ -261,7 +341,7 @@ export default function EmergencyManagementPage() {
               role="switch"
               aria-checked={bookingsStopped}
               aria-label={bookingsStopped ? "إيقاف الحجوزات نشط" : "إيقاف الحجوزات غير نشط"}
-              onClick={() => setBookingsStopped((v) => !v)}
+              onClick={handleBookingsToggle}
               className="em-bookings-switch mt-3 flex w-full items-center justify-between gap-3"
             >
               <span
@@ -343,10 +423,24 @@ export default function EmergencyManagementPage() {
             </button>
           </div>
 
+          <TableBulkActionBar
+            count={selection.count}
+            onClear={selection.clearSelection}
+            actions={[{ label: "حذف المحدد", icon: Trash2, onClick: handleBulkDelete, variant: "danger" }]}
+          />
+
           <div className="overflow-x-auto rounded-xl border border-slate-800/80" data-zones-table-wrap>
             <table className="em-table w-full min-w-[640px] border-collapse text-[12px]">
               <thead>
                 <tr className="border-b border-slate-800/90 bg-[#0b0e14]/70 text-start text-xs font-medium uppercase tracking-wide text-slate-500">
+                  <th className={`${SELECT_COL_TH} text-center`}>
+                    <Checkbox
+                      checked={selection.masterChecked}
+                      onCheckedChange={selection.toggleSelectAll}
+                      aria-label="تحديد الكل"
+                      className="mx-auto ring-offset-[#0b0e14] data-[state=checked]:shadow-[0_0_0_2px_rgba(107,84,120,0.25)]"
+                    />
+                  </th>
                   <th className="px-3 py-3 text-end">#</th>
                   <th className="px-3 py-3 text-end">نوع الطوارئ</th>
                   <th className="px-3 py-3 text-end">الوصف</th>
@@ -355,6 +449,13 @@ export default function EmergencyManagementPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/80">
+                {filteredLogs.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-3 py-10 text-center text-[12px] text-slate-500">
+                      لا توجد حالات طوارئ مسجّلة بعد.
+                    </td>
+                  </tr>
+                ) : null}
                 {pagedLogs.map((row, idx) => {
                   const Icon = rowIcon(row.typeValue);
                   const label = rowLabel(row.typeValue);
@@ -362,8 +463,16 @@ export default function EmergencyManagementPage() {
                   return (
                     <tr
                       key={row.id}
-                      className="transition odd:bg-[#0f131a]/40 even:bg-[#121722]/30 hover:bg-[#151a24]/80"
+                      className={`transition odd:bg-[#0f131a]/40 even:bg-[#121722]/30 hover:bg-[#151a24]/80 ${selectableRowClass(selection.isSelected(row.id), "")}`}
                     >
+                      <td className={SELECT_COL_TD}>
+                        <Checkbox
+                          checked={selection.isSelected(row.id)}
+                          onCheckedChange={() => selection.toggleRow(row.id)}
+                          aria-label={`تحديد السجل ${rowNum}`}
+                          className="mx-auto ring-offset-[#0b0e14] data-[state=checked]:shadow-[0_0_0_2px_rgba(107,84,120,0.25)]"
+                        />
+                      </td>
                       <td className="px-3 py-3 text-end font-medium text-slate-400">{rowNum}</td>
                       <td className="px-3 py-3 text-end">
                         <span className="inline-flex items-center justify-end gap-1.5">
@@ -378,7 +487,11 @@ export default function EmergencyManagementPage() {
                       <td className="px-3 py-3 text-end">
                         <IconButton
                           icon={Trash2}
-                          label="حذف"
+                          label={
+                            selection.isSelected(row.id) && selection.count > 1
+                              ? `حذف ${selection.count}`
+                              : "حذف"
+                          }
                           tone="danger"
                           size={16}
                           onClick={() => deleteRow(row)}
@@ -571,6 +684,12 @@ export default function EmergencyManagementPage() {
           </div>
         </div>
       ) : null}
+
+      <StopBookingsFormModal
+        open={stopModalOpen}
+        onClose={() => setStopModalOpen(false)}
+        onSubmit={handleStopSubmit}
+      />
     </ManagerLayout>
   );
 }

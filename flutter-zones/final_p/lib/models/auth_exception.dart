@@ -2,6 +2,9 @@ enum AuthErrorType {
   userNotFound,
   wrongPassword,
   emailAlreadyRegistered,
+  invalidCode,
+  networkError,
+  serverError,
 }
 
 class AuthException implements Exception {

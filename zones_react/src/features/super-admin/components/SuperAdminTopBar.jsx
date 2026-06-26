@@ -43,7 +43,7 @@ export default function SuperAdminTopBar({ session, pendingCount = 0, onMenuClic
                 وضع الصيانة
               </Link>
             ) : null}
-            <SuperAdminNotificationsDropdown pendingCount={pendingCount} />
+            <SuperAdminNotificationsDropdown />
           </>
         }
       />

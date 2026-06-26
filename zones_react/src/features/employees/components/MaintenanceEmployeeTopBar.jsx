@@ -3,10 +3,12 @@ import DashboardProfileChip from "../../../shared/components/DashboardProfileChi
 import DashboardTopBarActions from "../../../shared/components/DashboardTopBarActions";
 import { DASHBOARD_ICON_BTN_CLS } from "../../../shared/components/dashboardTopBarUi";
 import { useDashboardProfile } from "../../../shared/hooks/useDashboardProfile";
+import { useMaintenanceEmployeeRoutes } from "../data/maintenanceEmployeeRoutes";
 import HallNotificationsBell from "./HallNotificationsBell";
 
 export default function MaintenanceEmployeeTopBar({ onMenuClick }) {
   const profile = useDashboardProfile();
+  const { routes } = useMaintenanceEmployeeRoutes();
 
   return (
     <header
@@ -28,7 +30,7 @@ export default function MaintenanceEmployeeTopBar({ onMenuClick }) {
       </div>
 
       <DashboardTopBarActions
-        profile={<DashboardProfileChip roleLabel="صيانة" />}
+        profile={<DashboardProfileChip roleLabel="صيانة" profileTo={routes.profile} />}
         notifications={<HallNotificationsBell audience="maintenance" />}
       />
     </header>

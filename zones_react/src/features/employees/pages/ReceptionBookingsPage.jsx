@@ -4,6 +4,17 @@ import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAler
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
 import TablePagination from "../../../shared/components/TablePagination";
@@ -16,52 +27,57 @@ import {
   loadCalendarSlots,
   paymentTypeLabel,
   RECEPTION_CALENDAR_EVENT,
+  syncReceptionLiveState,
   todayIso,
 } from "../data/receptionCalendarStorage";
+import { isApiStaffSession, getActiveStaffSession } from "../../devices-packages/data/hallCatalogSync";
 import { formatCalendarDate, getHallWorkHours, loadCalendarDevices } from "../utils/receptionCalendarUtils";
 import {
   isAppBooking,
   isManualBooking,
 } from "../utils/receptionBookingsFilters";
-import {
-  getCustomerPointsBalance,
-  LOYALTY_UPDATED_EVENT,
-} from "../../loyalty/data/loyaltyPointsStorage";
+import { openBookingReceiptPdf } from "../utils/openBookingReceiptPdf";
 
-const PAGE_SIZE = 8;
-const AUTO_REFRESH_MS = 60_000;
+import { useReceptionLiveSync } from "../hooks/useReceptionLiveSync";
+
+const PAGE_SIZE = 10;
 
 export default function ReceptionBookingsPage() {
   const [slots, setSlots] = useState(() => loadCalendarSlots());
   const [search, setSearch] = useState("");
   const [sourceFilter, setSourceFilter] = useState("all");
   const [selectedDate, setSelectedDate] = useState(() => todayIso());
+  useReceptionLiveSync(selectedDate);
   const [page, setPage] = useState(1);
   const [voucherSlot, setVoucherSlot] = useState(null);
-  const [loyaltyTick, setLoyaltyTick] = useState(0);
 
   const devices = useMemo(() => loadCalendarDevices(), [slots]);
-  const deviceMap = useMemo(() => new Map(devices.map((d) => [d.id, d])), [devices]);
+  const deviceMap = useMemo(
+    () => new Map(devices.map((d) => [String(d.id), d])),
+    [devices],
+  );
   const hallName = useMemo(() => getHallWorkHours().hallName, []);
 
-  const refresh = useCallback(() => {
+  const reloadView = useCallback(() => {
     setSlots(loadCalendarSlots());
   }, []);
 
+  const syncView = useCallback(async () => {
+    if (isApiStaffSession(getActiveStaffSession())) {
+      await syncReceptionLiveState(selectedDate);
+    }
+    reloadView();
+  }, [selectedDate, reloadView]);
+
   useEffect(() => {
-    const onLoyaltyUpdate = () => setLoyaltyTick(Date.now());
-    refresh();
-    window.addEventListener(RECEPTION_CALENDAR_EVENT, refresh);
-    window.addEventListener(LOYALTY_UPDATED_EVENT, onLoyaltyUpdate);
-    window.addEventListener("focus", refresh);
-    const timer = setInterval(refresh, AUTO_REFRESH_MS);
+    syncView();
+    window.addEventListener(RECEPTION_CALENDAR_EVENT, reloadView);
+    window.addEventListener("focus", syncView);
     return () => {
-      window.removeEventListener(RECEPTION_CALENDAR_EVENT, refresh);
-      window.removeEventListener(LOYALTY_UPDATED_EVENT, onLoyaltyUpdate);
-      window.removeEventListener("focus", refresh);
-      clearInterval(timer);
+      window.removeEventListener(RECEPTION_CALENDAR_EVENT, reloadView);
+      window.removeEventListener("focus", syncView);
     };
-  }, [refresh]);
+  }, [syncView, reloadView]);
 
   const bookings = useMemo(() => {
     let list = getAwaitingBookings(slots).filter((b) => b.date === selectedDate);
@@ -90,6 +106,8 @@ export default function ReceptionBookingsPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: bookings, pageIds });
 
   useEffect(() => {
     setPage(1);
@@ -99,17 +117,55 @@ export default function ReceptionBookingsPage() {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const handleCheckIn = async (row) => {
+  useEffect(() => {
+    syncView();
+  }, [selectedDate, syncView]);
+
+  const handleOpenReceipt = async (row) => {
+    if (!row?.id) return;
+    try {
+      await openBookingReceiptPdf(row.id);
+    } catch {
+      openVoucher(row);
+    }
+  };
+
+  const runCheckIn = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(bookings, targetIds);
+
     const confirmed = await zonesConfirm({
-      title: "تسجيل الحضور؟",
-      text: `تأكيد حضور «${row.visitorName}».`,
+      title: isBulk ? `تسجيل حضور ${targetIds.length} حجوزات؟` : "تسجيل الحضور؟",
+      text: isBulk
+        ? `تأكيد حضور ${targetIds.length} حجوزات.`
+        : `تأكيد حضور «${rowForMessage.visitorName}».`,
       confirmText: "تسجيل الحضور",
       cancelText: "إلغاء",
     });
     if (!confirmed) return;
-    checkInBooking(row.id);
-    refresh();
-    zonesToastSuccess("انتقل الحجز إلى صفحة الجلسات.", "تم تسجيل الحضور");
+
+    let success = 0;
+    for (const row of targets) {
+      const result = await checkInBooking(row.id);
+      if (result.ok) success += 1;
+    }
+
+    if (success === 0) return;
+
+    selection.clearSelection();
+    reloadView();
+    zonesToastSuccess(
+      isBulk ? `تم تسجيل حضور ${success} من ${targets.length} حجوزات` : "انتقل الحجز إلى صفحة الجلسات.",
+      isBulk ? "تم تسجيل الحضور" : "تم تسجيل الحضور",
+    );
+  };
+
+  const handleCheckIn = (row) => runCheckIn(resolveBulkActionIds(row.id, selection.selectedIds), row);
+
+  const handleBulkCheckIn = () => {
+    const targets = filterItemsByIds(bookings, selection.selectedIds);
+    if (!targets.length) return;
+    runCheckIn(selection.selectedIds, targets[0]);
   };
 
   const openVoucher = (row) => {
@@ -169,21 +225,27 @@ export default function ReceptionBookingsPage() {
           />
         </div>
 
+        <TableBulkActionBar
+          count={selection.count}
+          onClear={selection.clearSelection}
+          actions={[{ label: "تسجيل حضور المحدد", icon: UserCheck, onClick: handleBulkCheckIn }]}
+        />
+
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1060px] text-right text-xs">
+          <table className="w-full min-w-[1180px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">رقم الحجز</th>
                 <th className="px-3 py-2.5 font-bold">نوع الحجز</th>
                 <th className="px-3 py-2.5 font-bold">الزبون</th>
-                <th className="px-3 py-2.5 font-bold">الهاتف</th>
-                <th className="px-3 py-2.5 font-bold">البريد</th>
+                <th className="px-3 py-2.5 font-bold">التاريخ / الوقت</th>
                 <th className="px-3 py-2.5 font-bold">الجهاز</th>
                 <th className="px-3 py-2.5 font-bold">الباقة</th>
-                <th className="px-3 py-2.5 font-bold">التاريخ / الوقت</th>
                 <th className="px-3 py-2.5 font-bold">الدفع</th>
-                <th className="px-3 py-2.5 font-bold">نقاط</th>
+                <th className="px-3 py-2.5 font-bold">الإجمالي</th>
                 <th className="px-3 py-2.5 font-bold">الحالة</th>
+                <th className="px-3 py-2.5 font-bold">الإيصال</th>
                 <th className={TABLE_ACTIONS_TH}>الإجراء</th>
               </tr>
             </thead>
@@ -196,12 +258,14 @@ export default function ReceptionBookingsPage() {
                 </tr>
               ) : (
                 paged.map((row) => {
-                  const device = deviceMap.get(row.deviceId);
-                  const appBooking = isAppBooking(row);
-                  const pointsBalance = appBooking ? getCustomerPointsBalance(row.phone) : null;
-                  void loyaltyTick;
+                  const device = deviceMap.get(String(row.deviceId));
                   return (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                      <TableSelectRowCell
+                        id={row.id}
+                        ariaLabel={`تحديد حجز ${row.bookingCode}`}
+                        {...selection}
+                      />
                       <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
                         {row.bookingCode}
                       </td>
@@ -209,38 +273,32 @@ export default function ReceptionBookingsPage() {
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">
                         {row.visitorName || "—"}
                       </td>
-                      <td className="px-3 py-3 text-gray-600" dir="ltr">
-                        {row.phone || "—"}
-                      </td>
-                      <td className="px-3 py-3 text-gray-500" dir="ltr">
-                        {row.email || "—"}
-                      </td>
-                      <td className="px-3 py-3 font-semibold" dir="ltr">
-                        {device?.name || row.deviceName || "—"}
-                      </td>
-                      <td className="px-3 py-3 text-gray-600">
-                        {row.packageName} ({row.packagePrice})
-                      </td>
                       <td className="px-3 py-3 text-gray-600">
                         <span className="block">{formatCalendarDate(row.date)}</span>
                         <span className="font-bold" dir="ltr">
                           {row.hour} → {row.hourTo}
                         </span>
                       </td>
+                      <td className="px-3 py-3 font-semibold" dir="ltr">
+                        {device?.name || row.deviceName || "—"}
+                      </td>
+                      <td className="px-3 py-3 text-gray-600">{row.packageName}</td>
                       <td className="px-3 py-3">{paymentTypeLabel(row.paymentType)}</td>
-                      <td className="px-3 py-3">
-                        {appBooking ? (
-                          <span className="inline-flex rounded-full bg-[#6B5478]/12 px-2.5 py-0.5 text-[11px] font-bold text-[#6B5478]">
-                            {pointsBalance} نقطة
-                          </span>
-                        ) : (
-                          <span className="text-gray-400">—</span>
-                        )}
+                      <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">
+                        {row.totalPrice ? `${row.totalPrice} د.ل` : `${row.packagePrice} د.ل`}
                       </td>
                       <td className="px-3 py-3">
                         <span className="inline-flex rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-700 dark:text-amber-400">
                           لم يحضر
                         </span>
+                      </td>
+                      <td className="px-3 py-3">
+                        <IconButton
+                          icon={FileText}
+                          label="عرض الإيصال"
+                          tone="default"
+                          onClick={() => handleOpenReceipt(row)}
+                        />
                       </td>
                       <td className={TABLE_ACTIONS_TD}>
                         <TableActionsGroup>
@@ -249,12 +307,6 @@ export default function ReceptionBookingsPage() {
                             label="تسجيل الحضور"
                             tone="brand"
                             onClick={() => handleCheckIn(row)}
-                          />
-                          <IconButton
-                            icon={FileText}
-                            label="عرض وصل الحجز PDF"
-                            tone="default"
-                            onClick={() => openVoucher(row)}
                           />
                         </TableActionsGroup>
                       </td>

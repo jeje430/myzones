@@ -2,6 +2,12 @@ import { useEffect, useMemo, useState } from "react";
 
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
+import {
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import { formatDisplayDate } from "../../maintenance/data/faultMeta";
 
 import TablePagination from "../../../shared/components/TablePagination";
@@ -128,6 +134,10 @@ export default function ReceptionPackagesPage() {
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+
+  const selection = useTableSelection({ items: filtered, pageIds });
+
 
 
   useEffect(() => {
@@ -184,9 +194,9 @@ export default function ReceptionPackagesPage() {
 
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
 
-                <th className="px-3 py-2.5 font-bold">الباقات</th>
+                <TableSelectHeaderCell {...selection} />
 
-                <th className="px-3 py-2.5 font-bold">المدة</th>
+                <th className="px-3 py-2.5 font-bold">الباقات</th>
 
                 <th className="px-3 py-2.5 font-bold">السعر</th>
 
@@ -220,7 +230,9 @@ export default function ReceptionPackagesPage() {
 
                   return (
 
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
 
                       <td className="px-3 py-3">
 
@@ -233,8 +245,6 @@ export default function ReceptionPackagesPage() {
                         </p>
 
                       </td>
-
-                      <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{row.hours}</td>
 
                       <td className="px-3 py-3 font-bold text-[#6B5478]">{row.price}</td>
 

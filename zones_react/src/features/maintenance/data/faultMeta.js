@@ -1,3 +1,4 @@
+import { localTodayIso } from "../../../shared/utils/localDateUtils";
 import { isDeviceBroken, isDeviceRepairInProgress } from "../../devices-packages/utils/deviceFaultSync";
 
 export const FAULT_TYPES = [
@@ -15,8 +16,7 @@ export const FAULT_STATUSES = [
 ];
 
 const STATUS_TONE_CLASS = {
-  red: "bg-red-500/15 text-red-600 dark:text-red-400",
-  amber: "bg-amber-500/15 text-amber-700 dark:text-amber-400",
+  gray: "bg-gray-500/15 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300",
   green: "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400",
   muted: "bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400",
 };
@@ -25,20 +25,26 @@ const STATUS_TONE_CLASS = {
 export function deviceFaultUiStatus(device) {
   if (!device) return { key: "unknown", label: "—", tone: "muted" };
   if (isDeviceRepairInProgress(device)) {
-    return { key: "repairing", label: "تحت الصيانة", tone: "amber" };
+    return { key: "repairing", label: "تحت الصيانة", tone: "gray" };
   }
   if (isDeviceBroken(device)) {
-    return { key: "broken", label: "معطل", tone: "red" };
+    return { key: "broken", label: "معطل", tone: "gray" };
   }
   return { key: "healthy", label: "سليم", tone: "green" };
 }
 
 /** شارة حالة سجل العطل في جدول الأعطال */
 export function faultRowDisplayStatus(row, device) {
-  if (isDeviceRepairInProgress(device)) {
-    return { key: "repairing", label: "قيد الإصلاح", tone: "amber" };
+  if (row?.status === "scheduled") {
+    return { key: "scheduled", label: "مجدول", tone: "muted" };
   }
-  return { key: "waiting", label: "في الانتظار", tone: "red" };
+  if (row?.status === "in_progress" || isDeviceRepairInProgress(device)) {
+    return { key: "repairing", label: "قيد الإصلاح", tone: "gray" };
+  }
+  if (device?.operationalStatus === "maintenance" || device?.isMaintenance) {
+    return { key: "maintenance", label: "صيانة", tone: "gray" };
+  }
+  return { key: "waiting", label: "في الانتظار", tone: "gray" };
 }
 
 export function faultStatusBadgeClass(tone) {
@@ -47,9 +53,17 @@ export function faultStatusBadgeClass(tone) {
 
 export function parseDeviceCreatedAt(createdAt) {
   if (!createdAt) return null;
-  const datePart = String(createdAt).split("—")[0]?.trim().replace(/\//g, "-");
+  const str = String(createdAt).trim();
+  if (!str || str === "—") return null;
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(str)) {
+    const d = new Date(str.includes("T") ? str : `${str.slice(0, 10)}T12:00:00`);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+
+  const datePart = str.split("—")[0]?.trim().replace(/\//g, "-");
   if (!datePart) return null;
-  const d = new Date(datePart);
+  const d = new Date(`${datePart}T12:00:00`);
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -57,6 +71,23 @@ export function minFaultDateInputValue(device) {
   const created = parseDeviceCreatedAt(device?.createdAt);
   if (!created) return undefined;
   return toDateInputValue(created);
+}
+
+/** حتى سنة قادمة — يسمح بتسجيل عطل مجدول */
+export function maxFaultDateInputValue() {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return toDateInputValue(d);
+}
+
+export function isFutureFaultDate(dateInputValue) {
+  if (!dateInputValue) return false;
+  return dateInputValue > localTodayIso();
+}
+
+export function isFaultDateTodayOrPast(dateInputValue) {
+  if (!dateInputValue) return true;
+  return dateInputValue <= localTodayIso();
 }
 
 export function isFaultDateValidForDevice(device, dateInputValue) {

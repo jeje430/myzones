@@ -8,6 +8,13 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
+import {
   alertTargetLabel,
   formatAlertRecordCode,
 } from "../data/alertsMeta";
@@ -15,6 +22,11 @@ import {
   loadArchivedAlerts,
   MANAGER_ALERTS_EVENT,
 } from "../data/managerAlertsStorage";
+import {
+  fetchArchivedManagerBroadcasts,
+  MANAGER_BROADCASTS_ARCHIVED_EVENT,
+} from "../data/managerBroadcastsApi";
+import { getActiveStaffSession, isApiStaffSession } from "../../devices-packages/data/hallCatalogSync";
 import ManagerAlertDetailsModal from "../components/ManagerAlertDetailsModal";
 
 const PAGE_SIZE = 8;
@@ -25,14 +37,26 @@ export default function ManagerAlertsArchivePage() {
   const [page, setPage] = useState(1);
   const [detailAlert, setDetailAlert] = useState(null);
 
-  const refresh = useCallback(() => setAlerts(loadArchivedAlerts()), []);
+  const refresh = useCallback(async () => {
+    const session = getActiveStaffSession();
+    if (isApiStaffSession(session) && session.role === "manager") {
+      const result = await fetchArchivedManagerBroadcasts();
+      if (result.ok) {
+        setAlerts(result.broadcasts);
+        return;
+      }
+    }
+    setAlerts(loadArchivedAlerts());
+  }, []);
 
   useEffect(() => {
     refresh();
     window.addEventListener(MANAGER_ALERTS_EVENT, refresh);
+    window.addEventListener(MANAGER_BROADCASTS_ARCHIVED_EVENT, refresh);
     window.addEventListener("focus", refresh);
     return () => {
       window.removeEventListener(MANAGER_ALERTS_EVENT, refresh);
+      window.removeEventListener(MANAGER_BROADCASTS_ARCHIVED_EVENT, refresh);
       window.removeEventListener("focus", refresh);
     };
   }, [refresh]);
@@ -47,13 +71,15 @@ export default function ManagerAlertsArchivePage() {
     return alerts.filter(
       (row) =>
         row.name.toLowerCase().includes(q) ||
-        alertTargetLabel(row.targetCategories ?? row.targetCategory).toLowerCase().includes(q) ||
+        alertTargetLabel(row.targetAudience ?? row.targetCategories ?? row.targetCategory).toLowerCase().includes(q) ||
         formatAlertRecordCode(row.id).toLowerCase().includes(q),
     );
   }, [alerts, search]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: alerts, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -84,10 +110,13 @@ export default function ManagerAlertsArchivePage() {
             />
           </div>
 
+          <TableBulkActionBar count={selection.count} onClear={selection.clearSelection} actions={[]} />
+
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-right text-xs">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                  <TableSelectHeaderCell {...selection} />
                   <th className="px-3 py-2.5 font-bold">رقم السجل</th>
                   <th className="px-3 py-2.5 font-bold">اسم التنبيه</th>
                   <th className="px-3 py-2.5 font-bold">فئة مستهدفة</th>
@@ -100,19 +129,20 @@ export default function ManagerAlertsArchivePage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
                       لا توجد تنبيهات مؤرشفة.
                     </td>
                   </tr>
                 ) : (
                   paged.map((row) => (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
                       <td className="px-3 py-3 font-bold text-[#6B5478]" dir="ltr">
                         {formatAlertRecordCode(row.id)}
                       </td>
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
                       <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
-                        {alertTargetLabel(row.targetCategories ?? row.targetCategory)}
+                        {alertTargetLabel(row.targetAudience ?? row.targetCategories ?? row.targetCategory)}
                       </td>
                       <td className="px-3 py-3 whitespace-nowrap text-gray-500" dir="ltr">
                         {row.startDate}

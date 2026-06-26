@@ -1,10 +1,6 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
 
 import 'package:google_fonts/google_fonts.dart';
-
-import 'package:image_picker/image_picker.dart';
 
 import 'package:provider/provider.dart';
 
@@ -16,7 +12,10 @@ import '../../providers/app_state_provider.dart';
 
 import '../../providers/zones_data_provider.dart';
 
+import '../../services/profile_avatar_picker.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/user_avatar.dart';
+import '../../widgets/zonez_screen.dart';
 
 import '../drawer/edit_profile_screen.dart';
 
@@ -38,6 +37,8 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
 
+  bool _avatarUploading = false;
+
   @override
 
   void initState() {
@@ -47,12 +48,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
     WidgetsBinding.instance.addPostFrameCallback((_) {
 
       final zonesData = context.read<ZonesDataProvider>();
+      final appState = context.read<AppStateProvider>();
 
       if (zonesData.user == null) {
 
         zonesData.loadUserProfile();
 
       }
+
+      appState.syncLoyaltyFromApi();
 
     });
 
@@ -97,7 +101,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
           const CircuitBackground(),
 
-          zonesData.isLoadingProfile
+          ZonezScreen(
+            top: false,
+            child: zonesData.isLoadingProfile
 
               ? const Center(
 
@@ -146,8 +152,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               _buildIdentityCard(
                                 context,
                                 onSurface,
-                                user.name,
-                                appState.profileAvatarBytes,
+                                user,
+                                _avatarUploading,
                               ),
 
                               const SizedBox(height: 16),
@@ -168,6 +174,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
                         ),
 
+          ),
+
         ],
 
       ),
@@ -179,186 +187,211 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
 
   Widget _buildLoyaltyCard(
-
     BuildContext context,
-
     AppStateProvider appState,
-
     bool isDark,
-
   ) {
+    final loyalty = appState.loyaltyStatus;
+    final progressPoints = loyalty?.progressPoints ?? 0;
+    final progressMax = loyalty?.progressMax ?? appState.nextMilestonePoints;
+    final isUnlocked = appState.loyaltyRewardUnlocked;
+    final perSession = loyalty?.pointsPerCompletedSession ?? 0;
+    final sessionsNeeded = loyalty?.estimatedSessionsRequired ?? 0;
+    final sessionsRemaining = loyalty?.sessionsRemaining ?? sessionsNeeded;
 
     return Container(
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
-
           gradient: isDark
-
               ? LinearGradient(
-
                   colors: [
-
-                    ZonezColors.neonPurple.withValues(alpha: 0.3),
-
-                    ZonezColors.neonCyan.withValues(alpha: 0.15),
-
+                    ZonezColors.neonPurple.withValues(alpha: isUnlocked ? 0.45 : 0.3),
+                    ZonezColors.neonCyan.withValues(alpha: isUnlocked ? 0.25 : 0.15),
                   ],
-
                 )
-
               : LinearGradient(
                   colors: [
-                    ZonezColors.lightPrimary.withValues(alpha: 0.12),
-                    ZonezColors.lightAccent.withValues(alpha: 0.08),
+                    ZonezColors.lightPrimary.withValues(alpha: isUnlocked ? 0.18 : 0.12),
+                    ZonezColors.lightAccent.withValues(alpha: isUnlocked ? 0.12 : 0.08),
                   ],
                 ),
-
           borderRadius: BorderRadius.circular(16),
-
           border: Border.all(
-
-            color: isDark
-
-                ? ZonezColors.neonGold.withValues(alpha: 0.4)
-
-                : ZonezColors.lightPrimary.withValues(alpha: 0.3),
-
+            color: isUnlocked
+                ? ZonezColors.neonGold.withValues(alpha: 0.75)
+                : (isDark
+                    ? ZonezColors.neonGold.withValues(alpha: 0.4)
+                    : ZonezColors.lightPrimary.withValues(alpha: 0.3)),
+            width: isUnlocked ? 1.6 : 1,
           ),
-
-          boxShadow: isDark
-
-              ? null
-
-              : [
-
+          boxShadow: isUnlocked
+              ? [
                   BoxShadow(
-
-                    color: ZonezColors.lightPrimary.withValues(alpha: 0.1),
-
-                    blurRadius: 12,
-
-                    offset: const Offset(0, 4),
-
+                    color: ZonezColors.neonGold.withValues(alpha: 0.25),
+                    blurRadius: 18,
+                    spreadRadius: 1,
                   ),
-
-                ],
-
+                ]
+              : (isDark
+                  ? null
+                  : [
+                      BoxShadow(
+                        color: ZonezColors.lightPrimary.withValues(alpha: 0.1),
+                        blurRadius: 12,
+                        offset: const Offset(0, 4),
+                      ),
+                    ]),
         ),
-
       child: Column(
-
           crossAxisAlignment: CrossAxisAlignment.start,
-
           children: [
-
             Row(
-
               children: [
-
                 Icon(
-
                   Icons.card_giftcard,
-
-                  color: isDark ? ZonezColors.neonGold : ZonezColors.lightPrimary,
-
+                  color: isUnlocked
+                      ? ZonezColors.neonGold
+                      : (isDark ? ZonezColors.neonGold : ZonezColors.lightPrimary),
                 ),
-
                 const SizedBox(width: 10),
-
-                Text(
-
-                  'رصيد النقاط: ${appState.loyaltyPoints} نقطة',
-
-                  style: GoogleFonts.cairo(
-
-                    fontSize: 15,
-
-                    fontWeight: FontWeight.bold,
-
-                    color: Theme.of(context).colorScheme.onSurface,
-
+                Expanded(
+                  child: Text(
+                    isUnlocked
+                        ? 'مكافأة الولاء متاحة!'
+                        : 'تقدم نقاط الولاء',
+                    style: GoogleFonts.cairo(
+                      fontSize: 15,
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.onSurface,
+                    ),
                   ),
-
                 ),
-
               ],
-
             ),
-
-            const SizedBox(height: 12),
-
-            ClipRRect(
-
-              borderRadius: BorderRadius.circular(4),
-
-              child: LinearProgressIndicator(
-
-                value: appState.loyaltyProgress,
-
-                minHeight: 6,
-
-                backgroundColor: isDark
-
-                    ? ZonezColors.inputBg
-
-                    : ZonezColors.lightBorder,
-
-                valueColor: AlwaysStoppedAnimation(
-
-                  isDark ? ZonezColors.neonGold : ZonezColors.lightPrimary,
-
-                ),
-
-              ),
-
-            ),
-
-            const SizedBox(height: 6),
-
+            const SizedBox(height: 8),
             Text(
-
-              'التالي: ${appState.nextMilestonePoints} نقطة',
-
+              '$progressPoints / $progressMax',
               style: GoogleFonts.cairo(
-
-                fontSize: 11,
-
-                color: ZonezColors.textMuted,
-
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: isUnlocked ? ZonezColors.neonGold : ZonezColors.textMuted,
               ),
-
             ),
-
+            const SizedBox(height: 12),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: appState.loyaltyProgress,
+                minHeight: isUnlocked ? 8 : 6,
+                backgroundColor: isDark
+                    ? ZonezColors.inputBg
+                    : ZonezColors.lightBorder,
+                valueColor: AlwaysStoppedAnimation(
+                  isUnlocked
+                      ? ZonezColors.neonGold
+                      : (isDark ? ZonezColors.neonGold : ZonezColors.lightPrimary),
+                ),
+              ),
+            ),
+            const SizedBox(height: 10),
+            if (perSession > 0)
+              Text(
+                'كل جلسة مكتملة تمنحك $perSession نقطة ولاء.',
+                style: GoogleFonts.cairo(
+                  fontSize: 11,
+                  color: ZonezColors.textMuted,
+                  height: 1.5,
+                ),
+              ),
+            if (sessionsNeeded > 0) ...[
+              const SizedBox(height: 4),
+              Text(
+                isUnlocked
+                    ? 'يمكنك الآن حجز جلسة مجانية بمكافأة الولاء.'
+                    : 'تحتاج تقريباً $sessionsRemaining جلسة مكتملة لفتح مكافأتك.',
+                style: GoogleFonts.cairo(
+                  fontSize: 11,
+                  color: isUnlocked ? ZonezColors.neonGold : ZonezColors.textMuted,
+                  height: 1.5,
+                  fontWeight: isUnlocked ? FontWeight.w700 : FontWeight.w500,
+                ),
+              ),
+            ],
           ],
-
         ),
-
     );
-
   }
 
 
 
   Future<void> _pickAvatar(BuildContext context) async {
-    final picker = ImagePicker();
-    final file = await picker.pickImage(
-      source: ImageSource.gallery,
-      maxWidth: 512,
-      maxHeight: 512,
-      imageQuality: 85,
-    );
-    if (file == null || !context.mounted) return;
+    if (_avatarUploading) return;
 
-    final bytes = await file.readAsBytes();
+    final bytes = await ProfileAvatarPicker.pickCropAndReadBytes(context);
+    if (bytes == null || !context.mounted) return;
+
+    setState(() => _avatarUploading = true);
+
+    final zonesData = context.read<ZonesDataProvider>();
+    final ok = await zonesData.uploadProfileAvatar(bytes, filename: 'avatar.jpg');
+
     if (!context.mounted) return;
-    context.read<AppStateProvider>().setProfileAvatar(bytes);
+    setState(() => _avatarUploading = false);
+
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم تحديث الصورة بنجاح', style: GoogleFonts.cairo()),
+          backgroundColor: ZonezColors.neonPurple,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            zonesData.profileError ?? 'تعذّر رفع الصورة',
+            style: GoogleFonts.cairo(),
+          ),
+          backgroundColor: ZonezColors.neonRed,
+        ),
+      );
+    }
+  }
+
+  Future<void> _removeAvatar(BuildContext context) async {
+    if (_avatarUploading) return;
+
+    setState(() => _avatarUploading = true);
+    final zonesData = context.read<ZonesDataProvider>();
+    final ok = await zonesData.deleteProfileAvatar();
+    if (!context.mounted) return;
+    setState(() => _avatarUploading = false);
+
+    if (ok) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('تم حذف الصورة', style: GoogleFonts.cairo()),
+          backgroundColor: ZonezColors.neonPurple,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            zonesData.profileError ?? 'تعذّر حذف الصورة',
+            style: GoogleFonts.cairo(),
+          ),
+          backgroundColor: ZonezColors.neonRed,
+        ),
+      );
+    }
   }
 
   Widget _buildIdentityCard(
     BuildContext context,
     Color onSurface,
-    String name,
-    Uint8List? avatarBytes,
+    UserModel user,
+    bool isUploading,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
@@ -388,9 +421,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       child: Column(
         children: [
           GestureDetector(
-            onTap: () => _pickAvatar(context),
+            onTap: isUploading ? null : () => _pickAvatar(context),
             child: Stack(
               alignment: Alignment.bottomLeft,
+              clipBehavior: Clip.none,
               children: [
                 Container(
                   width: 100,
@@ -405,38 +439,71 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ],
                   ),
-                  child: CircleAvatar(
-                    backgroundColor: ZonezColors.inputBg,
-                    backgroundImage:
-                        avatarBytes != null ? MemoryImage(avatarBytes) : null,
-                    child: avatarBytes == null
-                        ? const Icon(Icons.person, size: 50, color: Colors.white54)
-                        : null,
+                  child: UserAvatar(
+                    name: user.name,
+                    imageUrl: user.profileImage,
+                    radius: 47,
+                    fontSize: 24,
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    gradient: ZonezColors.neonGradient,
-                    shape: BoxShape.circle,
-                    border: Border.all(color: ZonezColors.cardDark, width: 2),
+                if (isUploading)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        color: Colors.black.withValues(alpha: 0.55),
+                      ),
+                      child: const Center(
+                        child: SizedBox(
+                          width: 32,
+                          height: 32,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 3,
+                            color: ZonezColors.neonCyan,
+                          ),
+                        ),
+                      ),
+                    ),
+                  )
+                else
+                  Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      gradient: ZonezColors.neonGradient,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: ZonezColors.cardDark, width: 2),
+                    ),
+                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
                   ),
-                  child: const Icon(Icons.camera_alt, color: Colors.white, size: 16),
-                ),
               ],
             ),
           ),
           const SizedBox(height: 10),
           Text(
-            'اضغط لتغيير الصورة',
+            isUploading ? 'جاري رفع الصورة...' : 'اضغط لتغيير الصورة',
             style: GoogleFonts.cairo(
               fontSize: 11,
               color: ZonezColors.neonCyan,
             ),
           ),
+          if (user.profileImage != null && user.profileImage!.isNotEmpty && !isUploading) ...[
+            const SizedBox(height: 8),
+            TextButton.icon(
+              onPressed: () => _removeAvatar(context),
+              icon: const Icon(Icons.delete_outline, size: 16, color: ZonezColors.neonRed),
+              label: Text(
+                'حذف الصورة',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  color: ZonezColors.neonRed,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 12),
           Text(
-            name,
+            user.name,
             style: GoogleFonts.cairo(
               fontSize: 20,
               fontWeight: FontWeight.bold,

@@ -1,0 +1,270 @@
+.pay-cal {
+  position: relative;
+}
+
+.pay-cal-wrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.pay-cal-toolbar {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgb(229 231 235);
+  background: #fff;
+  padding: 0.2rem;
+}
+
+[data-theme="dark"] .pay-cal-toolbar {
+  border-color: rgb(31 41 55);
+  background: rgb(17 24 39);
+}
+
+.pay-cal-arrow {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  color: #6b7280;
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+[data-theme="dark"] .pay-cal-arrow {
+  color: #9ca3af;
+}
+
+.pay-cal-arrow:hover:not(:disabled) {
+  background: rgba(107, 84, 120, 0.12);
+  color: #6b5478;
+}
+
+[data-theme="dark"] .pay-cal-arrow:hover:not(:disabled) {
+  color: #c4b5d0;
+}
+
+.pay-cal-arrow:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.pay-cal-trigger {
+  display: inline-flex;
+  min-width: 10rem;
+  align-items: center;
+  gap: 0.45rem;
+  border: none;
+  border-radius: 0.5rem;
+  background: transparent;
+  padding: 0.35rem 0.65rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pay-cal-trigger:hover:not(:disabled) {
+  background: rgba(107, 84, 120, 0.08);
+}
+
+[data-theme="dark"] .pay-cal-trigger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.pay-cal-trigger:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.pay-cal-trigger-icon {
+  color: #6b5478;
+  flex-shrink: 0;
+}
+
+[data-theme="dark"] .pay-cal-trigger-icon {
+  color: #c4b5d0;
+}
+
+.pay-cal-trigger-text {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.05rem;
+  text-align: start;
+}
+
+.pay-cal-trigger-date {
+  font-size: 12px;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.15;
+}
+
+[data-theme="dark"] .pay-cal-trigger-date {
+  color: #f3f4f6;
+}
+
+.pay-cal-trigger-sub {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+}
+
+.pay-cal-all-btn {
+  height: 2.25rem;
+  border-radius: 0.65rem;
+  padding: 0 0.75rem;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid rgb(229 231 235);
+  background: #fff;
+  color: #6b7280;
+  cursor: pointer;
+  transition: color 0.15s ease, background 0.15s ease, border-color 0.15s ease;
+}
+
+[data-theme="dark"] .pay-cal-all-btn {
+  border-color: rgb(31 41 55);
+  background: rgb(17 24 39);
+  color: #9ca3af;
+}
+
+.pay-cal-all-btn:hover {
+  color: #6b5478;
+  border-color: rgba(107, 84, 120, 0.35);
+}
+
+.pay-cal-all-btn.is-active {
+  background: rgba(107, 84, 120, 0.12);
+  border-color: rgba(107, 84, 120, 0.35);
+  color: #6b5478;
+}
+
+[data-theme="dark"] .pay-cal-all-btn.is-active {
+  color: #d8b4fe;
+}
+
+/* Popover — نفس أسلوب تقويم الاستقبال (بنفسجي ZONES) */
+.pay-cal-popover {
+  width: 17.5rem;
+  border-radius: 0.9rem;
+  background: linear-gradient(165deg, #6b5478 0%, #5a4668 100%);
+  padding: 0.75rem;
+  box-shadow: 0 14px 36px rgba(107, 84, 120, 0.35);
+}
+
+.pay-cal-popover-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+}
+
+.pay-cal-month {
+  flex: 1;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 800;
+  color: #fff;
+}
+
+.pay-cal-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: none;
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pay-cal-nav:hover {
+  background: rgba(255, 255, 255, 0.22);
+}
+
+.pay-cal-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.15rem;
+  margin-bottom: 0.35rem;
+}
+
+.pay-cal-weekdays span {
+  text-align: center;
+  font-size: 9px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.75);
+}
+
+.pay-cal-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.2rem;
+}
+
+.pay-cal-day {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 1.85rem;
+  border: none;
+  border-radius: 0.45rem;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.12s ease, color 0.12s ease;
+}
+
+.pay-cal-day:disabled {
+  background: transparent;
+  cursor: default;
+}
+
+.pay-cal-day:not(:disabled):hover {
+  background: rgba(255, 255, 255, 0.24);
+}
+
+.pay-cal-day.is-today:not(.is-selected) {
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.55);
+}
+
+.pay-cal-day.is-selected {
+  background: #fff;
+  color: #6b5478;
+}
+
+.pay-cal-footer {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.65rem;
+  padding-top: 0.55rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.18);
+}
+
+.pay-cal-today-btn {
+  border: none;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 10px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.pay-cal-today-btn:hover {
+  background: rgba(255, 255, 255, 0.24);
+}

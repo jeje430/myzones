@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Button } from "react-bootstrap";
 import { ChevronLeft, ChevronRight, Clock } from "lucide-react";
 import { zonesToastSuccess, zonesToastWarning } from "../../../shared/utils/zonesAlerts";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
@@ -6,6 +7,8 @@ import ReceptionCalendarBookModal from "../components/ReceptionCalendarBookModal
 import ReceptionCalendarReservedModal from "../components/ReceptionCalendarReservedModal";
 import ReceptionDatePicker from "../components/ReceptionDatePicker";
 import { DEVICES_STORAGE_EVENT } from "../../devices-packages/data/devicesStorage";
+import { PACKAGES_STORAGE_EVENT } from "../../devices-packages/data/packagesStorage";
+import { refreshHallCatalogFromApi } from "../../devices-packages/data/hallCatalogSync";
 import { MAINTENANCE_FAULTS_EVENT } from "../../maintenance/data/maintenanceFaultsStorage";
 import {
   BOOKINGS_STOP_EVENT,
@@ -15,64 +18,83 @@ import {
 import {
   bookCalendarSlot,
   cancelCalendarBooking,
+  findCalendarSlot,
   loadCalendarSlots,
   RECEPTION_CALENDAR_EVENT,
+  syncReceptionLiveState,
   todayIso,
 } from "../data/receptionCalendarStorage";
 import {
   buildWorkHourSlots,
+  buildCalendarPackageGroups,
+  CALENDAR_LEGEND_ORDER,
   CELL_KIND,
+  CELL_BTN_VARIANT,
+  CELL_LEGEND_CLASS,
   CELL_META,
   formatCalendarDate,
+  getCalendarCellLabel,
   getHallWorkHours,
+  getReceptionDeviceLabel,
   loadCalendarDevices,
   resolveCellKind,
 } from "../utils/receptionCalendarUtils";
 import "./ReceptionCalendarPage.css";
 
+import { shiftLocalIsoDate } from "../../../shared/utils/localDateUtils";
+import { useReceptionLiveSync } from "../hooks/useReceptionLiveSync";
+
 function shiftDate(iso, deltaDays) {
-  const d = new Date(`${iso}T12:00:00`);
-  d.setDate(d.getDate() + deltaDays);
-  return d.toISOString().slice(0, 10);
+  return shiftLocalIsoDate(iso, deltaDays);
 }
 
 export default function ReceptionCalendarPage() {
   const [selectedDate, setSelectedDate] = useState(todayIso);
+  useReceptionLiveSync(selectedDate);
   const [slots, setSlots] = useState(() => loadCalendarSlots());
   const [devices, setDevices] = useState(() => loadCalendarDevices());
+  const [packageGroups, setPackageGroups] = useState(() => buildCalendarPackageGroups());
   const [bookTarget, setBookTarget] = useState(null);
   const [reservedTarget, setReservedTarget] = useState(null);
   const [bookingsStopped, setBookingsStopped] = useState(() => isBookingsStopped());
   const hall = useMemo(() => getHallWorkHours(), []);
   const hours = useMemo(() => buildWorkHourSlots(hall.from, hall.to), [hall.from, hall.to]);
 
-  const refresh = useCallback(() => {
+  const reloadView = useCallback(() => {
     setSlots(loadCalendarSlots());
     setDevices(loadCalendarDevices());
+    setPackageGroups(buildCalendarPackageGroups());
     setBookingsStopped(isBookingsStopped());
   }, []);
 
-  useEffect(() => {
-    refresh();
-    window.addEventListener(RECEPTION_CALENDAR_EVENT, refresh);
-    window.addEventListener(DEVICES_STORAGE_EVENT, refresh);
-    window.addEventListener(MAINTENANCE_FAULTS_EVENT, refresh);
-    window.addEventListener("manager-hall-updated", refresh);
-    window.addEventListener(BOOKINGS_STOP_EVENT, refresh);
-    window.addEventListener("focus", refresh);
-    return () => {
-      window.removeEventListener(RECEPTION_CALENDAR_EVENT, refresh);
-      window.removeEventListener(DEVICES_STORAGE_EVENT, refresh);
-      window.removeEventListener(MAINTENANCE_FAULTS_EVENT, refresh);
-      window.removeEventListener("manager-hall-updated", refresh);
-      window.removeEventListener(BOOKINGS_STOP_EVENT, refresh);
-      window.removeEventListener("focus", refresh);
-    };
-  }, [refresh]);
+  const syncView = useCallback(async () => {
+    await syncReceptionLiveState(selectedDate);
+    reloadView();
+  }, [selectedDate, reloadView]);
 
-  const confirmBook = (payload) => {
-    if (!bookTarget) return;
-    const res = bookCalendarSlot({
+  useEffect(() => {
+    refreshHallCatalogFromApi().finally(syncView);
+    window.addEventListener(RECEPTION_CALENDAR_EVENT, reloadView);
+    window.addEventListener(DEVICES_STORAGE_EVENT, syncView);
+    window.addEventListener(PACKAGES_STORAGE_EVENT, syncView);
+    window.addEventListener(MAINTENANCE_FAULTS_EVENT, syncView);
+    window.addEventListener("manager-hall-updated", syncView);
+    window.addEventListener(BOOKINGS_STOP_EVENT, syncView);
+    window.addEventListener("focus", syncView);
+    return () => {
+      window.removeEventListener(RECEPTION_CALENDAR_EVENT, reloadView);
+      window.removeEventListener(DEVICES_STORAGE_EVENT, syncView);
+      window.removeEventListener(PACKAGES_STORAGE_EVENT, syncView);
+      window.removeEventListener(MAINTENANCE_FAULTS_EVENT, syncView);
+      window.removeEventListener("manager-hall-updated", syncView);
+      window.removeEventListener(BOOKINGS_STOP_EVENT, syncView);
+      window.removeEventListener("focus", syncView);
+    };
+  }, [syncView, reloadView]);
+
+  const confirmBook = async (payload) => {
+    if (!bookTarget) return { ok: false, error: "لا يوجد موعد محدد" };
+    const res = await bookCalendarSlot({
       deviceId: bookTarget.device.id,
       date: selectedDate,
       hour: bookTarget.hour,
@@ -91,26 +113,26 @@ export default function ReceptionCalendarPage() {
     });
     if (!res.ok) {
       zonesToastWarning(`لا يمكن الحجز — ${res.error || getBookingsStopBlockMessage()}`);
-      return;
+      return res;
     }
-    setBookTarget(null);
-    refresh();
+    reloadView();
     zonesToastSuccess(
-      `رقم الحجز ${payload.bookingCode} — انتقل إلى صفحة الجلسات لبدء اللعب.`,
+      `رقم الحجز ${res.slot?.bookingCode || payload.bookingCode} — تم تسجيل الحجز في التقويم وقائمة الحجوزات.`,
       "تم الحجز",
     );
+    return res;
   };
 
-  const cancelReservedBooking = () => {
+  const cancelReservedBooking = async () => {
     if (!reservedTarget?.slot?.id) return;
-    cancelCalendarBooking(reservedTarget.slot.id);
+    await cancelCalendarBooking(reservedTarget.slot.id);
     setReservedTarget(null);
-    refresh();
+    reloadView();
   };
 
   const onCellClick = (device, hour) => {
     const kind = resolveCellKind(device, selectedDate, hour, slots);
-    const slot = slots.find((s) => s.deviceId === device.id && s.date === selectedDate && s.hour === hour);
+    const slot = findCalendarSlot(device.id, selectedDate, hour, slots);
 
     if (kind === CELL_KIND.available) {
       if (bookingsStopped) {
@@ -200,56 +222,62 @@ export default function ReceptionCalendarPage() {
                   </td>
                 </tr>
               ) : (
-                devices.map((device) => (
-                  <tr key={device.id}>
-                    <td className="rcal-sticky-device">
-                      <span className="rcal-device-name">{device.name}</span>
-                      <span className="rcal-device-type">{device.typeLabel}</span>
+                packageGroups.flatMap((group) => [
+                  <tr key={`pkg-${group.package.id ?? "none"}`} className="rcal-package-row">
+                    <td className="rcal-sticky-device rcal-package-head" colSpan={hours.length + 1}>
+                      <span className="rcal-package-name">{group.package.name}</span>
+                      {group.package.price ? (
+                        <span className="rcal-package-price">{group.package.price} د.ل / ساعة</span>
+                      ) : null}
+                      <span className="rcal-package-count">{group.devices.length} جهاز</span>
                     </td>
-                    {hours.map((hour) => {
-                      const kind = resolveCellKind(device, selectedDate, hour, slots);
-                      const meta = CELL_META[kind];
-                      const slot = slots.find(
-                        (s) => s.deviceId === device.id && s.date === selectedDate && s.hour === hour,
-                      );
-                      const short =
-                        kind === CELL_KIND.reserved || kind === CELL_KIND.active
-                          ? slot?.visitorName?.split(" ")[0] ||
-                            slot?.bookingCode ||
-                            meta.label
-                          : meta.label;
+                  </tr>,
+                  ...group.devices.map((device, deviceIndex) => (
+                    <tr key={device.id}>
+                      <td className="rcal-sticky-device">
+                        <span className="rcal-device-name" dir="ltr">
+                          {getReceptionDeviceLabel(device, deviceIndex)}
+                        </span>
+                      </td>
+                      {hours.map((hour) => {
+                        const kind = resolveCellKind(device, selectedDate, hour, slots);
+                        const meta = CELL_META[kind];
+                        const short = getCalendarCellLabel(kind);
 
-                      return (
-                        <td key={hour} className={`rcal-cell ${meta.className}`}>
-                          <button
-                            type="button"
-                            className="rcal-cell-btn"
-                            title={meta.hint}
-                            disabled={kind === CELL_KIND.maintenance || kind === CELL_KIND.active}
-                            onClick={() => onCellClick(device, hour)}
-                          >
-                            {short}
-                          </button>
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))
+                        return (
+                          <td key={hour} className={`rcal-cell ${meta.className}`}>
+                            <Button
+                              type="button"
+                              variant={CELL_BTN_VARIANT[kind]}
+                              size="sm"
+                              className={`rcal-cell-btn fw-bold ${
+                                kind === CELL_KIND.available ? "btn-rcal-available" : ""
+                              } ${kind === CELL_KIND.busy ? "btn-rcal-busy" : ""} ${
+                                kind === CELL_KIND.maintenance ? "btn-rcal-maintenance" : ""
+                              }`}
+                              title={meta.hint}
+                              disabled={kind === CELL_KIND.maintenance || kind === CELL_KIND.busy}
+                              onClick={() => onCellClick(device, hour)}
+                            >
+                              {short}
+                            </Button>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  )),
+                ])
               )}
             </tbody>
           </table>
         </div>
 
         <div className="rcal-legend">
-          {[
-            { key: "maintenance", color: "#9ca3af" },
-            { key: "reserved", color: "#ef4444" },
-            { key: "available", color: "#22c55e" },
-            { key: "active", color: "#3b82f6" },
-          ].map(({ key, color }) => (
+          {CALENDAR_LEGEND_ORDER.map((key) => (
             <span key={key} className="rcal-legend-item">
-              <span className="rcal-legend-swatch" style={{ background: color }} />
-              <span className="rcal-legend-label">{CELL_META[key].label}</span>
+              <span className={`badge ${CELL_LEGEND_CLASS[key]} rcal-legend-badge`}>
+                {CELL_META[key].label}
+              </span>
             </span>
           ))}
         </div>

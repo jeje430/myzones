@@ -1,22 +1,13 @@
 import TournamentDetailsSection from "../../tournaments/components/TournamentDetailsSection";
-
-import { RECEPTION_EMPLOYEE_ROUTES } from "../data/receptionEmployeeRoutes";
-
-
-
-const RECEPTION_TOURNAMENT_ROUTES = {
-  tournaments: RECEPTION_EMPLOYEE_ROUTES.tournaments,
-  tournamentsData: RECEPTION_EMPLOYEE_ROUTES.tournamentsData,
-  participants: (id) => RECEPTION_EMPLOYEE_ROUTES.tournamentParticipants(id),
-  bracket: (id) => RECEPTION_EMPLOYEE_ROUTES.tournamentBracket(id),
-};
-
-
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 
 export default function ReceptionTournamentDetailsPage() {
-
-  return <TournamentDetailsSection routes={RECEPTION_TOURNAMENT_ROUTES} />;
-
+  const { routes } = useReceptionEmployeeRoutes();
+  const tournamentRoutes = {
+    tournaments: routes.tournaments,
+    tournamentsData: routes.tournamentsData,
+    participants: (id) => routes.tournamentParticipants(id),
+    bracket: (id) => routes.tournamentBracket(id),
+  };
+  return <TournamentDetailsSection routes={tournamentRoutes} />;
 }
-
-

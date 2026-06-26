@@ -1,10 +1,33 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Archive, Building2, Eye, MapPin, Phone, SlidersHorizontal, User, Users } from "lucide-react";
-import { zonesSwal, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
+import { zonesSwal, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import SearchBar from "../components/ui/SearchBar";
 import PageHeader from "../components/ui/PageHeader";
 import { archiveHall, getSuperAdminState } from "../data/superAdminStorage";
 import { formatHallServicesHtml } from "../data/hallServicesData";
+import { fetchHallJoinRequests } from "../data/hallJoinRequestsApi";
+import { HALL_REQUEST_STATUS } from "../data/hallRequestStatus";
+
+/** يحوّل طلب انضمام مقبول إلى بطاقة صالة نشطة */
+function mapAcceptedRequestToHall(req, fallbackCommission) {
+  return {
+    id: `req-${req.id}`,
+    sortKey: Number(req.id) || 0,
+    source: "api",
+    name: req.hallName || "—",
+    address: req.address || "—",
+    city: req.city || "—",
+    commercialPhone: req.commercialPhone || "—",
+    managerName: req.managerName || "—",
+    managerEmail: req.managerEmail || "—",
+    employeeCount: req.employeeCount ?? 0,
+    monthlyIncome: req.monthlyIncome ?? 0,
+    commissionRate: req.commissionRate ?? fallbackCommission,
+    status: "active",
+    mapLink: req.mapLink || "",
+    acceptedAt: req.acceptedAt || req.submittedAt || "",
+  };
+}
 
 function InfoRow({ icon: Icon, label, value, ltr }) {
   return (
@@ -22,33 +45,68 @@ function InfoRow({ icon: Icon, label, value, ltr }) {
 
 export default function HallsManagementPage() {
   const [state, setState] = useState(getSuperAdminState());
+  const [acceptedHalls, setAcceptedHalls] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState("newest");
+
+  const loadAcceptedHalls = useCallback(async () => {
+    const fallback = getSuperAdminState().systemSettings?.globalCommissionRate ?? 3;
+    const result = await fetchHallJoinRequests();
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذر تحميل الصالات");
+      setAcceptedHalls([]);
+      setLoading(false);
+      return;
+    }
+    const halls = result.requests
+      .filter((r) => r.status === HALL_REQUEST_STATUS.accepted)
+      .map((r) => mapAcceptedRequestToHall(r, fallback));
+    setAcceptedHalls(halls);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     const refresh = () => setState(getSuperAdminState());
     refresh();
+    loadAcceptedHalls();
+    const onRequests = () => loadAcceptedHalls();
     window.addEventListener("super-admin-data-updated", refresh);
-    return () => window.removeEventListener("super-admin-data-updated", refresh);
-  }, []);
+    window.addEventListener("hall-join-requests-updated", onRequests);
+    return () => {
+      window.removeEventListener("super-admin-data-updated", refresh);
+      window.removeEventListener("hall-join-requests-updated", onRequests);
+    };
+  }, [loadAcceptedHalls]);
+
+  /** الصالات المقبولة من الـ API + أي صالات محلية (دون تكرار حسب البريد) */
+  const allHalls = useMemo(() => {
+    const apiEmails = new Set(
+      acceptedHalls.map((h) => String(h.managerEmail || "").toLowerCase()),
+    );
+    const localHalls = (state.activeHalls || [])
+      .filter((h) => !apiEmails.has(String(h.managerEmail || "").toLowerCase()))
+      .map((h) => ({ ...h, sortKey: Number(h.id) || 0, source: "local" }));
+    return [...acceptedHalls, ...localHalls];
+  }, [acceptedHalls, state.activeHalls]);
 
   const filteredHalls = useMemo(() => {
     const q = search.trim().toLowerCase();
-    let list = state.activeHalls;
+    let list = allHalls;
     if (q) {
       list = list.filter(
         (h) =>
-          h.name.toLowerCase().includes(q) ||
-          h.address.toLowerCase().includes(q) ||
-          h.managerName.toLowerCase().includes(q),
+          String(h.name).toLowerCase().includes(q) ||
+          String(h.address).toLowerCase().includes(q) ||
+          String(h.managerName).toLowerCase().includes(q),
       );
     }
     const sorted = [...list];
-    if (sort === "newest") sorted.sort((a, b) => b.id - a.id);
-    else if (sort === "oldest") sorted.sort((a, b) => a.id - b.id);
-    else if (sort === "name") sorted.sort((a, b) => a.name.localeCompare(b.name, "ar"));
+    if (sort === "newest") sorted.sort((a, b) => b.sortKey - a.sortKey);
+    else if (sort === "oldest") sorted.sort((a, b) => a.sortKey - b.sortKey);
+    else if (sort === "name") sorted.sort((a, b) => String(a.name).localeCompare(String(b.name), "ar"));
     return sorted;
-  }, [state.activeHalls, search, sort]);
+  }, [allHalls, search, sort]);
 
   const showHallDetails = (hall) => {
     zonesSwal({
@@ -70,6 +128,10 @@ export default function HallsManagementPage() {
   };
 
   const onArchive = async (hall) => {
+    if (hall.source === "api") {
+      zonesToastError("أرشفة الصالات المقبولة عبر الخادم غير متاحة من هنا.");
+      return;
+    }
     const res = await zonesSwal({
       title: "أرشفة الصالة؟",
       input: "text",
@@ -107,7 +169,7 @@ export default function HallsManagementPage() {
       <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {filteredHalls.length === 0 ? (
           <p className="col-span-full rounded-2xl border border-dashed border-gray-300 py-10 text-center text-xs text-gray-400 dark:border-gray-700">
-            لا توجد صالات مطابقة.
+            {loading ? "جاري تحميل الصالات..." : "لا توجد صالات مسجّلة بعد. ستظهر الصالة هنا فور قبول طلب انضمامها."}
           </p>
         ) : (
           filteredHalls.map((hall) => {
@@ -141,12 +203,16 @@ export default function HallsManagementPage() {
                 </div>
 
                 <div className="mt-3 flex items-center justify-between border-t border-gray-100 pt-3 dark:border-gray-800">
-                  <button
-                    onClick={() => onArchive(hall)}
-                    className="flex items-center gap-1.5 text-xs font-bold text-gray-500 transition hover:text-[#6B5478] dark:text-gray-400"
-                  >
-                    <Archive size={14} /> أرشفة
-                  </button>
+                  {hall.source === "api" ? (
+                    <span className="text-[10px] font-bold text-gray-400">صالة مُفعّلة</span>
+                  ) : (
+                    <button
+                      onClick={() => onArchive(hall)}
+                      className="flex items-center gap-1.5 text-xs font-bold text-gray-500 transition hover:text-[#6B5478] dark:text-gray-400"
+                    >
+                      <Archive size={14} /> أرشفة
+                    </button>
+                  )}
                   <button
                     onClick={() => showHallDetails(hall)}
                     className="flex items-center gap-1.5 text-xs font-bold text-[#6B5478]"
@@ -161,7 +227,7 @@ export default function HallsManagementPage() {
       </div>
 
       <p className="mt-5 text-center text-[11px] text-gray-500 sm:text-right">
-        عرض {filteredHalls.length} من {state.activeHalls.length} صالة
+        عرض {filteredHalls.length} من {allHalls.length} صالة
       </p>
     </div>
   );

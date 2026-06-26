@@ -2,6 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import AdminModal from "../../devices-packages/components/AdminModal";
 import Button from "../../super-admin/components/ui/Button";
 import { DEVICES_STORAGE_EVENT } from "../../devices-packages/data/devicesStorage";
+import { getDevicePackageLabel } from "../../devices-packages/data/devicesStorage";
+import { loadActivePackages } from "../../devices-packages/data/packagesStorage";
 import { useDevicesStorageSync } from "../../devices-packages/hooks/useDevicesStorageSync";
 import {
   loadSelectableDevicesForFault,
@@ -12,6 +14,8 @@ import {
   FAULT_TYPES,
   formatFaultDateTime,
   isFaultDateValidForDevice,
+  isFutureFaultDate,
+  maxFaultDateInputValue,
   minFaultDateInputValue,
   toDateInputValue,
 } from "../../maintenance/data/faultMeta";
@@ -23,6 +27,8 @@ import {
 } from "../../maintenance/data/maintenanceFaultsStorage";
 import { zonesToastError } from "../../../shared/utils/zonesAlerts";
 import DeviceNameCell from "./DeviceNameCell";
+import { refreshHallCatalogFromApi, isApiStaffSession, getActiveStaffSession } from "../../devices-packages/data/hallCatalogSync";
+import { syncMaintenanceStateFromApi } from "../../maintenance/data/maintenanceFaultsSync";
 
 const labelCls = "mb-1.5 block text-[11px] font-bold text-gray-500 dark:text-gray-400";
 const inputCls =
@@ -46,6 +52,16 @@ export default function MaintenanceFaultRecordModal({
     () => (open ? loadSelectableDevicesForFault() : []),
     [open, devicesTick],
   );
+  const packages = useMemo(() => (open ? loadActivePackages() : []), [open, devicesTick]);
+
+  const deviceOptionLabel = useCallback(
+    (device) => {
+      const code = String(device.deviceCode || device.name || "").trim();
+      const packageLabel = getDevicePackageLabel(device.packageId, packages);
+      return `${code} | ${packageLabel}`;
+    },
+    [packages],
+  );
   const allDevices = useMemo(
     () => (open ? loadSyncedActiveDevices() : []),
     [open, devicesTick],
@@ -63,6 +79,11 @@ export default function MaintenanceFaultRecordModal({
   useEffect(() => {
     if (!open) return;
     refreshDevices();
+    const session = getActiveStaffSession();
+    if (isApiStaffSession(session)) {
+      refreshHallCatalogFromApi().then(() => refreshDevices());
+      syncMaintenanceStateFromApi().then(() => refreshDevices());
+    }
     window.addEventListener(DEVICES_STORAGE_EVENT, refreshDevices);
     window.addEventListener(MAINTENANCE_FAULTS_EVENT, refreshDevices);
     return () => {
@@ -86,7 +107,7 @@ export default function MaintenanceFaultRecordModal({
     setCreatedDate(toDateInputValue());
     setDetails("");
     setDateError("");
-  }, [open, lockDevice, prefilledDeviceId, devicesTick]);
+  }, [open, lockDevice, prefilledDeviceId]);
 
   const selectedDevice = useMemo(() => {
     if (lockDevice) {
@@ -94,6 +115,8 @@ export default function MaintenanceFaultRecordModal({
     }
     return selectableDevices.find((d) => String(d.id) === String(deviceId)) ?? null;
   }, [allDevices, selectableDevices, deviceId, lockDevice, prefilledDeviceId]);
+
+  const isScheduledFault = isFutureFaultDate(createdDate);
 
   const submit = (e) => {
     e.preventDefault();
@@ -119,7 +142,9 @@ export default function MaintenanceFaultRecordModal({
       deviceTypeLabel: selectedDevice.typeLabel,
       faultType,
       faultTypeCustom: faultType === "other" ? customFaultType.trim() : "",
-      status: "pending",
+      status: isScheduledFault ? "scheduled" : "pending",
+      faultDate: createdDate,
+      applyMaintenanceNow: !isScheduledFault,
       createdAt: formatFaultDateTime(new Date(`${createdDate}T12:00:00`)),
       maintenanceCost: 0,
       maintenanceEmployeeName: session?.fullName || "موظف الصيانة",
@@ -159,7 +184,7 @@ export default function MaintenanceFaultRecordModal({
                   <option value="">اختر أجهزة الصالة</option>
                   {selectableDevices.map((d) => (
                     <option key={d.id} value={String(d.id)}>
-                      {d.name} — {d.typeLabel}
+                      {deviceOptionLabel(d)}
                     </option>
                   ))}
                 </select>
@@ -221,6 +246,7 @@ export default function MaintenanceFaultRecordModal({
               required
               value={createdDate}
               min={minFaultDateInputValue(selectedDevice)}
+              max={maxFaultDateInputValue()}
               onChange={(e) => {
                 setCreatedDate(e.target.value);
                 setDateError("");
@@ -231,9 +257,15 @@ export default function MaintenanceFaultRecordModal({
 
           <div className={fieldWrap}>
             <label className={labelCls}>الحالة بعد الحفظ</label>
-            <span className="inline-flex rounded-full bg-red-500/15 px-2.5 py-1 text-[11px] font-bold text-red-600 dark:text-red-400">
-              معطل
-            </span>
+            {isScheduledFault ? (
+              <span className="inline-flex rounded-full bg-blue-500/15 px-2.5 py-1 text-[11px] font-bold text-blue-700 dark:text-blue-400">
+                مجدول — الجهاز يبقى متاحاً حتى التاريخ
+              </span>
+            ) : (
+              <span className="inline-flex rounded-full bg-gray-500/15 px-2.5 py-1 text-[11px] font-bold text-gray-700 dark:bg-gray-500/20 dark:text-gray-300">
+                صيانة فورية — الحجوزات تبقى كما هي
+              </span>
+            )}
           </div>
         </div>
 

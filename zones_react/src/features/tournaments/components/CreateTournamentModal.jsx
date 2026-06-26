@@ -1,10 +1,14 @@
 import { useEffect, useState } from "react";
 import AdminModal from "../../devices-packages/components/AdminModal";
 import Button from "../../super-admin/components/ui/Button";
-import { loadTournamentRows, saveTournamentRows } from "../tournamentsListStorage";
-
-const COVER_MAX_EDGE = 1200;
-const COVER_JPEG_QUALITY = 0.82;
+import { createManagerTournament } from "../data/managerTournamentsApi";
+import { validateRegistrationDeadline } from "../utils/tournamentDeadlineValidation";
+import {
+  COVER_ASPECT,
+  COVER_MAX_FILE_BYTES,
+  COVER_OUTPUT_WIDTH,
+  processTournamentCoverFile,
+} from "../utils/tournamentCoverImage";
 
 const labelCls = "mb-1.5 block text-[11px] font-bold text-gray-500 dark:text-gray-400";
 const inputCls =
@@ -18,64 +22,26 @@ const EMPTY = {
   participants: "8",
   startDate: "",
   endDate: "",
+  registrationDeadline: "",
   prize: "",
   delayMinutes: "10",
   withdrawal: "خسارة",
-  tieRule: "يتم ترحيل المباراة للمراجعة",
   coverDataUrl: null,
+  rules: "",
 };
-
-function readFileAsDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(reader.error);
-    reader.readAsDataURL(file);
-  });
-}
-
-async function fileToCoverDataUrl(file) {
-  if (!file?.type?.startsWith("image/")) throw new Error("not-image");
-  const dataUrl = await readFileAsDataUrl(file);
-  const img = await new Promise((resolve, reject) => {
-    const image = new Image();
-    image.onload = () => resolve(image);
-    image.onerror = () => reject(new Error("load-failed"));
-    image.src = dataUrl;
-  });
-  let w = img.naturalWidth;
-  let h = img.naturalHeight;
-  if (!w || !h) throw new Error("bad-dimensions");
-  const scale = Math.min(1, COVER_MAX_EDGE / Math.max(w, h));
-  w = Math.round(w * scale);
-  h = Math.round(h * scale);
-  const canvas = document.createElement("canvas");
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext("2d");
-  if (!ctx) throw new Error("no-canvas");
-  ctx.drawImage(img, 0, 0, w, h);
-  return canvas.toDataURL("image/jpeg", COVER_JPEG_QUALITY);
-}
-
-function formatDisplayDate(iso) {
-  if (!iso || typeof iso !== "string") return "—";
-  const p = iso.split("-");
-  if (p.length !== 3) return iso;
-  const [y, m, d] = p;
-  return `${d}-${m}-${y}`;
-}
 
 export default function CreateTournamentModal({ open, onClose, onSaved }) {
   const [form, setForm] = useState(EMPTY);
   const [coverBusy, setCoverBusy] = useState(false);
   const [coverError, setCoverError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(EMPTY);
     setCoverError("");
     setCoverBusy(false);
+    setSaving(false);
   }, [open]);
 
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
@@ -85,13 +51,13 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
     e.target.value = "";
     if (!file) return;
     setCoverError("");
-    if (file.size > 12 * 1024 * 1024) {
+    if (file.size > COVER_MAX_FILE_BYTES) {
       setCoverError("الملف كبير جداً (الحد الأقصى تقريباً 12 ميجابايت).");
       return;
     }
     setCoverBusy(true);
     try {
-      const url = await fileToCoverDataUrl(file);
+      const url = await processTournamentCoverFile(file);
       set("coverDataUrl", url);
     } catch {
       setCoverError("تعذر قراءة الصورة. جرّب ملفاً آخر (JPG أو PNG).");
@@ -100,35 +66,38 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const list = loadTournamentRows();
-    const nid = Math.max(0, ...list.map((r) => r.id)) + 1;
     const n = Number(String(form.participants).replace(/\D/g, "")) || 8;
     if (n !== 8 && n !== 16) {
       setCoverError("عدد المشاركين يجب أن يكون 8 أو 16 فقط.");
       return;
     }
-    const row = {
-      id: nid,
-      name: form.name.trim() || "بطولة بدون اسم",
-      game: form.game.trim() || "—",
-      participants: n,
-      startDate: formatDisplayDate(form.startDate),
-      status: "upcoming",
-      endDate: formatDisplayDate(form.endDate),
-      prize: form.prize.trim(),
-      delayMinutes: Number(String(form.delayMinutes).replace(/\D/g, "")) || 10,
-      withdrawal: form.withdrawal,
-      tieRule: form.tieRule.trim(),
-      ...(form.coverDataUrl ? { coverImage: form.coverDataUrl } : {}),
-    };
-    const ok = saveTournamentRows([...list, row]);
-    if (!ok) {
-      setCoverError("تعذر الحفظ: البيانات كبيرة جداً. جرّب صورة أصغر أو احذف الصورة.");
+    if (!form.registrationDeadline) {
+      setCoverError("موعد انتهاء التسجيل مطلوب.");
       return;
     }
-    onSaved?.(row);
+    const deadlineError = validateRegistrationDeadline(form);
+    if (deadlineError) {
+      setCoverError(deadlineError);
+      return;
+    }
+    if (!form.rules?.trim()) {
+      setCoverError("قوانين البطولة مطلوبة.");
+      return;
+    }
+
+    setSaving(true);
+    setCoverError("");
+    const result = await createManagerTournament({ ...form, participants: String(n) });
+    setSaving(false);
+
+    if (!result.ok) {
+      setCoverError(result.error || "تعذر حفظ البطولة.");
+      return;
+    }
+
+    onSaved?.(result.tournament);
     onClose();
   };
 
@@ -250,29 +219,52 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
               onChange={(e) => set("withdrawal", e.target.value)}
               placeholder="خسارة"
             />
+            <p className="mt-1.5 text-[10px] text-gray-400">منطق داخلي للمدير — لا يظهر للزبائن</p>
           </div>
         </div>
 
         <div className={fieldWrap}>
-          <label htmlFor="ct-tie" className={labelCls}>
-            في حالة التعادل <span className="text-red-500">*</span>
+          <label htmlFor="ct-deadline" className={labelCls}>
+            تاريخ انتهاء مهلة المشاركة <span className="text-red-500">*</span>
+          </label>
+          <input
+            id="ct-deadline"
+            type="datetime-local"
+            className={inputCls}
+            required
+            value={form.registrationDeadline}
+            onChange={(e) => set("registrationDeadline", e.target.value)}
+          />
+          <p className="mt-1.5 text-[10px] text-gray-400">
+            بعد الحفظ، يستطيع الزبائن في تطبيق ZONEZ الاشتراك أو الانسحاب حتى هذا التاريخ والوقت بالضبط.
+          </p>
+        </div>
+
+        <div className={fieldWrap}>
+          <label htmlFor="ct-rules" className={labelCls}>
+            قوانين البطولة <span className="text-red-500">*</span>
           </label>
           <textarea
-            id="ct-tie"
-            rows={3}
-            className={`${inputCls} min-h-[80px] resize-y`}
+            id="ct-rules"
+            className={`${inputCls} min-h-[120px] resize-y leading-relaxed`}
             required
-            value={form.tieRule}
-            onChange={(e) => set("tieRule", e.target.value)}
-            placeholder="اكتب ما يحدث في حالة التعادل"
+            value={form.rules}
+            onChange={(e) => set("rules", e.target.value)}
+            placeholder={"• يجب أن يكون لكل مباراة فائز.\n• لا يُسمح بالتعادل.\n• اللاعب المتأخر يُعتبر خاسراً بعد 10 دقائق."}
           />
+          <p className="mt-1.5 text-[10px] text-gray-400">
+            اكتب كل قانون في سطر منفصل — تظهر في صفحة تفاصيل البطولة بتطبيق الزبون
+          </p>
         </div>
 
         <div className={fieldWrap}>
           <label htmlFor="ct-cover" className={labelCls}>
             صورة غلاف البطولة <span className="font-normal text-gray-400">(اختياري)</span>
           </label>
-          <p className="mb-3 text-[10px] text-gray-400">يُعرض كبانر في صفحة التفاصيل. يُفضّل صورة أفقية.</p>
+          <p className="mb-3 text-[10px] text-gray-400">
+            نسبة العرض {COVER_ASPECT === 16 / 9 ? "16:9" : COVER_ASPECT.toFixed(2)} — تُقصّ تلقائياً من
+            المنتصف لتطابق بطاقة Flutter وصفحة التفاصيل ({COVER_OUTPUT_WIDTH}px عرض).
+          </p>
           <div className="flex flex-wrap items-center gap-2">
             <input
               id="ct-cover"
@@ -300,18 +292,44 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
           </div>
           {coverError ? <p className="mt-2 text-[11px] font-bold text-red-600">{coverError}</p> : null}
           {form.coverDataUrl ? (
-            <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
-              <img src={form.coverDataUrl} alt="" className="max-h-40 w-full object-cover" />
+            <div className="mt-3 space-y-3">
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold text-gray-500">معاينة البطاقة (Flutter Home)</p>
+                <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                  <div className="relative aspect-[16/9] w-full max-w-md">
+                    <img
+                      src={form.coverDataUrl}
+                      alt=""
+                      className="absolute inset-0 h-full w-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/75 via-black/20 to-transparent" />
+                    <div className="absolute bottom-3 right-3 left-3 text-white">
+                      <p className="text-sm font-bold">اسم البطولة</p>
+                      <p className="text-xs text-amber-300">الجائزة</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <p className="mb-1.5 text-[10px] font-bold text-gray-500">معاينة صفحة التفاصيل</p>
+                <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+                  <img
+                    src={form.coverDataUrl}
+                    alt=""
+                    className="aspect-[16/9] w-full max-w-2xl object-cover"
+                  />
+                </div>
+              </div>
             </div>
           ) : null}
         </div>
 
         <div className="flex flex-wrap items-center justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
-          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+          <Button type="button" variant="outline" size="sm" onClick={onClose} disabled={saving}>
             إلغاء
           </Button>
-          <Button type="submit" size="sm">
-            حفظ البطولة
+          <Button type="submit" size="sm" disabled={saving || coverBusy}>
+            {saving ? "جاري الحفظ..." : "حفظ البطولة"}
           </Button>
         </div>
       </form>

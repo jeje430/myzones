@@ -86,7 +86,7 @@ class BookingStepAvailability extends StatelessWidget {
 
       return _UnavailableState(
 
-        message: result.message ?? 'نعتذر، لا يوجد جهاز متاح',
+        message: result.message ?? 'لا يوجد حجز متاح',
 
         onGoBack: flow.previousStep,
 
@@ -376,7 +376,9 @@ class _OrderSummary extends StatelessWidget {
 
           const SizedBox(height: 12),
 
-          _SummaryLine('الجهاز', flow.orderSummaryDevice),
+          _SummaryLine('الباقة', flow.orderSummaryDevice),
+
+          _SummaryLine('الجهاز', flow.assignedDeviceLabel),
 
           _SummaryLine('التاريخ', flow.formattedDate),
 

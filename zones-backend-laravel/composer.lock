@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "0c30ae4b749164abeb9ef7dfeb38f8f9",
+    "content-hash": "72da7eabf313faaf32da5eb468fbce7b",
     "packages": [
         {
             "name": "barryvdh/laravel-dompdf",
@@ -2972,6 +2972,131 @@
                 }
             ],
             "time": "2025-12-27T19:41:33+00:00"
+        },
+        {
+            "name": "plutu/plutu-laravel",
+            "version": "1.1.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/getplutu/plutu-laravel.git",
+                "reference": "f070050ba3e70d03d2fddf3921b2ee632c36e58b"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/getplutu/plutu-laravel/zipball/f070050ba3e70d03d2fddf3921b2ee632c36e58b",
+                "reference": "f070050ba3e70d03d2fddf3921b2ee632c36e58b",
+                "shasum": ""
+            },
+            "require": {
+                "php": "^8.0",
+                "plutu/plutu-php": "^1.1"
+            },
+            "type": "library",
+            "extra": {
+                "laravel": {
+                    "aliases": {
+                        "PlutuMpgs": "PlutuLaravel\\Facades\\PlutuMpgs",
+                        "PlutuSadad": "PlutuLaravel\\Facades\\PlutuSadad",
+                        "PlutuTlync": "PlutuLaravel\\Facades\\PlutuTlync",
+                        "PlutuAdfali": "PlutuLaravel\\Facades\\PlutuAdfali",
+                        "PlutuLocalBankCards": "PlutuLaravel\\Facades\\PlutuLocalBankCards"
+                    },
+                    "providers": [
+                        "PlutuLaravel\\Providers\\PlutuServiceProvider"
+                    ]
+                }
+            },
+            "autoload": {
+                "psr-4": {
+                    "PlutuLaravel\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Plutu Team",
+                    "email": "developers@plutu.ly",
+                    "homepage": "https://plutu.ly"
+                },
+                {
+                    "name": "Mohamed Endisha",
+                    "email": "mohamed.endisha@gmail.com"
+                }
+            ],
+            "description": "Plutu for Laravel",
+            "keywords": [
+                "api",
+                "laravel",
+                "payment",
+                "php",
+                "plutu",
+                "services"
+            ],
+            "support": {
+                "issues": "https://github.com/getplutu/plutu-laravel/issues",
+                "source": "https://github.com/getplutu/plutu-laravel/tree/1.1.0"
+            },
+            "time": "2023-03-26T13:56:37+00:00"
+        },
+        {
+            "name": "plutu/plutu-php",
+            "version": "1.1.2",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/getplutu/plutu-php.git",
+                "reference": "361eaa57e9daa5369a22c63559c0a89756c38e3e"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/getplutu/plutu-php/zipball/361eaa57e9daa5369a22c63559c0a89756c38e3e",
+                "reference": "361eaa57e9daa5369a22c63559c0a89756c38e3e",
+                "shasum": ""
+            },
+            "require": {
+                "guzzlehttp/guzzle": "^7.2",
+                "php": "^8.1"
+            },
+            "require-dev": {
+                "phpstan/phpstan": "^1.10",
+                "phpunit/phpunit": "^10.0"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "Plutu\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "Plutu Team",
+                    "email": "developers@plutu.ly",
+                    "homepage": "https://plutu.ly"
+                },
+                {
+                    "name": "Mohamed Endisha",
+                    "email": "mohamed.endisha@gmail.com"
+                }
+            ],
+            "description": "Plutu for php",
+            "keywords": [
+                "api",
+                "payment",
+                "php",
+                "plutu",
+                "services"
+            ],
+            "support": {
+                "issues": "https://github.com/getplutu/plutu-php/issues",
+                "source": "https://github.com/getplutu/plutu-php/tree/1.1.2"
+            },
+            "time": "2023-08-24T13:34:44+00:00"
         },
         {
             "name": "psr/clock",

@@ -1,4 +1,128 @@
-/** أقرب أس 2 ≥ n (للبطولة الإقصائية) */
+/** Strict match lifecycle statuses */
+export const MATCH_STATUS = {
+  UPCOMING: "upcoming",
+  LIVE: "live",
+  FINISHED: "finished",
+};
+
+const LEGACY_STATUS_MAP = {
+  pending: MATCH_STATUS.UPCOMING,
+  upcoming: MATCH_STATUS.UPCOMING,
+  active: MATCH_STATUS.LIVE,
+  live: MATCH_STATUS.LIVE,
+  ongoing: MATCH_STATUS.LIVE,
+  completed: MATCH_STATUS.FINISHED,
+  finished: MATCH_STATUS.FINISHED,
+};
+
+/** @returns {string} normalized lifecycle status */
+export function normalizeMatchStatus(match) {
+  if (!match) return MATCH_STATUS.UPCOMING;
+  if (match.winner) return MATCH_STATUS.FINISHED;
+
+  if (match.scheduledAt) {
+    const scheduledMs = new Date(match.scheduledAt).getTime();
+    if (!Number.isNaN(scheduledMs)) {
+      if (scheduledMs > Date.now()) {
+        return MATCH_STATUS.UPCOMING;
+      }
+      return MATCH_STATUS.LIVE;
+    }
+  }
+
+  const raw = String(match.status || MATCH_STATUS.UPCOMING).toLowerCase();
+  const mapped = LEGACY_STATUS_MAP[raw] || MATCH_STATUS.UPCOMING;
+
+  if (mapped === MATCH_STATUS.LIVE) {
+    return MATCH_STATUS.UPCOMING;
+  }
+
+  return mapped;
+}
+
+export function matchStatusLabel(status) {
+  if (status === MATCH_STATUS.LIVE) return "جارية";
+  if (status === MATCH_STATUS.FINISHED) return "انتهت";
+  return "قادمة";
+}
+
+export function matchStatusCssKey(status) {
+  if (status === MATCH_STATUS.LIVE) return "live";
+  if (status === MATCH_STATUS.FINISHED) return "finished";
+  return "upcoming";
+}
+
+/**
+ * UPCOMING ➡️ LIVE when scheduled time has arrived.
+ * @returns {boolean} whether any match changed
+ */
+export function applyTimeBasedStatusTransitions(rounds) {
+  if (!rounds?.length) return false;
+  const now = Date.now();
+  let changed = false;
+
+  for (const round of rounds) {
+    for (const match of round.matches) {
+      if (match.winner) {
+        if (match.status !== MATCH_STATUS.FINISHED) {
+          match.status = MATCH_STATUS.FINISHED;
+          changed = true;
+        }
+        continue;
+      }
+
+      if (match.scheduledAt) {
+        const scheduledMs = new Date(match.scheduledAt).getTime();
+        if (!Number.isNaN(scheduledMs)) {
+          if (scheduledMs > now) {
+            if (match.status !== MATCH_STATUS.UPCOMING) {
+              match.status = MATCH_STATUS.UPCOMING;
+              changed = true;
+            }
+            continue;
+          }
+
+          if (match.status !== MATCH_STATUS.LIVE) {
+            match.status = MATCH_STATUS.LIVE;
+            changed = true;
+          }
+          continue;
+        }
+      }
+
+      const current = normalizeMatchStatus(match);
+      if (match.status !== current) {
+        match.status = current;
+        changed = true;
+      }
+    }
+  }
+
+  return changed;
+}
+
+/** Normalize all matches and apply time-based transitions */
+export function syncBracketMatchLifecycle(rounds) {
+  if (!rounds?.length) return false;
+  let changed = false;
+
+  for (const round of rounds) {
+    for (const match of round.matches) {
+      const normalized = normalizeMatchStatus(match);
+      if (match.status !== normalized) {
+        match.status = normalized;
+        changed = true;
+      }
+    }
+  }
+
+  if (applyTimeBasedStatusTransitions(rounds)) {
+    changed = true;
+  }
+
+  return changed;
+}
+
 export function nextPowerOfTwo(n) {
   const x = Math.max(2, Math.floor(Number(n)) || 2);
   let p = 1;
@@ -117,18 +241,24 @@ export function roundTitleAtIndex(bracketSize, roundIndex) {
   return `الدور ${roundIndex + 1}`;
 }
 
-/** يضمن وجود حقول النتيجة ويُكمّل مباريات قديمة بلا أرقام */
 export function normalizeBracketRounds(rounds) {
   for (const round of rounds) {
     for (const m of round.matches) {
       if (m.scoreA === undefined) m.scoreA = null;
       if (m.scoreB === undefined) m.scoreB = null;
+      if (m.scoreA != null) m.scoreA = Number(m.scoreA);
+      if (m.scoreB != null) m.scoreB = Number(m.scoreB);
+      if (m.scoreA != null && Number.isNaN(m.scoreA)) m.scoreA = null;
+      if (m.scoreB != null && Number.isNaN(m.scoreB)) m.scoreB = null;
+      if (m.scheduledAt === undefined) m.scheduledAt = null;
       if (m.winner && m.playerA && m.playerB && (m.scoreA == null || m.scoreB == null)) {
         m.scoreA = m.winner === m.playerA ? 1 : 0;
         m.scoreB = m.winner === m.playerB ? 1 : 0;
       }
+      m.status = normalizeMatchStatus(m);
     }
   }
+  syncBracketMatchLifecycle(rounds);
 }
 
 export function createEmptyBracket(tournament, options = {}) {
@@ -154,7 +284,8 @@ export function createEmptyBracket(tournament, options = {}) {
           winner: null,
           scoreA: null,
           scoreB: null,
-          status: "pending",
+          scheduledAt: null,
+          status: MATCH_STATUS.UPCOMING,
         });
       } else {
         matches.push({
@@ -166,7 +297,8 @@ export function createEmptyBracket(tournament, options = {}) {
           winner: null,
           scoreA: null,
           scoreB: null,
-          status: "pending",
+          scheduledAt: null,
+          status: MATCH_STATUS.UPCOMING,
         });
       }
     }
@@ -176,35 +308,23 @@ export function createEmptyBracket(tournament, options = {}) {
       matches,
     });
   }
-  applyLiveStatus(rounds);
+  syncBracketMatchLifecycle(rounds);
   return { bracketSize, players, rounds, tournamentId: tournament.id };
 }
 
+/** @deprecated use syncBracketMatchLifecycle */
 export function applyLiveStatus(rounds) {
-  for (const round of rounds) {
-    for (const match of round.matches) {
-      if (match.status === "live") match.status = "pending";
-    }
-  }
-  for (const round of rounds) {
-    for (const match of round.matches) {
-      if (match.status === "completed") continue;
-      if (match.playerA && match.playerB && !match.winner) {
-        match.status = "live";
-        return;
-      }
-    }
-  }
+  syncBracketMatchLifecycle(rounds);
 }
 
-/**
- * @param {{ scoreA: number, scoreB: number } | null} scores - إن وُجد يجب أن يطابق الفائز (الأعلى نقاطاً).
- */
 export function advanceWinner(rounds, matchId, winnerName, scores = null) {
   const flat = rounds.flatMap((x) => x.matches);
   const match = flat.find((x) => x.id === matchId);
   if (!match || match.winner) return false;
   if (winnerName !== match.playerA && winnerName !== match.playerB) return false;
+
+  const currentStatus = normalizeMatchStatus(match);
+  if (currentStatus !== MATCH_STATUS.LIVE) return false;
 
   let sa;
   let sb;
@@ -221,18 +341,75 @@ export function advanceWinner(rounds, matchId, winnerName, scores = null) {
   match.scoreA = sa;
   match.scoreB = sb;
   match.winner = winnerName;
-  match.status = "completed";
+  match.status = MATCH_STATUS.FINISHED;
 
   const nextR = match.r + 1;
-  if (nextR >= rounds.length) {
-    applyLiveStatus(rounds);
-    return true;
+  if (nextR < rounds.length) {
+    const nextM = Math.floor(match.m / 2);
+    const next = rounds[nextR].matches[nextM];
+    if (match.m % 2 === 0) next.playerA = winnerName;
+    else next.playerB = winnerName;
   }
-  const nextM = Math.floor(match.m / 2);
-  const next = rounds[nextR].matches[nextM];
-  if (match.m % 2 === 0) next.playerA = winnerName;
-  else next.playerB = winnerName;
 
-  applyLiveStatus(rounds);
+  syncBracketMatchLifecycle(rounds);
   return true;
+}
+
+export function updateMatchSchedule(rounds, matchId, scheduledAt) {
+  const flat = rounds.flatMap((x) => x.matches);
+  const match = flat.find((x) => x.id === matchId);
+  if (!match) return false;
+  match.scheduledAt = scheduledAt || null;
+  if (normalizeMatchStatus(match) !== MATCH_STATUS.FINISHED) {
+    match.status = MATCH_STATUS.UPCOMING;
+  }
+  syncBracketMatchLifecycle(rounds);
+  return true;
+}
+
+export function formatMatchSchedule(iso) {
+  if (!iso) return null;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return null;
+  return d.toLocaleString("ar-SA", {
+    day: "2-digit",
+    month: "short",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: true,
+  });
+}
+
+export function toDatetimeLocalValue(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+export function canSelectWinner(match) {
+  return Boolean(
+    match?.playerA?.trim() &&
+      match?.playerB?.trim() &&
+      match?.scheduledAt &&
+      normalizeMatchStatus(match) === MATCH_STATUS.LIVE,
+  );
+}
+
+export function buildBracketGridLayout(bracket) {
+  if (!bracket?.rounds?.length) return null;
+  const numRows = bracket.bracketSize;
+  const numRounds = bracket.rounds.length;
+  const colParts = [];
+  for (let r = 0; r < numRounds; r++) {
+    colParts.push("minmax(232px, 18rem)");
+    if (r < numRounds - 1) colParts.push("minmax(56px, 4.5rem)");
+  }
+  return {
+    numRows,
+    numRounds,
+    colTemplate: colParts.join(" "),
+    rowTemplate: `auto repeat(${numRows}, minmax(var(--tb-match-row-min, 76px), var(--tb-match-row-max, 104px)))`,
+  };
 }

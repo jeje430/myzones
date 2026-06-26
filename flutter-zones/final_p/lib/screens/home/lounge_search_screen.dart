@@ -9,7 +9,7 @@ import '../../providers/lounge_ratings_provider.dart';
 import '../../utils/lounge_filter_utils.dart';
 import '../lounge/lounge_details_screen.dart';
 import 'widgets/device_filter_sheet.dart';
-import 'widgets/lounge_card.dart';
+import 'widgets/zonez_lounge_card.dart';
 
 /// Search & filter tab embedded in the main home shell (bottom nav stays visible).
 class LoungeSearchScreen extends StatefulWidget {
@@ -189,19 +189,11 @@ class _LoungeSearchScreenState extends State<LoungeSearchScreen> {
                   itemCount: lounges.length,
                   itemBuilder: (context, index) {
                     final l = lounges[index];
-                    return LoungeCard(
-                      compact: true,
-                      loungeId: l.id,
-                      name: l.name,
-                      rating: l.loungeAverageRating,
-                      reviews: l.reviewCount,
-                      location: l.location,
-                      devices: l.totalDevices,
-                      price: l.startingPrice,
+                    return ZonezLoungeCard(
+                      lounge: l,
                       isFavorite: appState.isFavorite(l.name),
                       onFavoriteTap: () => appState.toggleFavorite(l.name),
-                      onTap: () => _openLounge(l.id),
-                      onBookTap: () => _openLounge(l.id),
+                      onOpenDetails: () => _openLounge(l.id),
                     );
                   },
                 ),

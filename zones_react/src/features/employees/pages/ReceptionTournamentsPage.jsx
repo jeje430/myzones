@@ -7,10 +7,13 @@ import {
   TOURNAMENTS_LIST_EVENT,
 } from "../../tournaments/tournamentsListStorage";
 
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
+
 const PAGE_SIZE = 5;
 
 export default function ReceptionTournamentsPage() {
   const navigate = useNavigate();
+  const { routes } = useReceptionEmployeeRoutes();
   const [rows, setRows] = useState(() => loadActiveTournamentRows());
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
@@ -49,7 +52,7 @@ export default function ReceptionTournamentsPage() {
   }, [search]);
 
   const openParticipants = (row) => {
-    navigate(`/employee/reception/tournaments/${row.id}/participants`, {
+    navigate(routes.tournamentParticipants(row.id), {
       state: { tournament: row, from: "list" },
     });
   };
@@ -63,6 +66,7 @@ export default function ReceptionTournamentsPage() {
 
       <TournamentsListTable
         rows={paged}
+        allRows={filtered}
         search={search}
         onSearchChange={setSearch}
         page={page}

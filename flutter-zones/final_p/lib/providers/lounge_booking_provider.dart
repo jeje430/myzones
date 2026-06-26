@@ -1,8 +1,8 @@
 import 'package:flutter/foundation.dart';
 
+import '../data/repositories/booking_repository.dart';
 import '../models/booking.dart';
 import '../models/lounge_model.dart';
-import '../services/lounge_api_extension.dart';
 import '../utils/date_format_utils.dart';
 
 enum BookingFlowStep {
@@ -14,7 +14,7 @@ enum BookingFlowStep {
 }
 
 class LoungeBookingProvider extends ChangeNotifier {
-  final LoungeDataStore _store = LoungeDataStore.instance;
+  final BookingRepository _bookings = BookingRepository.instance;
 
   LoungeModel? lounge;
   DevicePackage? selectedDevice;
@@ -36,7 +36,7 @@ class LoungeBookingProvider extends ChangeNotifier {
     'التاريخ',
     'التحقق',
     'الدفع',
-    'التأكيد',
+    'الإيصال',
   ];
 
   void init(LoungeModel loungeModel) {
@@ -85,7 +85,12 @@ class LoungeBookingProvider extends ChangeNotifier {
       availabilityResult?.isAvailable == true && selectedSlot != null;
   bool get canProceedFromStep4 => true;
 
-  double get totalPrice => selectedDevice?.hourlyRate ?? 0;
+  double get totalPrice =>
+      selectedSlot?.totalPrice ?? selectedDevice?.hourlyRate ?? 0;
+
+  int get stationId => int.tryParse(lounge?.id ?? '') ?? 0;
+
+  int get packageId => int.tryParse(selectedDevice?.id ?? '') ?? 0;
 
   Future<void> checkAvailability() async {
     if (lounge == null || selectedDevice == null || selectedDate == null) {
@@ -98,20 +103,52 @@ class LoungeBookingProvider extends ChangeNotifier {
     selectedSlot = null;
     notifyListeners();
 
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-
-    final result = _store.checkAvailability(
-      loungeId: lounge!.id,
-      deviceType: selectedDevice!.type,
-      date: selectedDate!,
-    );
-
-    availabilityResult = result;
-    isCheckingAvailability = false;
-    notifyListeners();
+    try {
+      availabilityResult = await _bookings.checkAvailability(
+        stationId: stationId,
+        packageId: packageId,
+        date: selectedDate!,
+      );
+    } catch (e) {
+      errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      availabilityResult = AvailabilityResult(
+        isAvailable: false,
+        message: errorMessage ?? 'تعذر التحقق من التوفر',
+      );
+    } finally {
+      isCheckingAvailability = false;
+      notifyListeners();
+    }
   }
 
-  Future<bool> confirmBooking() async {
+  /// Creates booking on Laravel. For online payments call with [paymentMethod] `online`
+  /// before opening Plutu, then call [refreshConfirmationAfterPayment] after success.
+  Future<DeviceBookingConfirmation?> createBookingOnServer({
+    required String paymentMethod,
+  }) async {
+    if (lounge == null ||
+        selectedDevice == null ||
+        selectedDate == null ||
+        selectedSlot == null) {
+      return null;
+    }
+
+    final slot = selectedSlot!;
+    if (slot.deviceId == null || slot.hour == null) {
+      throw Exception('بيانات الموعد غير مكتملة');
+    }
+
+    return _bookings.createBooking(
+      stationId: stationId,
+      packageId: packageId,
+      deviceId: slot.deviceId!,
+      date: selectedDate!,
+      hour: slot.hour!,
+      paymentMethod: paymentMethod,
+    );
+  }
+
+  Future<bool> confirmBooking({String paymentMethod = 'cash'}) async {
     if (lounge == null ||
         selectedDevice == null ||
         selectedDate == null ||
@@ -124,18 +161,57 @@ class LoungeBookingProvider extends ChangeNotifier {
     notifyListeners();
 
     try {
-      await Future<void>.delayed(const Duration(milliseconds: 500));
-      confirmation = await _store.confirmDeviceBooking(
-        loungeId: lounge!.id,
-        deviceType: selectedDevice!.type,
-        date: selectedDate!,
-        slot: selectedSlot!,
-      );
-      earnedPoints = confirmation!.earnedPoints;
+      final result = await createBookingOnServer(paymentMethod: paymentMethod);
+      if (result == null) return false;
+
+      confirmation = result;
+      earnedPoints = result.earnedPoints;
       currentStep = BookingFlowStep.confirmation;
       return true;
     } catch (e) {
-      errorMessage = e.toString().replaceFirst('Exception: ', '');
+      errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      return false;
+    } finally {
+      isConfirming = false;
+      notifyListeners();
+    }
+  }
+
+  Future<bool> refreshConfirmationAfterPayment(
+    int bookingId, {
+    String? invoiceNo,
+    Map<String, String>? callbackParams,
+  }) async {
+    isConfirming = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      final record = await _bookings.waitForPaymentConfirmation(
+        bookingId,
+        invoiceNo: invoiceNo,
+        callbackParams: callbackParams,
+      );
+      if (record == null) {
+        throw Exception('تعذر تأكيد الدفع — حاول تحديث حجوزاتي');
+      }
+
+      confirmation = DeviceBookingConfirmation(
+        bookingId: record.bookingNumber,
+        bookingNumber: record.bookingNumber,
+        finalPrice: record.totalPrice,
+        earnedPoints: (record.totalPrice * 0.5).round(),
+        receiptPdfUrl: record.receiptPdfUrl,
+        numericId: record.id,
+      );
+      earnedPoints = confirmation!.earnedPoints;
+      paymentMethod = PaymentStatus.electronic;
+      currentStep = BookingFlowStep.confirmation;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      errorMessage = e.toString().replaceFirst('ApiException: ', '');
+      notifyListeners();
       return false;
     } finally {
       isConfirming = false;
@@ -195,4 +271,7 @@ class LoungeBookingProvider extends ChangeNotifier {
       selectedSlot != null ? selectedSlot!.label : '';
 
   String get orderSummaryDevice => selectedDevice?.nameAr ?? '';
+
+  String get assignedDeviceLabel =>
+      selectedSlot?.deviceCode ?? selectedSlot?.deviceName ?? '—';
 }

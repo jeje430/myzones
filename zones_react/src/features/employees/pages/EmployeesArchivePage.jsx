@@ -3,6 +3,17 @@ import { Archive, ArchiveRestore, Eye } from "lucide-react";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
 import { useNavigate } from "react-router-dom";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
@@ -54,23 +65,46 @@ export default function EmployeesArchivePage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: archived, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const handleRestore = async (row) => {
+  const runRestore = async (targetIds) => {
+    const targets = filterItemsByIds(archived, targetIds);
+    if (!targets.length) return;
+
+    const isBulk = targets.length > 1;
     const ok = await confirmAction({
-      title: "استعادة الموظف؟",
-      text: `سيتم إعادة «${row.fullName}» إلى قائمة الموظفين النشطة.`,
+      title: isBulk ? `استعادة ${targets.length} موظفين؟` : "استعادة الموظف؟",
+      text: isBulk
+        ? `سيتم إعادة ${targets.length} موظفين إلى قائمة الموظفين النشطة.`
+        : `سيتم إعادة «${targets[0].fullName}» إلى قائمة الموظفين النشطة.`,
       confirmText: "نعم، استعد",
     });
     if (!ok) return;
-    const next = restoreEmployee(rows, row.id);
+
+    let next = rows;
+    for (const id of targetIds) {
+      next = restoreEmployee(next, id);
+    }
     setRows(next);
-    await toastSuccess("تمت الاستعادة", "عاد الموظف إلى القائمة النشطة.");
-    if (row.role === "reception") navigate("/employees/reception");
-    else navigate("/employees");
+    selection.clearSelection();
+    await toastSuccess("تمت الاستعادة", isBulk ? `عاد ${targets.length} موظفين إلى القائمة النشطة.` : "عاد الموظف إلى القائمة النشطة.");
+
+    if (!isBulk && targets[0]) {
+      if (targets[0].role === "reception") navigate("/employees/reception");
+      else navigate("/employees");
+    }
+  };
+
+  const handleRestore = (row) => runRestore(resolveBulkActionIds(row.id, selection.selectedIds));
+
+  const handleBulkRestore = () => {
+    if (!selection.selectedIds.length) return;
+    runRestore(selection.selectedIds);
   };
 
   return (
@@ -90,10 +124,16 @@ export default function EmployeesArchivePage() {
         />
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <TableBulkActionBar
+            count={selection.count}
+            onClear={selection.clearSelection}
+            actions={[{ label: "استعادة المحدد", icon: ArchiveRestore, onClick: handleBulkRestore }]}
+          />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-right text-xs">
               <thead className="border-b border-gray-100 bg-gray-50 text-[11px] font-extrabold text-gray-500 dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400">
                 <tr>
+                  <TableSelectHeaderCell {...selection} />
                   <th className="px-4 py-3">اسم الموظف</th>
                   <th className="px-4 py-3">نوع الموظف</th>
                   <th className="px-4 py-3">البريد الإلكتروني</th>
@@ -106,7 +146,7 @@ export default function EmployeesArchivePage() {
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                       لا يوجد موظفون مؤرشفون.
                     </td>
                   </tr>
@@ -114,8 +154,12 @@ export default function EmployeesArchivePage() {
                   paged.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-b border-gray-50 transition hover:bg-amber-500/5 dark:border-gray-800/80"
+                      className={selectableRowClass(
+                        selection.isSelected(row.id),
+                        "border-b border-gray-50 transition hover:bg-amber-500/5 dark:border-gray-800/80",
+                      )}
                     >
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
                       <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.fullName}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{roleLabel(row.role)}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
@@ -134,7 +178,11 @@ export default function EmployeesArchivePage() {
                           />
                           <IconButton
                             icon={ArchiveRestore}
-                            label="استعادة"
+                            label={
+                              selection.isSelected(row.id) && selection.count > 1
+                                ? `استعادة ${selection.count} موظفين`
+                                : "استعادة"
+                            }
                             tone="success"
                             onClick={() => handleRestore(row)}
                           />

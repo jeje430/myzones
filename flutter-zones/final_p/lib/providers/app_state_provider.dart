@@ -1,15 +1,20 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import 'package:flutter/material.dart' show Color, Icons;
 
 
 
+import '../data/repositories/booking_repository.dart';
+import '../data/repositories/loyalty_repository.dart';
 import '../models/booking.dart';
+import '../models/loyalty_status.dart';
+import '../utils/date_format_utils.dart';
 
 import '../models/lounge_model.dart';
 
 import '../models/notification_model.dart';
-
 import '../models/reward_milestone.dart';
 
 
@@ -26,7 +31,9 @@ class AppStateProvider extends ChangeNotifier {
 
   int bottomNavIndex = 0;
 
-  int loyaltyPoints = 850;
+  LoyaltyStatus? loyaltyStatus;
+
+  final Set<int> _processedLoyaltyNotificationIds = {};
 
   Uint8List? profileAvatarBytes;
 
@@ -38,35 +45,7 @@ class AppStateProvider extends ChangeNotifier {
 
   final List<Booking> _currentBookings = [];
 
-  final List<Booking> _pastBookings = [
-
-    Booking(
-
-      id: 'past-1',
-
-      title: 'PlayStation 5',
-
-      day: 'الأحد 18 مايو',
-
-      time: '6:00 م',
-
-      price: 50,
-
-      status: BookingStatus.past,
-
-      loungeName: 'Game Zone Arena',
-
-      deviceName: 'PlayStation 5',
-
-      deviceType: DeviceType.ps5,
-
-      paymentStatus: PaymentStatus.paid,
-
-      earnedPoints: 50,
-
-    ),
-
-  ];
+  final List<Booking> _pastBookings = [];
 
   final List<AppNotification> _notifications = [];
 
@@ -82,7 +61,7 @@ class AppStateProvider extends ChangeNotifier {
 
   List<Booking> get pastBookings => List.unmodifiable(_pastBookings);
 
-  /// Lounge device bookings only — tournaments live in [TournamentHistoryScreen].
+  /// Lounge device bookings only — tournaments live in participation records screens.
   List<Booking> get currentLoungeBookings => _currentBookings
       .where((b) => !b.isTournament)
       .toList(growable: false);
@@ -103,39 +82,39 @@ class AppStateProvider extends ChangeNotifier {
 
 
 
-  int get nextMilestonePoints {
+  int get loyaltyPoints => loyaltyStatus?.pointsBalance ?? 0;
 
-    for (final milestone in kRewardMilestones) {
+  int get nextMilestonePoints => loyaltyStatus?.minimumPointsRequired ?? 100;
 
-      if (loyaltyPoints < milestone.pointsRequired) {
+  double get loyaltyProgress => loyaltyStatus?.progressValue ?? 0;
 
-        return milestone.pointsRequired;
+  bool get canPayWithPoints => loyaltyStatus?.canRedeemReward ?? false;
 
-      }
+  bool get loyaltyRewardUnlocked => loyaltyStatus?.rewardUnlocked ?? false;
 
-    }
-
-    return kRewardMilestones.last.pointsRequired;
-
+  void applyLoyaltyStatus(LoyaltyStatus status) {
+    loyaltyStatus = status;
+    notifyListeners();
   }
-
-
-
-  double get loyaltyProgress {
-
-    final next = nextMilestonePoints;
-
-    if (next <= 0) return 1.0;
-
-    return (loyaltyPoints / next).clamp(0.0, 1.0);
-
-  }
-
-  /// True when the loyalty progress bar is full (100%) — unlocks pay-with-points.
-  bool get canPayWithPoints => loyaltyProgress >= 1.0;
 
   void resetLoyaltyPointsAfterRedemption() {
-    loyaltyPoints = 0;
+    if (loyaltyStatus == null) return;
+    final minimum = loyaltyStatus!.minimumPointsRequired;
+    final remaining = loyaltyStatus!.pointsBalance - minimum;
+    loyaltyStatus = LoyaltyStatus(
+      pointsBalance: remaining < 0 ? 0 : remaining,
+      minimumPointsRequired: loyaltyStatus!.minimumPointsRequired,
+      pointsPerCompletedSession: loyaltyStatus!.pointsPerCompletedSession,
+      estimatedSessionsRequired: loyaltyStatus!.estimatedSessionsRequired,
+      sessionsRemaining: loyaltyStatus!.sessionsRemaining,
+      progressPoints: (remaining < 0 ? 0 : remaining).clamp(0, minimum),
+      progressMax: minimum,
+      progressPercent: minimum > 0
+          ? (((remaining < 0 ? 0 : remaining) / minimum) * 100).round().clamp(0, 100)
+          : 0,
+      canRedeemReward: remaining >= minimum,
+      rewardUnlocked: remaining >= minimum,
+    );
     notifyListeners();
   }
 
@@ -322,6 +301,10 @@ class AppStateProvider extends ChangeNotifier {
 
     int? earnedPoints,
 
+    int? serverId,
+
+    String? receiptPdfUrl,
+
   }) {
 
     _currentBookings.insert(
@@ -353,6 +336,10 @@ class AppStateProvider extends ChangeNotifier {
         startDateTime: startDateTime,
 
         earnedPoints: earnedPoints,
+
+        serverId: serverId,
+
+        receiptPdfUrl: receiptPdfUrl,
 
       ),
 
@@ -420,6 +407,187 @@ class AppStateProvider extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<void> syncLoyaltyFromApi() async {
+    try {
+      final result = await LoyaltyRepository.instance.fetchStatus();
+      applyLoyaltyStatus(result.loyalty);
+
+      for (final notification in result.notifications) {
+        if (_processedLoyaltyNotificationIds.contains(notification.id)) {
+          continue;
+        }
+        _processedLoyaltyNotificationIds.add(notification.id);
+
+        final isMaintenanceCancel =
+            notification.type == 'booking_cancelled_maintenance';
+        final isManagerBroadcast = notification.type == 'manager_broadcast';
+        final cancelledBookingId = notification.payload?['booking_number']?.toString();
+
+        pushNotification(
+          AppNotification(
+            id: isMaintenanceCancel
+                ? 'booking-cancel-${notification.id}'
+                : isManagerBroadcast
+                    ? 'broadcast-${notification.id}'
+                    : 'loyalty-${notification.id}',
+            title: notification.title,
+            body: notification.body,
+            createdAt: notification.createdAt ?? DateTime.now(),
+            icon: isMaintenanceCancel
+                ? Icons.build_circle_outlined
+                : isManagerBroadcast
+                    ? Icons.campaign_outlined
+                    : Icons.card_giftcard,
+            color: isMaintenanceCancel
+                ? const Color(0xFFD97706)
+                : isManagerBroadcast
+                    ? const Color(0xFF6B5478)
+                    : const Color(0xFF6B5478),
+            type: isMaintenanceCancel
+                ? NotificationType.bookingCancelled
+                : isManagerBroadcast
+                    ? NotificationType.general
+                    : NotificationType.reward,
+            bookingId: isMaintenanceCancel ? cancelledBookingId : null,
+          ),
+        );
+
+        if (isMaintenanceCancel) {
+          unawaited(syncBookingsFromApi());
+        }
+
+        try {
+          await LoyaltyRepository.instance.markNotificationRead(notification.id);
+        } catch (_) {
+          // Ignore read failures — notification already shown locally.
+        }
+      }
+    } catch (_) {
+      // Keep cached loyalty when offline or unauthenticated.
+    }
+  }
+
+  Future<void> syncBookingsFromApi() async {
+    try {
+      await syncLoyaltyFromApi();
+      final records = await BookingRepository.instance.fetchMyBookings();
+      final now = DateTime.now();
+
+      final loungeCurrent = <Booking>[];
+      final loungePast = <Booking>[];
+
+      for (final record in records) {
+        final isCancelled = record.bookingStatus == 'cancelled' ||
+            record.bookingStatus == 'cancelled_maintenance';
+
+        final start = _parseBookingDateTime(record.date, record.hour);
+        var end = _parseBookingDateTime(record.date, record.hourTo) ??
+            start?.add(const Duration(hours: 1));
+        if (start != null && end != null && !end.isAfter(start)) {
+          end = end.add(const Duration(days: 1));
+        }
+
+        if (isCancelled) {
+          final booking = Booking(
+            id: record.bookingNumber,
+            title: record.packageName,
+            day: start != null ? formatArabicDate(start) : record.date,
+            time: record.hour,
+            price: record.totalPrice,
+            status: BookingStatus.cancelled,
+            loungeName: record.stationName,
+            deviceName: record.deviceName,
+            paymentStatus: record.paymentStatusEnum,
+            startDateTime: start,
+            earnedPoints: (record.totalPrice * 0.5).round(),
+            loungeId: record.stationId.toString(),
+            serverId: record.id,
+            receiptPdfUrl: record.receiptPdfUrl,
+          );
+          loungePast.add(booking);
+          continue;
+        }
+
+        final isPast = _isPastBooking(
+          bookingStatus: record.bookingStatus,
+          sessionStatus: record.sessionStatus,
+          endDateTime: end,
+          now: now,
+        );
+
+        final booking = Booking(
+          id: record.bookingNumber,
+          title: record.packageName,
+          day: start != null ? formatArabicDate(start) : record.date,
+          time: record.hour,
+          price: record.totalPrice,
+          status: isPast ? BookingStatus.past : BookingStatus.active,
+          loungeName: record.stationName,
+          deviceName: record.deviceName,
+          paymentStatus: record.paymentStatusEnum,
+          startDateTime: start,
+          earnedPoints: (record.totalPrice * 0.5).round(),
+          loungeId: record.stationId.toString(),
+          serverId: record.id,
+          receiptPdfUrl: record.receiptPdfUrl,
+        );
+
+        if (isPast) {
+          loungePast.add(booking);
+        } else {
+          loungeCurrent.add(booking);
+        }
+      }
+
+      _currentBookings.removeWhere((b) => b.isLounge && !b.isTournament);
+      _pastBookings.removeWhere((b) => b.isLounge && !b.isTournament);
+      _currentBookings.insertAll(0, loungeCurrent);
+      _pastBookings.insertAll(0, loungePast);
+      notifyListeners();
+    } catch (_) {
+      // Keep cached bookings when offline or unauthenticated.
+    }
+  }
+
+  bool _isPastBooking({
+    required String bookingStatus,
+    required String? sessionStatus,
+    required DateTime? endDateTime,
+    required DateTime now,
+  }) {
+    if (bookingStatus == 'completed' || bookingStatus == 'expired') {
+      return true;
+    }
+    if (bookingStatus == 'cancelled' || bookingStatus == 'cancelled_maintenance') {
+      return true;
+    }
+    if (sessionStatus == 'finished' || sessionStatus == 'no_show') {
+      return true;
+    }
+    // Active session lifecycle — keep in Current Reservations.
+    if (sessionStatus == 'playing' || sessionStatus == 'checked_in') {
+      return false;
+    }
+    if (endDateTime == null) return false;
+    return !endDateTime.isAfter(now);
+  }
+
+  DateTime? _parseBookingDateTime(String date, String hour) {
+    final dateParts = date.split('-');
+    if (dateParts.length != 3) return null;
+    final hourParts = hour.split(':');
+    final h = int.tryParse(hourParts.first) ?? 0;
+    final m = hourParts.length > 1 ? int.tryParse(hourParts[1]) ?? 0 : 0;
+
+    return DateTime(
+      int.parse(dateParts[0]),
+      int.parse(dateParts[1]),
+      int.parse(dateParts[2]),
+      h,
+      m,
+    );
+  }
+
   void cancelBooking(String bookingId) {
 
     final index = _currentBookings.indexWhere((b) => b.id == bookingId);
@@ -438,6 +606,28 @@ class AppStateProvider extends ChangeNotifier {
 
     notifyListeners();
 
+  }
+
+  /// Cancels a lounge booking on the server, then refreshes local state from API.
+  Future<String?> cancelBookingViaApi(String bookingId) async {
+    final index = _currentBookings.indexWhere((b) => b.id == bookingId);
+    if (index == -1) {
+      return 'الحجز غير موجود.';
+    }
+
+    final booking = _currentBookings[index];
+    final serverId = booking.serverId;
+    if (serverId == null) {
+      return 'لا يمكن إلغاء هذا الحجز — معرّف الخادم غير متوفر.';
+    }
+
+    try {
+      await BookingRepository.instance.cancelBooking(serverId);
+      await syncBookingsFromApi();
+      return null;
+    } catch (e) {
+      return e.toString().replaceFirst('Exception: ', '');
+    }
   }
 
 
@@ -486,7 +676,7 @@ class AppStateProvider extends ChangeNotifier {
 
     _pastBookings.insert(0, booking);
 
-    loyaltyPoints += earnedPoints;
+    unawaited(syncLoyaltyFromApi());
 
 
 
@@ -522,11 +712,7 @@ class AppStateProvider extends ChangeNotifier {
 
   String? redeemReward(RewardMilestone milestone) {
 
-    if (loyaltyPoints < milestone.pointsRequired) return null;
-
-
-
-    loyaltyPoints -= milestone.pointsRequired;
+    if (!canPayWithPoints) return null;
 
     final code =
 
@@ -548,7 +734,8 @@ class AppStateProvider extends ChangeNotifier {
 
     userPhone = '';
 
-    loyaltyPoints = 0;
+    loyaltyStatus = null;
+    _processedLoyaltyNotificationIds.clear();
 
     redeemedCoupons.clear();
 

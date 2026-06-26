@@ -6,7 +6,7 @@ import '../../../models/tournament.dart';
 
 /// Layout constants — shared between widgets and connector painter.
 abstract final class _BracketMetrics {
-  static const matchHeight = 120.0;
+  static const matchHeight = 148.0;
   static const matchGap = 20.0;
   static const columnWidth = 210.0;
   static const connectorWidth = 60.0;
@@ -29,17 +29,6 @@ abstract final class _BracketMetrics {
     final totalChildren = count * slotHeight;
     final gap = (contentHeight - totalChildren) / (count - 1);
     return index * (slotHeight + gap) + slotHeight / 2;
-  }
-}
-
-String _matchStatusLabel(MatchStatus status) {
-  switch (status) {
-    case MatchStatus.upcoming:
-      return 'قادمة';
-    case MatchStatus.live:
-      return 'جارية';
-    case MatchStatus.completed:
-      return 'منتهية';
   }
 }
 
@@ -336,6 +325,7 @@ class _BracketMatchNode extends StatelessWidget {
         match.player1 == null && match.round != BracketRound.quarterFinal;
     final waiting2 =
         match.player2 == null && match.round != BracketRound.quarterFinal;
+    final resolved = match.resolvedStatus;
 
     return Container(
       decoration: BoxDecoration(
@@ -354,12 +344,16 @@ class _BracketMatchNode extends StatelessWidget {
         border: Border.all(
           color: match.isCompleted
               ? primary.withValues(alpha: 0.55)
-              : primary.withValues(alpha: isDark ? 0.45 : 0.28),
-          width: 1.5,
+              : resolved == MatchStatus.live
+                  ? ZonezColors.neonCyan.withValues(alpha: 0.5)
+                  : primary.withValues(alpha: isDark ? 0.45 : 0.28),
+          width: resolved == MatchStatus.live ? 1.8 : 1.5,
         ),
         boxShadow: [
           BoxShadow(
-            color: primary.withValues(alpha: isDark ? 0.14 : 0.06),
+            color: resolved == MatchStatus.live
+                ? ZonezColors.neonCyan.withValues(alpha: isDark ? 0.18 : 0.1)
+                : primary.withValues(alpha: isDark ? 0.14 : 0.06),
             blurRadius: 10,
             offset: const Offset(0, 3),
           ),
@@ -368,10 +362,16 @@ class _BracketMatchNode extends StatelessWidget {
       clipBehavior: Clip.antiAlias,
       child: Column(
         children: [
+          _MatchScheduleMeta(
+            match: match,
+            muted: muted,
+            isDark: isDark,
+            primary: primary,
+          ),
           Expanded(
             child: _OpponentRow(
               name: match.playerLabel(match.player1, match.round),
-              statusLabel: waiting1 ? 'فائز' : _matchStatusLabel(match.status),
+              score: match.isCompleted ? match.score1 : null,
               isWinner: match.winnerId == match.player1?.id,
               isWaiting: waiting1,
               onSurface: onSurface,
@@ -390,7 +390,7 @@ class _BracketMatchNode extends StatelessWidget {
           Expanded(
             child: _OpponentRow(
               name: match.playerLabel(match.player2, match.round),
-              statusLabel: waiting2 ? 'فائز' : _matchStatusLabel(match.status),
+              score: match.isCompleted ? match.score2 : null,
               isWinner: match.winnerId == match.player2?.id,
               isWaiting: waiting2,
               onSurface: onSurface,
@@ -405,10 +405,145 @@ class _BracketMatchNode extends StatelessWidget {
   }
 }
 
+class _MatchScheduleMeta extends StatelessWidget {
+  const _MatchScheduleMeta({
+    required this.match,
+    required this.muted,
+    required this.isDark,
+    required this.primary,
+  });
+
+  final BracketMatch match;
+  final Color muted;
+  final bool isDark;
+  final Color primary;
+
+  @override
+  Widget build(BuildContext context) {
+    final resolved = match.resolvedStatus;
+    final isLive = resolved == MatchStatus.live;
+    final accent = isLive ? ZonezColors.neonCyan : primary;
+    final bg = isLive
+        ? ZonezColors.neonCyan.withValues(alpha: isDark ? 0.12 : 0.08)
+        : primary.withValues(alpha: isDark ? 0.1 : 0.06);
+    final borderColor = accent.withValues(alpha: isDark ? 0.35 : 0.22);
+
+    if (!match.hasScheduledTime) {
+      return Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          color: isDark
+              ? ZonezColors.inputBg.withValues(alpha: 0.55)
+              : ZonezColors.lightSurfaceAlt,
+          border: Border(
+            bottom: BorderSide(
+              color: isDark
+                  ? ZonezColors.borderMuted.withValues(alpha: 0.4)
+                  : ZonezColors.lightBorder,
+            ),
+          ),
+        ),
+        child: Center(
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+            decoration: BoxDecoration(
+              color: muted.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: muted.withValues(alpha: 0.25)),
+            ),
+            child: Text(
+              'في انتظار التحديد',
+              style: ZonezTypography.caption(
+                size: 10,
+                weight: FontWeight.w600,
+                color: muted,
+                context: context,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final dateLabel = match.formattedScheduleDate ?? '—';
+    final timeLabel = match.formattedScheduleTime ?? '—';
+  final metaColor = isLive ? accent : (isDark ? ZonezColors.textMuted : muted);
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+      decoration: BoxDecoration(
+        color: bg,
+        border: Border(
+          bottom: BorderSide(color: borderColor),
+        ),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          if (isLive) ...[
+            Container(
+              width: 6,
+              height: 6,
+              margin: const EdgeInsets.only(right: 6),
+              decoration: BoxDecoration(
+                color: ZonezColors.neonCyan,
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: ZonezColors.neonCyan.withValues(alpha: 0.7),
+                    blurRadius: 6,
+                  ),
+                ],
+              ),
+            ),
+          ],
+          Icon(
+            Icons.calendar_today_rounded,
+            size: 12,
+            color: metaColor,
+          ),
+          const SizedBox(width: 4),
+          Flexible(
+            child: Text(
+              dateLabel,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: ZonezTypography.caption(
+                size: 10,
+                weight: FontWeight.w600,
+                color: metaColor,
+                context: context,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            Icons.access_time_rounded,
+            size: 12,
+            color: metaColor,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            timeLabel,
+            style: ZonezTypography.caption(
+              size: 10,
+              weight: FontWeight.w700,
+              color: isLive ? accent : metaColor,
+              context: context,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _OpponentRow extends StatelessWidget {
   const _OpponentRow({
     required this.name,
-    required this.statusLabel,
+    this.score,
     required this.isWinner,
     required this.isWaiting,
     required this.onSurface,
@@ -418,7 +553,7 @@ class _OpponentRow extends StatelessWidget {
   });
 
   final String name;
-  final String statusLabel;
+  final int? score;
   final bool isWinner;
   final bool isWaiting;
   final Color onSurface;
@@ -429,6 +564,8 @@ class _OpponentRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final gold = ZonezColors.neonGold;
+    final scoreLabel = score != null ? score.toString() : '–';
+    final showScore = !isWaiting;
 
     return ColoredBox(
       color: isWinner
@@ -464,16 +601,17 @@ class _OpponentRow extends StatelessWidget {
                     context: context,
                   ),
                 ),
-                Text(
-                  isWaiting ? 'بانتظار التأهل' : statusLabel,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: ZonezTypography.caption(
-                    size: 9,
-                    color: muted,
-                    context: context,
+                if (isWaiting)
+                  Text(
+                    'بانتظار التأهل',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: ZonezTypography.caption(
+                      size: 9,
+                      color: muted,
+                      context: context,
+                    ),
                   ),
-                ),
               ],
             ),
           ),
@@ -501,8 +639,46 @@ class _OpponentRow extends StatelessWidget {
                 ),
               ),
             )
-          else if (isWinner)
-            const Icon(Icons.emoji_events, size: 14, color: ZonezColors.neonGold),
+          else ...[
+            if (isWinner)
+              const Padding(
+                padding: EdgeInsets.only(left: 4),
+                child: Icon(Icons.emoji_events, size: 14, color: ZonezColors.neonGold),
+              ),
+            if (showScore)
+              Container(
+                margin: const EdgeInsets.only(left: 6),
+                constraints: const BoxConstraints(minWidth: 28),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: isWinner
+                      ? gold.withValues(alpha: isDark ? 0.18 : 0.12)
+                      : (isDark
+                          ? Colors.white.withValues(alpha: 0.06)
+                          : primary.withValues(alpha: 0.08)),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(
+                    color: isWinner
+                        ? gold.withValues(alpha: 0.45)
+                        : (isDark
+                            ? ZonezColors.borderMuted.withValues(alpha: 0.5)
+                            : primary.withValues(alpha: 0.2)),
+                  ),
+                ),
+                child: Text(
+                  scoreLabel,
+                  textAlign: TextAlign.center,
+                  style: ZonezTypography.caption(
+                    size: 13,
+                    weight: FontWeight.bold,
+                    color: isWinner
+                        ? gold
+                        : (isDark ? onSurface : onSurface),
+                    context: context,
+                  ),
+                ),
+              ),
+          ],
         ],
       ),
       ),

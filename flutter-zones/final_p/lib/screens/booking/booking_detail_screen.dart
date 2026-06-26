@@ -10,6 +10,7 @@ import '../../providers/app_state_provider.dart';
 import '../../services/pdf_receipt_service.dart';
 import '../../utils/booking_cancellation_utils.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 import '../../widgets/neon_gradient_button.dart';
 
 class BookingDetailScreen extends StatefulWidget {
@@ -77,7 +78,9 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
       body: Stack(
         children: [
           const CircuitBackground(),
-          SingleChildScrollView(
+          ZonezScreen(
+            top: false,
+            child: SingleChildScrollView(
             padding: const EdgeInsets.all(20),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -192,6 +195,7 @@ class _BookingDetailScreenState extends State<BookingDetailScreen> {
                 ],
               ],
             ),
+          ),
           ),
         ],
       ),

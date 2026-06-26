@@ -102,6 +102,7 @@ class ExploreGlassCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _Thumbnail(
+                    imageUrl: lounge.imageUrl,
                     icon: _categoryIcon,
                     accentColor: _categoryColor,
                   ),
@@ -251,39 +252,52 @@ class ExploreGlassCard extends StatelessWidget {
 
 class _Thumbnail extends StatelessWidget {
   const _Thumbnail({
+    this.imageUrl,
     required this.icon,
     required this.accentColor,
   });
 
+  final String? imageUrl;
   final IconData icon;
   final Color accentColor;
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: 78,
-      height: 78,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [
-            ZonezColors.neonPurple.withValues(alpha: 0.55),
-            ZonezColors.neonCyan.withValues(alpha: 0.25),
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: Container(
+        width: 78,
+        height: 78,
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              ZonezColors.neonPurple.withValues(alpha: 0.55),
+              ZonezColors.neonCyan.withValues(alpha: 0.25),
+            ],
+          ),
+          border: Border.all(
+            color: accentColor.withValues(alpha: 0.55),
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: accentColor.withValues(alpha: 0.35),
+              blurRadius: 12,
+            ),
           ],
         ),
-        border: Border.all(
-          color: accentColor.withValues(alpha: 0.55),
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: accentColor.withValues(alpha: 0.35),
-            blurRadius: 12,
-          ),
-        ],
+        child: imageUrl != null && imageUrl!.isNotEmpty
+            ? Image.network(
+                imageUrl!,
+                fit: BoxFit.cover,
+                width: 78,
+                height: 78,
+                errorBuilder: (_, __, ___) => Icon(icon, color: Colors.white, size: 34),
+              )
+            : Icon(icon, color: Colors.white, size: 34),
       ),
-      child: Icon(icon, color: Colors.white, size: 34),
     );
   }
 }

@@ -9,18 +9,33 @@ import {
   MapPin,
   Phone,
   Sparkles,
+  User,
   X,
 } from "lucide-react";
 import ThemePill from "../../../shared/components/ThemePill";
 import IconButton from "../../../shared/components/ui/IconButton";
 import IconGlyph from "../../../shared/components/ui/IconGlyph";
-import { submitHallJoinRequest } from "../../super-admin/data/superAdminStorage";
+import { submitHallJoinRequest } from "../data/hallJoinApi";
 
-const CARD =
-  "rounded-2xl border border-gray-200 bg-white p-5 shadow-lg shadow-gray-200/40 transition-colors dark:border-slate-700/70 dark:bg-[#110c1a] dark:shadow-black/25";
-const LABEL = "mb-1.5 block text-xs font-bold text-gray-600 dark:text-slate-300";
-const INPUT =
-  "w-full rounded-xl border border-gray-300 bg-gray-50 px-4 py-3 text-sm text-gray-900 placeholder:text-gray-400 outline-none transition focus:border-[#6B5478] focus:ring-2 focus:ring-[#6B5478]/25 dark:border-slate-700 dark:bg-slate-900/90 dark:text-white dark:placeholder:text-slate-500";
+const CARD   = "hj-card rounded-2xl p-5 shadow-lg transition-colors";
+const LABEL  = "hj-label  flex items-center gap-2 text-lg font-extrabold leading-snug mb-1";
+const HINT   = "hj-hint   mt-2 mb-3 text-[15px] font-bold leading-relaxed rounded-xl px-4 py-2.5";
+const INTRO  = "hj-hint   mt-2 text-[15px] font-bold leading-relaxed rounded-xl px-4 py-2.5";
+const INPUT  = "hj-input  w-full rounded-xl px-4 py-3.5 text-base font-semibold leading-relaxed shadow-sm outline-none transition";
+const UPLOAD_BTN = "hj-upload flex w-full items-center justify-center gap-2 rounded-xl py-7 text-base font-bold transition";
+
+function FormField({ label, hint, icon: Icon, children }) {
+  return (
+    <div>
+      <label className={LABEL}>
+        {Icon ? <Icon size={18} className="shrink-0 text-[#6B5478]" strokeWidth={2.25} /> : null}
+        <span>{label}</span>
+      </label>
+      {hint ? <p className={HINT}>{hint}</p> : null}
+      {children}
+    </div>
+  );
+}
 
 function readImageFiles(files, max = 5) {
   const list = Array.from(files || []).slice(0, max);
@@ -49,8 +64,8 @@ function SuccessModal({ onClose }) {
     >
       <div className="w-full max-w-md rounded-2xl border border-gray-200 bg-white p-6 text-center shadow-2xl dark:border-slate-700 dark:bg-[#110c1a]">
         <IconGlyph icon={CheckCircle2} tone="green" size={32} className="mx-auto mb-4" />
-        <h2 className="text-base font-extrabold text-gray-900 dark:text-white">تم إرسال طلبك بنجاح!</h2>
-        <p className="mt-3 text-sm leading-relaxed text-gray-600 dark:text-slate-300">
+        <h2 className="text-base font-bold text-[#0b1020] dark:text-white">تم إرسال طلبك بنجاح!</h2>
+        <p className="mt-3 text-sm font-semibold leading-relaxed text-[#0b1020] dark:text-slate-100">
           جاري مراجعة البيانات من قبل الإدارة وسنتواصل معك قريباً عبر البريد الإلكتروني.
         </p>
         <button
@@ -71,14 +86,14 @@ function WelcomeStep({ onStart }) {
       <span className="mb-6 flex h-16 w-16 items-center justify-center overflow-hidden rounded-2xl bg-[#6B5478]/15 ring-1 ring-[#6B5478]/30 dark:bg-[#6B5478]/20 dark:ring-[#6B5478]/40">
         <img src="/zones-logo.png" alt="ZONES" className="h-full w-full object-cover" />
       </span>
-      <p className="mb-2 flex items-center justify-center gap-1.5 text-xs font-bold text-[#6B5478]">
-        <Sparkles size={14} />
+      <p className="mb-2 flex items-center justify-center gap-1.5 text-sm font-bold text-[#6B5478]">
+        <Sparkles size={16} strokeWidth={2.25} />
         انضم إلى ZONES
       </p>
-      <h1 className="max-w-lg text-xl font-extrabold leading-relaxed text-gray-900 dark:text-white md:text-2xl">
+      <h1 className="hj-heading max-w-lg text-2xl font-bold leading-relaxed md:text-3xl">
         قم بإضافة صالتك إلى منصة ZONES وابدأ بإدارة حجوزاتك ذكياً
       </h1>
-      <p className="mt-4 max-w-md text-sm leading-relaxed text-gray-500 dark:text-slate-400">
+      <p className="hj-subtext mt-4 max-w-md text-base font-bold leading-relaxed">
         سجّل بيانات صالتك في دقائق، وسيقوم فريق الإدارة بمراجعة طلبك والتواصل معك لإتمام التفعيل.
       </p>
       <button
@@ -89,8 +104,8 @@ function WelcomeStep({ onStart }) {
         ابدأ الآن
       </button>
       <Link
-        to="/auth/login"
-        className="mt-6 text-xs font-semibold text-gray-500 transition hover:text-[#6B5478] dark:text-slate-500"
+        to="/manager/login"
+        className="mt-6 text-sm font-bold text-[#5a4668] transition hover:text-[#6B5478] dark:text-[#d4c4de]"
       >
         لديك حساب؟ تسجيل الدخول
       </Link>
@@ -104,6 +119,7 @@ function RegistrationForm({ onBack, onSuccess }) {
   const [address, setAddress] = useState("");
   const [mapLink, setMapLink] = useState("");
   const [email, setEmail] = useState("");
+  const [managerName, setManagerName] = useState("");
   const [commercialPhone, setCommercialPhone] = useState("");
   const [imagePreviews, setImagePreviews] = useState([]);
   const [error, setError] = useState("");
@@ -128,11 +144,12 @@ function RegistrationForm({ onBack, onSuccess }) {
     setError("");
     setSubmitting(true);
 
-    const result = submitHallJoinRequest({
+    const result = await submitHallJoinRequest({
       hallName,
       address,
       mapLink,
       email,
+      managerName,
       commercialPhone,
       images: imagePreviews,
     });
@@ -150,102 +167,129 @@ function RegistrationForm({ onBack, onSuccess }) {
       <button
         type="button"
         onClick={onBack}
-        className="mb-5 flex items-center gap-1.5 text-xs font-bold text-gray-500 transition hover:text-[#6B5478] dark:text-slate-400 dark:hover:text-white"
+        className="mb-5 flex items-center gap-1.5 text-sm font-bold text-[#5a4668] transition hover:text-[#6B5478] dark:text-[#d4c4de] dark:hover:text-white"
       >
         <ArrowRight size={16} />
         العودة للترحيب
       </button>
 
       <div className={`${CARD} mb-5`}>
-        <h2 className="text-base font-extrabold text-gray-900 dark:text-white">نموذج طلب الانضمام</h2>
-        <p className="mt-1 text-xs text-gray-500 dark:text-slate-400">
-          أدخل بيانات صالتك بدقة — ستظهر للإدارة فور الإرسال.
-        </p>
+        <h2 className="hj-heading text-xl font-bold">نموذج طلب الانضمام</h2>
+        <p className={INTRO}>أدخل بيانات صالتك بدقة — ستظهر للإدارة فور الإرسال.</p>
       </div>
 
       <form onSubmit={submit} className="space-y-4">
         <div className={CARD}>
-          <label className={LABEL}>
-            <Building2 size={13} className="me-1 inline text-[#6B5478]" />
-            اسم الصالة
-          </label>
-          <input
-            type="text"
-            value={hallName}
-            onChange={(e) => setHallName(e.target.value)}
-            placeholder="مثال: صالة الأبطال VIP"
-            className={INPUT}
-            required
-          />
+          <FormField
+            label="اسم الصالة"
+            hint="اكتب اسم الصالة كما تريد أن يظهر للزبائن — مثال: صالة الأبطال VIP"
+            icon={Building2}
+          >
+            <input
+              type="text"
+              value={hallName}
+              onChange={(e) => setHallName(e.target.value)}
+              placeholder="صالة الأبطال VIP"
+              className={INPUT}
+              required
+            />
+          </FormField>
         </div>
 
         <div className={CARD}>
-          <label className={LABEL}>
-            <MapPin size={13} className="me-1 inline text-[#6B5478]" />
-            مكان الصالة / العنوان
-          </label>
-          <input
-            type="text"
-            value={address}
-            onChange={(e) => setAddress(e.target.value)}
-            placeholder="مثال: طرابلس — شارع الجمهورية"
-            className={INPUT}
-            required
-          />
+          <FormField
+            label="مكان الصالة / العنوان"
+            hint="المدينة والحي أو الشارع — مثال: طرابلس — شارع الجمهورية"
+            icon={MapPin}
+          >
+            <input
+              type="text"
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="طرابلس — شارع الجمهورية"
+              className={INPUT}
+              required
+            />
+          </FormField>
         </div>
 
         <div className={CARD}>
-          <label className={LABEL}>رابط الموقع على الخريطة (Google Maps)</label>
-          <input
-            type="url"
-            value={mapLink}
-            onChange={(e) => setMapLink(e.target.value)}
-            placeholder="https://maps.google.com/..."
-            className={INPUT}
-            dir="ltr"
-            required
-          />
+          <FormField
+            label="رابط الموقع على الخريطة (Google Maps)"
+            hint="انسخ رابط Google Maps من تطبيق الخرائط أو الموقع — يبدأ بـ https://maps.google.com/..."
+          >
+            <input
+              type="url"
+              value={mapLink}
+              onChange={(e) => setMapLink(e.target.value)}
+              placeholder="https://maps.google.com/..."
+              className={INPUT}
+              dir="ltr"
+              required
+            />
+          </FormField>
+        </div>
+
+        <div className={CARD}>
+          <FormField
+            label="اسم المدير"
+            hint="الاسم الكامل لمدير الصالة — سيُستخدم في حساب المدير والدعوة"
+            icon={User}
+          >
+            <input
+              type="text"
+              value={managerName}
+              onChange={(e) => setManagerName(e.target.value)}
+              placeholder="أحمد محمد"
+              className={INPUT}
+              required
+            />
+          </FormField>
         </div>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <div className={CARD}>
-            <label className={LABEL}>
-              <Mail size={13} className="me-1 inline text-[#6B5478]" />
-              البريد الإلكتروني
-            </label>
-            <input
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="manager@gmail.com"
-              className={INPUT}
-              dir="ltr"
-              required
-            />
+            <FormField
+              label="البريد الإلكتروني"
+              hint="بريد المدير للتواصل وإرسال رابط التفعيل — مثال: manager@gmail.com"
+              icon={Mail}
+            >
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder="manager@gmail.com"
+                className={INPUT}
+                dir="ltr"
+                required
+              />
+            </FormField>
           </div>
           <div className={CARD}>
-            <label className={LABEL}>
-              <Phone size={13} className="me-1 inline text-[#6B5478]" />
-              رقم الهاتف التجاري
-            </label>
-            <input
-              type="tel"
-              value={commercialPhone}
-              onChange={(e) => setCommercialPhone(e.target.value)}
-              placeholder="091 000 0000"
-              className={INPUT}
-              dir="ltr"
-              required
-            />
+            <FormField
+              label="رقم الهاتف التجاري"
+              hint="رقم يتواصل معه الزبائن — مثال: 091 000 0000"
+              icon={Phone}
+            >
+              <input
+                type="tel"
+                value={commercialPhone}
+                onChange={(e) => setCommercialPhone(e.target.value)}
+                placeholder="091 000 0000"
+                className={INPUT}
+                dir="ltr"
+                required
+              />
+            </FormField>
           </div>
         </div>
 
         <div className={CARD}>
-          <label className={LABEL}>
-            <ImagePlus size={13} className="me-1 inline text-[#6B5478]" />
-            صور الصالة
-          </label>
-          <p className="mb-3 text-[11px] text-gray-400 dark:text-slate-500">يمكنك رفع حتى 5 صور (JPG, PNG)</p>
+          <FormField
+            label="صور الصالة"
+            hint="ارفع صور واضحة للصالة (داخلية أو خارجية) — حتى 5 صور بصيغة JPG أو PNG"
+            icon={ImagePlus}
+          >
 
           <input
             ref={fileRef}
@@ -262,7 +306,7 @@ function RegistrationForm({ onBack, onSuccess }) {
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
-            className="flex w-full items-center justify-center gap-2 rounded-xl border border-dashed border-gray-300 bg-gray-50 py-6 text-xs font-bold text-gray-600 transition hover:border-[#6B5478] hover:text-[#6B5478] dark:border-slate-600 dark:bg-slate-900/50 dark:text-slate-300 dark:hover:text-white"
+            className={UPLOAD_BTN}
           >
             <ImagePlus size={18} className="text-[#6B5478]" />
             اضغط لرفع صور الصالة
@@ -288,10 +332,11 @@ function RegistrationForm({ onBack, onSuccess }) {
               ))}
             </div>
           ) : null}
+          </FormField>
         </div>
 
         {error ? (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-xs font-bold text-red-700 dark:border-red-800/50 dark:bg-red-950/40 dark:text-red-300">
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-bold text-red-700 dark:border-red-800/50 dark:bg-red-950/40 dark:text-red-300">
             {error}
           </p>
         ) : null}
@@ -299,7 +344,7 @@ function RegistrationForm({ onBack, onSuccess }) {
         <button
           type="submit"
           disabled={submitting}
-          className="w-full rounded-2xl bg-[#6B5478] py-3.5 text-sm font-extrabold text-white shadow-lg shadow-[#6B5478]/20 transition hover:bg-[#5a4665] disabled:opacity-60 dark:shadow-[#6B5478]/25"
+          className="w-full rounded-2xl bg-[#6B5478] py-4 text-base font-bold text-white shadow-lg shadow-[#6B5478]/20 transition hover:bg-[#5a4665] disabled:opacity-60 dark:shadow-[#6B5478]/25"
         >
           {submitting ? "جاري الإرسال..." : "إرسال طلب الانضمام"}
         </button>
@@ -319,7 +364,7 @@ export default function HallJoinPage() {
 
   return (
     <div
-      className="min-h-screen bg-gray-50 text-gray-900 transition-colors duration-300 dark:bg-[#0b1020] dark:text-white"
+      className="hall-join-page min-h-screen bg-gray-50 text-gray-900 transition-colors duration-300 dark:bg-[#0b1020] dark:text-white"
       style={{ fontFamily: "Cairo, 'Segoe UI', Tahoma, sans-serif" }}
       dir="rtl"
     >
@@ -332,16 +377,16 @@ export default function HallJoinPage() {
               <img src="/zones-logo.png" alt="ZONES" className="h-full w-full object-cover" />
             </span>
             <div>
-              <p className="text-sm font-extrabold text-gray-900 dark:text-white">ZONES</p>
-              <p className="text-[10px] text-gray-500 dark:text-slate-500">انضمام مديري الصالات</p>
+              <p className="text-base font-bold text-[#0b1020] dark:text-white">ZONES</p>
+              <p className="text-sm font-semibold text-[#5a4668] dark:text-[#d4c4de]">انضمام مديري الصالات</p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
             <ThemePill />
             <Link
-              to="/auth/login"
-              className="rounded-xl border border-gray-200 px-3 py-1.5 text-[11px] font-bold text-gray-600 transition hover:border-[#6B5478] hover:text-[#6B5478] dark:border-slate-700 dark:text-slate-300 dark:hover:text-white"
+              to="/manager/login"
+              className="rounded-xl border-2 border-[#6B5478]/35 px-3 py-1.5 text-sm font-bold text-[#5a4668] transition hover:border-[#6B5478] hover:text-[#6B5478] dark:border-[#8b7a9a]/60 dark:text-[#d4c4de] dark:hover:text-white"
             >
               تسجيل الدخول
             </Link>

@@ -11,7 +11,7 @@ export default function Sidebar({ items = sidebarItems, isOpen = false, onClose 
 
   const logout = () => {
     clearAuthSession();
-    navigate("/auth/login", { replace: true });
+    navigate("/manager/login", { replace: true });
     onClose();
   };
 

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../core/http/api_client.dart';
 import '../models/zones_models.dart';
 
 import '../services/zones_api_service.dart';
@@ -32,34 +33,22 @@ class ZonesDataProvider extends ChangeNotifier {
 
 
 
-  Future<void> loadOffers() async {
-
+  Future<void> loadOffers({bool forceRefresh = false}) async {
     if (isLoadingOffers) return;
 
     isLoadingOffers = true;
-
     offersError = null;
-
     notifyListeners();
 
-
-
     try {
-
-      offers = await _api.fetchOffers();
-
+      offers = await _api.fetchOffers(forceRefresh: forceRefresh);
     } catch (e) {
-
-      offersError = e.toString();
-
+      offersError = e.toString().replaceFirst('Exception: ', '');
+      offers = [];
     } finally {
-
       isLoadingOffers = false;
-
       notifyListeners();
-
     }
-
   }
 
 
@@ -184,6 +173,36 @@ class ZonesDataProvider extends ChangeNotifier {
 
     }
 
+  }
+
+  Future<bool> uploadProfileAvatar(List<int> bytes, {String filename = 'avatar.jpg'}) async {
+    if (user == null) return false;
+
+    try {
+      profileError = null;
+      user = await _api.uploadProfileAvatar(bytes, filename: filename);
+      notifyListeners();
+      return true;
+    } catch (e) {
+      profileError = e is ApiException ? e.message : e.toString();
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<bool> deleteProfileAvatar() async {
+    if (user == null) return false;
+
+    try {
+      profileError = null;
+      user = await _api.deleteProfileAvatar();
+      notifyListeners();
+      return true;
+    } catch (e) {
+      profileError = e is ApiException ? e.message : e.toString();
+      notifyListeners();
+      return false;
+    }
   }
 
 }

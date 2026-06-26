@@ -5,6 +5,7 @@ import '../../core/theme/zonez_colors.dart';
 import '../../providers/app_state_provider.dart';
 import '../../providers/zones_data_provider.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 import '../../widgets/neon_gradient_button.dart';
 import '../../widgets/neon_text_field.dart';
 
@@ -125,7 +126,9 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
       body: Stack(
         children: [
           const CircuitBackground(),
-          _isLoading
+          ZonezScreen(
+            top: false,
+            child: _isLoading
               ? const Center(
                   child: CircularProgressIndicator(color: ZonezColors.neonPurple),
                 )
@@ -185,6 +188,7 @@ class _EditProfileScreenState extends State<EditProfileScreen> {
                     ],
                   ),
                 ),
+          ),
         ],
       ),
     );

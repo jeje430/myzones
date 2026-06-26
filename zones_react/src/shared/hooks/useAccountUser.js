@@ -12,8 +12,28 @@ import {
 export function useAccountUser() {
   const read = useCallback(() => {
     const session = getAuthSession();
-    if (!session?.id) return null;
-    return getUserById(session.id) ?? findUserByEmail(session.email);
+    if (!session?.id && !session?.email) return null;
+
+    const mock = session.id
+      ? getUserById(session.id) ?? findUserByEmail(session.email)
+      : findUserByEmail(session.email);
+    if (mock) return mock;
+
+    if (session.source === "api" && session.id != null) {
+      return {
+        id: session.id,
+        email: session.email || "",
+        fullName: session.fullName || "",
+        role: session.role,
+        phone: session.phone || "",
+        avatar: session.avatar || "",
+        joinDate: session.joinDate || "",
+        hallId: session.hallId ?? null,
+        source: "api",
+      };
+    }
+
+    return null;
   }, []);
 
   const [user, setUser] = useState(read);
@@ -44,7 +64,7 @@ export function useRequireAccountUser() {
 
   useEffect(() => {
     if (user) return;
-    navigate("/auth/login", {
+    navigate("/manager/login", {
       replace: true,
       state: { from: window.location.pathname },
     });

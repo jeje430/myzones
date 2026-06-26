@@ -4,6 +4,12 @@ import { useLocation } from "react-router-dom";
 
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
+import {
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 
 import TablePagination from "../../../shared/components/TablePagination";
 
@@ -39,7 +45,7 @@ import {
 
 import { faultTypeLabel, formatDisplayDate } from "../../maintenance/data/faultMeta";
 
-import { RECEPTION_EMPLOYEE_ROUTES } from "../data/receptionEmployeeRoutes";
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 
 
 
@@ -73,12 +79,9 @@ const VIEW_META = {
 
 
 
-function resolveView(pathname) {
-
-  if (pathname === RECEPTION_EMPLOYEE_ROUTES.devicesBroken) return "broken";
-
+function resolveView(pathname, devicesBrokenPath) {
+  if (pathname === devicesBrokenPath) return "broken";
   return "all";
-
 }
 
 
@@ -112,10 +115,9 @@ function FaultStateBadge({ underMaintenance }) {
 
 
 export default function ReceptionDevicesPage() {
-
   const location = useLocation();
-
-  const view = resolveView(location.pathname);
+  const { routes } = useReceptionEmployeeRoutes();
+  const view = resolveView(location.pathname, routes.devicesBroken);
 
   const meta = VIEW_META[view];
 
@@ -219,6 +221,10 @@ export default function ReceptionDevicesPage() {
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+
+  const selection = useTableSelection({ items: filtered, pageIds });
+
 
 
   useEffect(() => {
@@ -271,6 +277,8 @@ export default function ReceptionDevicesPage() {
 
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
 
+                  <TableSelectHeaderCell {...selection} />
+
                   <th className="px-3 py-2.5 font-bold">اسم الجهاز</th>
 
                   <th className="px-3 py-2.5 font-bold">نوع الجهاز</th>
@@ -293,7 +301,7 @@ export default function ReceptionDevicesPage() {
 
                   <tr>
 
-                    <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
 
                       {meta.empty}
 
@@ -309,13 +317,15 @@ export default function ReceptionDevicesPage() {
 
                       key={row.id}
 
-                      className={`transition hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                      className={`${selectableRowClass(selection.isSelected(row.id))} ${
 
                         isDeviceBroken(row) ? "bg-red-50/20 dark:bg-red-950/10" : ""
 
                       }`}
 
                     >
+
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
 
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
 
@@ -363,6 +373,8 @@ export default function ReceptionDevicesPage() {
 
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
 
+                  <TableSelectHeaderCell {...selection} />
+
                   <th className="px-3 py-2.5 font-bold">اسم الجهاز</th>
 
                   <th className="px-3 py-2.5 font-bold">نوع الجهاز</th>
@@ -387,7 +399,7 @@ export default function ReceptionDevicesPage() {
 
                   <tr>
 
-                    <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
 
                       {meta.empty}
 
@@ -409,9 +421,11 @@ export default function ReceptionDevicesPage() {
 
                         key={row.id}
 
-                        className="bg-red-50/30 transition hover:bg-red-50/50 dark:bg-red-950/10 dark:hover:bg-red-950/20"
+                        className={`${selectableRowClass(selection.isSelected(row.id))} bg-red-50/30 dark:bg-red-950/10`}
 
                       >
+
+                        <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
 
                         <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
 

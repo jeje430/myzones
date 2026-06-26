@@ -1,8 +1,13 @@
 import { loadManagerHall } from "../../lounge/data/managerHallStorage";
 import { normalizeRole, normalizeShift, normalizeStatus } from "./employeeMeta";
 import { normalizeGmailEmail } from "../../../shared/utils/normalizeGmailEmail";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+import { getActiveAccountIdFromUrl } from "../../auth/data/accountSessionStorage";
+import { getAuthSession, getManagerApiToken } from "../../auth/data/mockUsersStorage";
+import { fetchManagerEmployees, updateManagerEmployee, cancelManagerInvitation } from "./managerEmployeesApi";
 
-const STORAGE_KEY = "zones-employees";
+const BASE_KEY = "zones-employees-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const EMPLOYEES_STORAGE_EVENT = "zones-employees-updated";
 
@@ -13,147 +18,6 @@ function notifyEmployeesUpdated() {
 
 const DEFAULT_PHOTO =
   "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=200&h=200&fit=crop&crop=face";
-
-const DEFAULT_EMPLOYEES = [
-  {
-    id: 1,
-    fullName: "أحمد العقيبي",
-    phone: "+218 91 234 5678",
-    email: "ahmed@gmail.com",
-    role: "reception",
-    shift: "evening",
-    status: "working",
-    hireDate: "2024-03-15",
-    joinDate: "2024-03-15",
-    workStartDate: "2024-03-15",
-    salary: 1800,
-    notes: "استقبال وردية مسائية.",
-    hoursThisMonth: 168,
-    shiftsThisMonth: 22,
-    address: "طرابلس — حي الأندلس",
-    gender: "male",
-    birthDate: "1995-08-12",
-    workDays: "sat,sun,mon,tue,wed,thu",
-    workHours: "14:00 — 22:00",
-    workInfoType: "full_time",
-    photoUrl: DEFAULT_PHOTO,
-    lastLogin: "2026-06-07T21:34:00",
-    lastOperation: "فتح جلسة لعب",
-    operationsThisMonth: 142,
-    isArchived: false,
-    accountStatus: "active",
-  },
-  {
-    id: 2,
-    fullName: "محمد الفيتوري",
-    phone: "+218 92 881 2044",
-    email: "m.faitouri@gmail.com",
-    role: "reception",
-    shift: "morning",
-    status: "working",
-    hireDate: "2025-01-08",
-    joinDate: "2025-01-08",
-    workStartDate: "2025-01-08",
-    salary: 1200,
-    notes: "",
-    hoursThisMonth: 152,
-    shiftsThisMonth: 20,
-    address: "طرابلس — قرقارش",
-    gender: "male",
-    birthDate: "",
-    workDays: "sun,mon,tue,wed,thu",
-    workHours: "09:00 — 17:00",
-    workInfoType: "full_time",
-    photoUrl: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face",
-    lastLogin: "2026-06-08T08:15:00",
-    lastOperation: "تسجيل دخول زبون",
-    operationsThisMonth: 98,
-    isArchived: false,
-    accountStatus: "active",
-  },
-  {
-    id: 3,
-    fullName: "سارة المنصوري",
-    phone: "+218 94 550 3311",
-    email: "sara.m@gmail.com",
-    role: "reception",
-    shift: "evening",
-    status: "working",
-    hireDate: "2025-06-01",
-    joinDate: "2025-06-01",
-    workStartDate: "2025-06-01",
-    salary: 1250,
-    notes: "",
-    hoursThisMonth: 140,
-    shiftsThisMonth: 18,
-    address: "بنغازي — الصابري",
-    gender: "female",
-    birthDate: "1998-03-22",
-    workDays: "sat,sun,mon,tue,wed,thu",
-    workHours: "16:00 — 00:00",
-    workInfoType: "part_time",
-    photoUrl: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&h=200&fit=crop&crop=face",
-    lastLogin: "2026-06-07T19:42:00",
-    lastOperation: "حجز باقة",
-    operationsThisMonth: 115,
-    isArchived: false,
-    accountStatus: "active",
-  },
-  {
-    id: 4,
-    fullName: "خالد بوزريدة",
-    phone: "+218 91 770 9920",
-    email: "khaled@gmail.com",
-    role: "maintenance",
-    shift: "evening",
-    status: "working",
-    hireDate: "2023-11-20",
-    joinDate: "2023-11-20",
-    workStartDate: "2023-11-20",
-    salary: 1600,
-    notes: "صيانة الأجهزة والشبكة.",
-    hoursThisMonth: 176,
-    shiftsThisMonth: 24,
-    address: "طرابلس — عين زارة",
-    gender: "male",
-    workDays: "sat,sun,mon,tue,wed,thu,fri",
-    workHours: "12:00 — 20:00",
-    workInfoType: "full_time",
-    photoUrl: DEFAULT_PHOTO,
-    lastLogin: "2026-06-08T07:50:00",
-    lastOperation: "إغلاق بلاغ صيانة",
-    operationsThisMonth: 37,
-    isArchived: false,
-    accountStatus: "active",
-  },
-  {
-    id: 5,
-    fullName: "يوسف الكيلاني",
-    phone: "+218 92 440 1188",
-    email: "y.kilani@gmail.com",
-    role: "maintenance",
-    shift: "evening",
-    status: "leave",
-    hireDate: "2022-05-01",
-    joinDate: "2022-05-01",
-    workStartDate: "2022-05-01",
-    salary: 0,
-    notes: "موقوف مؤقتاً.",
-    hoursThisMonth: 0,
-    shiftsThisMonth: 0,
-    address: "مصراتة",
-    gender: "male",
-    workDays: "",
-    workHours: "",
-    workInfoType: "full_time",
-    photoUrl: DEFAULT_PHOTO,
-    lastLogin: "2026-05-20T14:10:00",
-    lastOperation: "تحديث حالة جهاز",
-    operationsThisMonth: 0,
-    isArchived: false,
-    accountStatus: "suspended",
-  },
-];
 
 function normalizeEmployee(row) {
   const hallName = loadManagerHall().hallName;
@@ -187,25 +51,25 @@ function normalizeEmployee(row) {
 
 export function loadEmployees() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return DEFAULT_EMPLOYEES.map(normalizeEmployee);
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_EMPLOYEES.map(normalizeEmployee);
+    if (!Array.isArray(parsed) || !parsed.length) return [];
     const normalized = parsed.map(normalizeEmployee);
     const emailChanged = parsed.some((row, i) => normalizeGmailEmail(row.email) !== row.email);
     if (emailChanged) saveEmployees(normalized);
     return normalized;
   } catch {
-    return DEFAULT_EMPLOYEES.map(normalizeEmployee);
+    return [];
   }
 }
 
 export function saveEmployees(list) {
   try {
     const serialized = JSON.stringify(list.map(normalizeEmployee));
-    const prev = localStorage.getItem(STORAGE_KEY);
+    const prev = localStorage.getItem(storageKey());
     if (prev === serialized) return;
-    localStorage.setItem(STORAGE_KEY, serialized);
+    localStorage.setItem(storageKey(), serialized);
     notifyEmployeesUpdated();
   } catch {
     /* ignore */
@@ -239,4 +103,51 @@ export function restoreEmployee(list, id) {
       ? { ...e, isArchived: false, archivedAt: null, accountStatus: "active" }
       : e,
   );
+}
+
+function isApiManagerSession(session) {
+  if (!session || session.role !== "manager") return false;
+  if (session.source === "api") return true;
+  const accountId = session.id ?? getActiveAccountIdFromUrl();
+  return Boolean(getManagerApiToken(accountId));
+}
+
+export async function refreshEmployeesFromApi() {
+  const accountId = getActiveAccountIdFromUrl();
+  const session = getAuthSession(accountId);
+  if (!isApiManagerSession(session)) {
+    return { ok: false, skipped: true };
+  }
+
+  const result = await fetchManagerEmployees();
+  if (!result.ok) return result;
+
+  saveEmployees(result.employees);
+  return { ok: true, employees: loadEmployees() };
+}
+
+export async function persistEmployeeArchiveApi(row) {
+  if (!row?.userId || row.isPendingInvite) {
+    return { ok: false, error: "لا يمكن أرشفة هذا السجل" };
+  }
+
+  const result = await updateManagerEmployee(row.userId, {
+    isArchived: true,
+    accountStatus: "archived",
+  });
+
+  if (!result.ok) return result;
+  await refreshEmployeesFromApi();
+  return result;
+}
+
+export async function persistCancelInvitation(row) {
+  if (!row?.invitationId) {
+    return { ok: false, error: "لا يمكن إلغاء هذه الدعوة" };
+  }
+
+  const result = await cancelManagerInvitation(row.invitationId);
+  if (!result.ok) return result;
+  await refreshEmployeesFromApi();
+  return result;
 }

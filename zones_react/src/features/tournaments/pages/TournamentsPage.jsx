@@ -1,35 +1,63 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
+import { useManagerPaths } from "../../../shared/tenant/ManagerWorkspaceProvider";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import TournamentsListTable from "../components/TournamentsListTable";
-import { generateTournamentBracket } from "../bracket/bracketStorage";
-import { isTournamentParticipantsFull } from "../data/tournamentParticipantsStorage";
+import CreateTournamentModal from "../components/CreateTournamentModal";
 import {
-  archiveTournamentRow,
-  loadTournamentRows,
-  saveTournamentRows,
-} from "../tournamentsListStorage";
+  cancelManagerTournament,
+  fetchManagerTournaments,
+} from "../data/managerTournamentsApi";
+import { buildManagerTournamentRoutes } from "../managerTournamentRoutes";
 
 const PAGE_SIZE = 5;
 
 export default function TournamentsPage() {
   const navigate = useNavigate();
-  const [allRows, setAllRows] = useState(() => loadTournamentRows());
+  const { routes } = useManagerPaths();
+  const tournamentRoutes = buildManagerTournamentRoutes(routes);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const autoOpenAdd = searchParams.get("add") === "1";
+
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
-  const skipNextSave = useRef(true);
-
-  const rows = useMemo(() => allRows.filter((r) => !r.isArchived), [allRows]);
+  const [createOpen, setCreateOpen] = useState(false);
 
   useEffect(() => {
-    if (skipNextSave.current) {
-      skipNextSave.current = false;
-      return;
+    if (autoOpenAdd) {
+      setCreateOpen(true);
+      setSearchParams({}, { replace: true });
     }
-    saveTournamentRows(allRows);
-  }, [allRows]);
+  }, [autoOpenAdd, setSearchParams]);
+
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    const result = await fetchManagerTournaments();
+    if (!result.ok) {
+      setLoadError(result.error || "تعذر تحميل البطولات.");
+      setRows([]);
+    } else {
+      setRows(result.tournaments);
+    }
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    reload();
+    const poll = window.setInterval(reload, 8000);
+    const onFocus = () => reload();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [reload]);
 
   const filtered = useMemo(() => {
     const q = search.trim();
@@ -54,99 +82,106 @@ export default function TournamentsPage() {
     setPage(1);
   }, [search]);
 
-  const updateRow = (id, patch) => {
-    setAllRows((list) => list.map((r) => (r.id === id ? { ...r, ...patch } : r)));
-  };
-
-  const openParticipants = (row) => {
-    navigate(`/tournaments/${row.id}/participants`, {
-      state: { tournament: row, from: "list" },
-    });
-  };
-
-  const handleGenerateBracket = async (row) => {
-    if (!isTournamentParticipantsFull(row.id, row.participants)) {
-      zonesToastError("لم يكتمل عدد المشاركين بعد.");
-      return;
-    }
-    const ok = await zonesConfirm({
-      title: "توليد المواجهات؟",
-      text: `سيتم إجراء قرعة عشوائية وتوزيع ${row.participants} مشتركاً على شجرة الإقصاء.`,
-      confirmText: "توليد الجدول",
-      cancelText: "تراجع",
-    });
-    if (!ok) return;
-
-    const result = generateTournamentBracket(row);
-    if (!result.ok) {
-      zonesToastError(result.error);
-      return;
-    }
-    updateRow(row.id, { status: "started" });
-    zonesToastSuccess("تم توليد شجرة البطولة");
-    navigate(`/tournaments/${row.id}/bracket`, {
-      state: { tournament: { ...row, status: "started" }, from: "list" },
-    });
-  };
-
-  const handleArchive = async (row) => {
-    const ok = await zonesConfirm({
-      title: "أرشفة البطولة؟",
-      text: `سيتم نقل «${row.name}» للأرشيف وإخفاؤها من واجهة الزبائن.`,
-      confirmText: "أرشفة",
-      cancelText: "تراجع",
-    });
-    if (!ok) return;
-    setAllRows((list) => archiveTournamentRow(list, row.id));
-    zonesToastSuccess("تمت الأرشفة");
-  };
-
   const handleCancel = async (row) => {
     const ok = await zonesConfirm({
       title: "إلغاء البطولة؟",
-      text: `حالة طارئة — سيتم إلغاء «${row.name}» قبل بدئها.`,
+      text: `سيتم إلغاء «${row.name}» وإخفاؤها من تطبيق الزبون.`,
       icon: "warning",
       confirmText: "إلغاء البطولة",
       cancelText: "تراجع",
       danger: true,
     });
     if (!ok) return;
-    updateRow(row.id, { status: "cancelled" });
+
+    const result = await cancelManagerTournament(row.id);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذر إلغاء البطولة.");
+      return;
+    }
     zonesToastSuccess("تم إلغاء البطولة");
+    reload();
   };
 
-  const canGenerate = (row) =>
-    row.status === "upcoming" && isTournamentParticipantsFull(row.id, row.participants);
+  const handleBulkCancel = async (targets) => {
+    const ok = await zonesConfirm({
+      title: `إلغاء ${targets.length} بطولات؟`,
+      text: `سيتم إلغاء ${targets.length} بطولات وإخفاؤها من تطبيق الزبون.`,
+      icon: "warning",
+      confirmText: "إلغاء البطولات",
+      cancelText: "تراجع",
+      danger: true,
+    });
+    if (!ok) return;
 
-  const canArchive = (row) => row.status === "started" || row.status === "finished";
+    let success = 0;
+    for (const row of targets) {
+      const result = await cancelManagerTournament(row.id);
+      if (result.ok) success += 1;
+    }
 
-  const canCancel = (row) => row.status === "upcoming";
+    if (!success) {
+      zonesToastError("تعذر إلغاء البطولات المحددة.");
+      return;
+    }
+
+    zonesToastSuccess(`تم إلغاء ${success} من ${targets.length} بطولات`);
+    reload();
+  };
+
+  const canCancel = (row) => row.status !== "cancelled" && row.status !== "finished";
 
   return (
     <ManagerLayout>
       <PageHeader
-        title="عرض البطولات"
-        description="إدارة البطولات — مشاركون، توليد المواجهات، أرشفة، أو إلغاء."
+        title="البطولات"
+        description="إنشاء وإدارة البطولات — متزامنة مع تطبيق الزبون."
       />
 
-      <TournamentsListTable
-        rows={paged}
-        search={search}
-        onSearchChange={setSearch}
-        page={page}
-        totalPages={totalPages}
-        totalItems={filtered.length}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-        onParticipants={openParticipants}
-        onGenerateBracket={handleGenerateBracket}
-        onArchive={handleArchive}
-        onCancel={handleCancel}
-        canGenerate={canGenerate}
-        canArchive={canArchive}
-        canCancel={canCancel}
-        actionsMode="manager"
+      {loadError ? (
+        <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600 dark:border-red-900/40 dark:bg-red-950/20">
+          {loadError}
+        </p>
+      ) : null}
+
+      {loading && rows.length === 0 ? (
+        <p className="py-10 text-center text-sm text-gray-500">جاري تحميل البطولات...</p>
+      ) : (
+        <TournamentsListTable
+          rows={paged}
+          allRows={filtered}
+          search={search}
+          onSearchChange={setSearch}
+          page={page}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          onDetails={(row) => {
+            navigate(tournamentRoutes.details(row.id), { state: { tournament: row, from: "list" } });
+          }}
+          onParticipants={(row) => {
+            navigate(tournamentRoutes.participants(row.id), {
+              state: { tournament: row, from: "list" },
+            });
+          }}
+          onBracket={(row) => {
+            navigate(tournamentRoutes.bracket(row.id), { state: { tournament: row, from: "list" } });
+          }}
+          onCancel={handleCancel}
+          onBulkCancel={handleBulkCancel}
+          canCancel={canCancel}
+          actionsMode="manager"
+          showAddButton
+          onAdd={() => setCreateOpen(true)}
+        />
+      )}
+
+      <CreateTournamentModal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        onSaved={() => reload()}
       />
+
     </ManagerLayout>
   );
 }

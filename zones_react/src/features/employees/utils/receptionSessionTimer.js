@@ -5,7 +5,7 @@ function parseHourOnDate(dateIso, hourStr) {
   return new Date(`${dateIso}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`);
 }
 
-/** نهاية الجلسة = ساعة «إلى» من الحجز، أو ساعة البداية + ساعة واحدة */
+/** Session end = booking hourTo, or start + 1 hour (legacy countdown helper). */
 export function getSlotSessionEndTime(dateIso, hourStr, hourToStr) {
   if (hourToStr && hourToStr !== "—" && hourToStr !== hourStr) {
     return parseHourOnDate(dateIso, hourToStr);
@@ -19,13 +19,23 @@ export function getSessionRemainingMs(dateIso, hourStr, hourToStr, now = Date.no
   return Math.max(0, end.getTime() - now);
 }
 
-export function formatSessionRemaining(ms) {
-  const totalSec = Math.ceil(ms / 1000);
+/** Live elapsed duration since session started (increasing timer). */
+export function getSessionElapsedMs(startedAtIso, now = Date.now()) {
+  if (!startedAtIso) return 0;
+  const startMs = new Date(startedAtIso).getTime();
+  if (!Number.isFinite(startMs)) return 0;
+  return Math.max(0, now - startMs);
+}
+
+export function formatSessionDuration(ms) {
+  const totalSec = Math.max(0, Math.floor(ms / 1000));
   const hours = Math.floor(totalSec / 3600);
   const minutes = Math.floor((totalSec % 3600) / 60);
   const seconds = totalSec % 60;
-  if (hours > 0) {
-    return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
-  }
-  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  return `${String(hours).padStart(2, "0")}:${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+/** @deprecated Use formatSessionDuration with getSessionElapsedMs for live sessions */
+export function formatSessionRemaining(ms) {
+  return formatSessionDuration(ms);
 }

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { Outlet } from "react-router-dom";
+import { Outlet, useParams } from "react-router-dom";
 import MaintenanceEmployeeSidebar from "../../features/employees/components/MaintenanceEmployeeSidebar";
 import MaintenanceEmployeeTopBar from "../../features/employees/components/MaintenanceEmployeeTopBar";
 import { getMaintenancePendingBadgeCount } from "../../features/employees/data/maintenanceDashboardData";
@@ -10,7 +10,8 @@ import useActiveSessionGuard from "../hooks/useActiveSessionGuard";
 
 export default function EmployeeMaintenanceLayout() {
   useActiveSessionGuard();
-  const session = getAuthSession();
+  const { employeeId } = useParams();
+  const session = getAuthSession(employeeId);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [pendingCount, setPendingCount] = useState(getMaintenancePendingBadgeCount);
 

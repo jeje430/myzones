@@ -6,9 +6,9 @@ import KpiCard from "../../super-admin/components/ui/KpiCard";
 import { getAuthSession } from "../../auth/data/mockUsersStorage";
 import { loadManagerHall } from "../../lounge/data/managerHallStorage";
 import ManagerWorkHoursChart from "../components/ManagerWorkHoursChart";
-import { workHoursData } from "../data/workHoursData";
+import { getWorkHoursCaption, getWorkHoursChartData } from "../data/workHoursData";
 import HallServicesManagerPicker from "../../lounge/components/HallServicesManagerPicker";
-import { getManagerDashboardKpis, MANAGER_DASHBOARD_EVENTS } from "../data/managerDashboardData";
+import { getManagerDashboardKpis, MANAGER_DASHBOARD_EVENTS, refreshManagerDashboardFinance } from "../data/managerDashboardData";
 
 export default function DashboardPage() {
   const session = getAuthSession();
@@ -16,7 +16,10 @@ export default function DashboardPage() {
   const [kpis, setKpis] = useState(getManagerDashboardKpis);
 
   useEffect(() => {
-    const refresh = () => setKpis(getManagerDashboardKpis());
+    const refresh = async () => {
+      await refreshManagerDashboardFinance();
+      setKpis(getManagerDashboardKpis());
+    };
     refresh();
     for (const eventName of MANAGER_DASHBOARD_EVENTS) {
       window.addEventListener(eventName, refresh);
@@ -30,11 +33,17 @@ export default function DashboardPage() {
     };
   }, []);
 
+  const hallLabel = hall.hallName?.trim()
+    ? `صالة ${hall.hallName}`
+    : session?.stationName
+      ? `صالة ${session.stationName}`
+      : "أكمل إعداد صالتك من إدارة الصالة";
+
   return (
     <ManagerLayout>
       <PageHeader
         title="لوحة التحكم"
-        description={`مرحباً ${session?.fullName || "مدير الصالة"} — صالة ${hall.hallName}`}
+        description={`مرحباً ${session?.fullName || "مدير الصالة"} — ${hallLabel}`}
       />
 
       <div className="mb-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -60,7 +69,7 @@ export default function DashboardPage() {
         />
       </div>
 
-      <ManagerWorkHoursChart data={workHoursData} />
+      <ManagerWorkHoursChart data={getWorkHoursChartData()} caption={getWorkHoursCaption()} />
 
       <div className="mt-6">
         <HallServicesManagerPicker compact />

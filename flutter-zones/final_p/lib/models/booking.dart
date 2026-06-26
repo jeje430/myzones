@@ -25,6 +25,8 @@ class Booking {
     this.tournamentId,
     this.loungeId,
     this.gameName,
+    this.serverId,
+    this.receiptPdfUrl,
   });
 
   final String id;
@@ -44,6 +46,8 @@ class Booking {
   final String? tournamentId;
   final String? loungeId;
   final String? gameName;
+  final int? serverId;
+  final String? receiptPdfUrl;
 
   bool get isActive => status == BookingStatus.active;
   bool get isCancelled => status == BookingStatus.cancelled;
@@ -83,6 +87,8 @@ class Booking {
     String? tournamentId,
     String? loungeId,
     String? gameName,
+    int? serverId,
+    String? receiptPdfUrl,
   }) {
     return Booking(
       id: id ?? this.id,
@@ -102,6 +108,8 @@ class Booking {
       tournamentId: tournamentId ?? this.tournamentId,
       loungeId: loungeId ?? this.loungeId,
       gameName: gameName ?? this.gameName,
+      serverId: serverId ?? this.serverId,
+      receiptPdfUrl: receiptPdfUrl ?? this.receiptPdfUrl,
     );
   }
 }

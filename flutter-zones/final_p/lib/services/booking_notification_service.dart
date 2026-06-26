@@ -24,10 +24,10 @@ class BookingNotificationService {
       appState.pushNotification(
         AppNotification(
           id: confirmId,
-          title: 'تم الحجز بنجاح!',
+          title: 'تم إكمال الحجز بنجاح',
           body: isOffer
               ? 'تم تأكيد حجز العرض «${booking.title}» في $loungeLabel.'
-              : 'تم تأكيد حجزك في $loungeLabel — ${booking.time}',
+              : 'تم إكمال حجزك بنجاح — يمكنك عرضه من «حجوزاتي». ${booking.time}',
           createdAt: DateTime.now(),
           icon: Icons.check_circle_rounded,
           color: const Color(0xFF06B6D4),

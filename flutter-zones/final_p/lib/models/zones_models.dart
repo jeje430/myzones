@@ -18,6 +18,16 @@ class OfferModel {
 
   final double? discountedPrice;
 
+  final int? discountPercent;
+
+  final int? stationId;
+
+  final int? packageId;
+
+  final String stationName;
+
+  final String packageName;
+
   final List<String> terms;
 
 
@@ -40,9 +50,23 @@ class OfferModel {
 
     this.discountedPrice,
 
+    this.discountPercent,
+
+    this.stationId,
+
+    this.packageId,
+
+    this.stationName = '',
+
+    this.packageName = '',
+
     this.terms = const [],
 
   });
+
+
+
+  bool get isBookable => stationId != null && packageId != null && stationId! > 0 && packageId! > 0;
 
 
 
@@ -168,6 +192,16 @@ class OfferModel {
 
       discountedPrice: (json['discounted_price'] as num?)?.toDouble(),
 
+      discountPercent: (json['discount_percent'] as num?)?.toInt(),
+
+      stationId: (json['station_id'] as num?)?.toInt(),
+
+      packageId: (json['package_id'] as num?)?.toInt(),
+
+      stationName: json['station_name']?.toString() ?? '',
+
+      packageName: json['package_name']?.toString() ?? '',
+
       terms: (json['terms'] as List<dynamic>?)
 
               ?.map((e) => e.toString())
@@ -230,21 +264,29 @@ class TimeSlotModel {
 
 class UserModel {
 
+  final int? id;
+
   final String name;
 
   final String phone;
 
   final String email;
 
+  final String? profileImage;
+
 
 
   UserModel({
+
+    this.id,
 
     required this.name,
 
     required this.phone,
 
     required this.email,
+
+    this.profileImage,
 
   });
 
@@ -254,11 +296,15 @@ class UserModel {
 
     return UserModel(
 
-      name: json['name'] ?? '',
+      id: json['id'] as int?,
 
-      phone: json['phone'] ?? '',
+      name: (json['name'] ?? json['full_name'] ?? '') as String,
 
-      email: json['email'] ?? '',
+      phone: (json['phone'] ?? '') as String,
+
+      email: (json['email'] ?? '') as String,
+
+      profileImage: json['profile_image'] as String?,
 
     );
 
@@ -274,11 +320,13 @@ class UserModel {
 
         'email': email,
 
+        if (profileImage != null) 'profile_image': profileImage,
+
       };
 
 
 
-  UserModel copyWith({String? name, String? phone, String? email}) {
+  UserModel copyWith({String? name, String? phone, String? email, String? profileImage}) {
 
     return UserModel(
 
@@ -287,6 +335,8 @@ class UserModel {
       phone: phone ?? this.phone,
 
       email: email ?? this.email,
+
+      profileImage: profileImage ?? this.profileImage,
 
     );
 

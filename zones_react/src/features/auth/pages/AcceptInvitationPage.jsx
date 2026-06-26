@@ -19,7 +19,7 @@ export default function AcceptInvitationPage() {
   useEffect(() => {
     const pending = getPendingInvite();
     if (!pending) {
-      navigate("/auth/login", { replace: true });
+      navigate("/manager/login", { replace: true });
       return;
     }
     setInvite(pending);
@@ -75,7 +75,7 @@ export default function AcceptInvitationPage() {
     }
 
     clearPendingInvite();
-    navigate("/auth/login", {
+    navigate("/manager/login", {
       replace: true,
       state: {
         registeredEmail: invite.email,
@@ -152,7 +152,7 @@ export default function AcceptInvitationPage() {
           إرسال وإنشاء الحساب
         </button>
 
-        <Link className="inline-link" to="/auth/login">
+        <Link className="inline-link" to="/manager/login">
           لديك حساب؟ تسجيل الدخول
         </Link>
       </form>

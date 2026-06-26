@@ -1,9 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Power, PowerOff } from "lucide-react";
 import { zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
 import ToggleSwitch from "../../super-admin/components/ui/ToggleSwitch";
 import TablePagination from "../../../shared/components/TablePagination";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
 import { useDevicesStorageSync } from "../../devices-packages/hooks/useDevicesStorageSync";
 import { loadPackages, PACKAGES_STORAGE_EVENT } from "../../devices-packages/data/packagesStorage";
 import { isDeviceBroken, loadSyncedActiveDevices } from "../../devices-packages/utils/deviceFaultSync";
@@ -81,6 +93,8 @@ export default function MaintenanceDevicesPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: devices, pageIds });
   const brokenCount = useMemo(() => devices.filter(isDeviceBroken).length, [devices]);
 
   useEffect(() => {
@@ -98,11 +112,53 @@ export default function MaintenanceDevicesPage() {
   };
 
   const handleToggle = (row, nextActive) => {
+    const targetIds = resolveBulkActionIds(row.id, selection.selectedIds);
+    const targets = filterItemsByIds(devices, targetIds);
+
     if (nextActive) {
-      if (tryEnableDevice(row.id)) refresh();
+      let success = 0;
+      for (const target of targets) {
+        if (tryEnableDevice(target.id)) success += 1;
+      }
+      if (success > 0) {
+        selection.clearSelection();
+        refresh();
+      }
       return;
     }
+
+    if (targetIds.length > 1) {
+      const unlocked = targets.filter((target) => !isDeviceToggleLocked(target));
+      if (!unlocked.length) return;
+      openReportFault(unlocked[0].id);
+      return;
+    }
+
     openReportFault(row.id);
+  };
+
+  const handleBulkEnable = () => {
+    const targets = filterItemsByIds(devices, selection.selectedIds).filter(
+      (row) => row.isActive === false && !isDeviceToggleLocked(row),
+    );
+    if (!targets.length) return;
+    let success = 0;
+    for (const row of targets) {
+      if (tryEnableDevice(row.id)) success += 1;
+    }
+    if (success > 0) {
+      selection.clearSelection();
+      refresh();
+      zonesToastSuccess(`تم تفعيل ${success} من ${targets.length} أجهزة`);
+    }
+  };
+
+  const handleBulkReportFault = () => {
+    const targets = filterItemsByIds(devices, selection.selectedIds).filter(
+      (row) => !isDeviceToggleLocked(row) && row.isActive !== false,
+    );
+    if (!targets.length) return;
+    openReportFault(targets[0].id);
   };
 
   const handleAddFault = (payload) => {
@@ -146,10 +202,20 @@ export default function MaintenanceDevicesPage() {
           />
         </div>
 
+        <TableBulkActionBar
+          count={selection.count}
+          onClear={selection.clearSelection}
+          actions={[
+            { label: "تفعيل المحدد", icon: Power, onClick: handleBulkEnable },
+            { label: "تعطيل المحدد", icon: PowerOff, onClick: handleBulkReportFault },
+          ]}
+        />
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[680px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">الجهاز</th>
                 <th className="px-3 py-2.5 font-bold">تاريخ الإضافة</th>
                 <th className="px-3 py-2.5 font-bold">حالة العطل</th>
@@ -159,7 +225,7 @@ export default function MaintenanceDevicesPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={4} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={5} className="px-3 py-10 text-center text-gray-400">
                     لا توجد أجهزة — أضف من لوحة المدير (/devices).
                   </td>
                 </tr>
@@ -170,10 +236,11 @@ export default function MaintenanceDevicesPage() {
                   return (
                     <tr
                       key={row.id}
-                      className={`transition hover:bg-gray-50 dark:hover:bg-gray-800/50 ${
+                      className={`${selectableRowClass(selection.isSelected(row.id))} ${
                         broken ? "bg-red-50/25 dark:bg-red-950/10" : ""
                       }`}
                     >
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
                       <td className="px-3 py-3">
                         <DeviceNameCell device={row} />
                       </td>

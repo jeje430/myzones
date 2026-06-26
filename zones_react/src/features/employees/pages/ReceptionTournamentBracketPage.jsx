@@ -1,17 +1,12 @@
 import TournamentBracketSection from "../../tournaments/components/TournamentBracketSection";
-
-import { RECEPTION_EMPLOYEE_ROUTES } from "../data/receptionEmployeeRoutes";
-
-
-
-const RECEPTION_TOURNAMENT_ROUTES = {
-  tournaments: RECEPTION_EMPLOYEE_ROUTES.tournaments,
-  details: (id) => RECEPTION_EMPLOYEE_ROUTES.tournamentDetails(id),
-  participants: (id) => RECEPTION_EMPLOYEE_ROUTES.tournamentParticipants(id),
-};
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 
 export default function ReceptionTournamentBracketPage() {
-  return <TournamentBracketSection routes={RECEPTION_TOURNAMENT_ROUTES} readOnly />;
+  const { routes } = useReceptionEmployeeRoutes();
+  const tournamentRoutes = {
+    tournaments: routes.tournaments,
+    details: (id) => routes.tournamentDetails(id),
+    participants: (id) => routes.tournamentParticipants(id),
+  };
+  return <TournamentBracketSection routes={tournamentRoutes} readOnly />;
 }
-
-

@@ -397,3 +397,119 @@
   background: rgba(107, 84, 120, 0.1);
   box-shadow: none;
 }
+
+.finance-package-usage-section {
+  margin-top: 0.25rem;
+}
+
+.finance-package-usage {
+  border-radius: 16px;
+  border: 1px solid rgba(107, 84, 120, 0.35);
+  background: linear-gradient(145deg, rgba(17, 24, 39, 0.72), rgba(9, 15, 47, 0.88));
+  padding: 1.1rem 1.25rem 1.25rem;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.22);
+}
+
+.finance-package-usage__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.finance-package-usage__title {
+  margin: 0;
+}
+
+.finance-package-usage__subtitle {
+  margin: 0.35rem 0 0;
+  font-size: 0.82rem;
+  color: #94a3b8;
+}
+
+.finance-package-usage__filters {
+  margin-bottom: 0.75rem;
+}
+
+.finance-package-usage__body {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(200px, 1fr);
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.finance-package-usage__chart {
+  min-height: 260px;
+  height: 280px;
+}
+
+.finance-package-usage__legend {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.finance-package-usage__legend-item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.84rem;
+}
+
+.finance-package-usage__legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 999px;
+  box-shadow: 0 0 10px currentColor;
+}
+
+.finance-package-usage__legend-name {
+  font-weight: 600;
+  color: #f3f4f6;
+}
+
+.finance-package-usage__legend-meta {
+  color: #94a3b8;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.finance-package-usage__empty {
+  padding: 2rem 1rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.9rem;
+  border: 1px dashed rgba(107, 84, 120, 0.45);
+  border-radius: 12px;
+}
+
+@media (max-width: 768px) {
+  .finance-package-usage__body {
+    grid-template-columns: 1fr;
+  }
+
+  .finance-package-usage__chart {
+    height: 240px;
+  }
+}
+
+[data-theme="light"] .finance-package-usage {
+  background: var(--card-bg);
+  border-color: var(--input-border);
+  box-shadow: var(--card-shadow);
+}
+
+[data-theme="light"] .finance-package-usage__subtitle,
+[data-theme="light"] .finance-package-usage__legend-meta,
+[data-theme="light"] .finance-package-usage__empty {
+  color: var(--muted);
+}
+
+[data-theme="light"] .finance-package-usage__legend-name {
+  color: var(--text);
+}

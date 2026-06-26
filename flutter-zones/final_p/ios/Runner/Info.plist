@@ -45,6 +45,10 @@
 	<string>يستخدم ZONEZ موقعك لعرض صالات الألعاب القريبة منك على الخريطة.</string>
 	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
 	<string>يستخدم ZONEZ موقعك لعرض صالات الألعاب القريبة منك على الخريطة.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>يُستخدم الوصول للكاميرا لالتقاط صورة الملف الشخصي.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>يُستخدم الوصول للمعرض لاختيار صورة الملف الشخصي.</string>
 	<key>io.flutter.embedded_views_preview</key>
 	<true/>
 	<key>CADisableMinimumFrameDurationOnPhone</key>

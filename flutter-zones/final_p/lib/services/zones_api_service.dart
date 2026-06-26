@@ -1,3 +1,5 @@
+import '../core/config/api_config.dart';
+import '../core/http/api_client.dart';
 import '../data/repositories/offer_catalog_repository.dart';
 import '../models/zones_models.dart';
 
@@ -11,33 +13,21 @@ class BookingConfirmation {
   final double finalPrice;
 }
 
-/// Simulated Laravel API layer — swap method bodies for HTTP when backend is ready.
+/// Laravel API layer for offers and profile.
 class ZonesApiService {
   ZonesApiService._();
   static final ZonesApiService instance = ZonesApiService._();
 
-  static const _baseUrl = 'https://api.zones.app';
-
+  final ApiClient _api = ApiClient.instance;
   final OfferCatalogRepository _offers = OfferCatalogRepository.instance;
 
-  UserModel _user = UserModel(
-    name: 'أحمد محمد',
-    phone: '+218 91 234 5678',
-    email: 'ahmed@zones.com',
-  );
+  UserModel? _user;
 
-  Future<void> _simulateNetworkDelay() =>
-      Future<void>.delayed(const Duration(milliseconds: 400));
+  Future<List<OfferModel>> fetchOffers({bool forceRefresh = false}) =>
+      _offers.fetchActiveOffers(forceRefresh: forceRefresh);
 
-  Future<List<OfferModel>> fetchOffers() async {
-    await _simulateNetworkDelay();
-    return _offers.fetchActiveOffers();
-  }
-
-  Future<List<TimeSlotModel>> fetchTimeSlots(int offerId) async {
-    await _simulateNetworkDelay();
-    return _offers.fetchTimeSlots(offerId);
-  }
+  Future<List<TimeSlotModel>> fetchTimeSlots(int offerId) =>
+      _offers.fetchTimeSlots(offerId);
 
   double getOfferPrice(int offerId) => _offers.getOfferPrice(offerId);
 
@@ -46,15 +36,10 @@ class ZonesApiService {
     required int timeSlotId,
     required String loungeName,
   }) async {
-    await _simulateNetworkDelay();
-
     final bookingId = await _offers.confirmSlotBooking(
       offerId: offerId,
       timeSlotId: timeSlotId,
     );
-
-    // ignore: avoid_print
-    print('POST $_baseUrl/api/bookings → booking_id: $bookingId');
 
     return BookingConfirmation(
       bookingId: bookingId,
@@ -63,19 +48,64 @@ class ZonesApiService {
   }
 
   Future<UserModel> fetchUserProfile() async {
-    await _simulateNetworkDelay();
-    return _user;
+    final body = await _api.get(ApiConfig.profile) as Map<String, dynamic>;
+    final userJson = body['user'] as Map<String, dynamic>;
+    _user = _userFromJson(userJson);
+    return _user!;
   }
 
   Future<UserModel> updateUserProfile(UserModel updatedUser) async {
-    await _simulateNetworkDelay();
-    // ignore: avoid_print
-    print('PUT $_baseUrl/api/profile → ${updatedUser.toJson()}');
-    _user = updatedUser;
-    return _user;
+    final body = await _api.put(
+      ApiConfig.profileUpdate,
+      body: {
+        'name': updatedUser.name,
+        'phone': updatedUser.phone,
+      },
+    ) as Map<String, dynamic>;
+
+    final userJson = body['user'] as Map<String, dynamic>;
+    _user = _userFromJson(userJson);
+    return _user!;
   }
 
   void setCurrentUser(UserModel user) {
     _user = user;
+  }
+
+  UserModel _userFromJson(Map<String, dynamic> json) {
+    return UserModel(
+      name: (json['name'] ?? json['full_name'] ?? '') as String,
+      phone: (json['phone'] ?? '') as String,
+      email: (json['email'] ?? '') as String,
+      profileImage: json['profile_image'] as String?,
+    );
+  }
+
+  Future<UserModel> uploadProfileAvatar(List<int> bytes, {String filename = 'avatar.jpg'}) async {
+    final body = await _api.postMultipart(
+      ApiConfig.profileAvatar,
+      fieldName: 'avatar',
+      bytes: bytes,
+      filename: filename,
+    ) as Map<String, dynamic>;
+
+    final avatarUrl = body['avatar_url'] as String?;
+    final userJson = body['user'] as Map<String, dynamic>?;
+    if (userJson == null) {
+      throw ApiException(statusCode: 500, message: 'استجابة غير متوقعة من الخادم');
+    }
+
+    _user = _userFromJson(userJson);
+    if (avatarUrl != null && avatarUrl.isNotEmpty) {
+      _user = _user!.copyWith(profileImage: avatarUrl);
+    }
+    return _user!;
+  }
+
+  Future<UserModel> deleteProfileAvatar() async {
+    final body = await _api.delete(ApiConfig.profileAvatar) as Map<String, dynamic>;
+    final userJson = body['user'] as Map<String, dynamic>;
+    _user = _userFromJson(userJson);
+    return _user!;
   }
 }

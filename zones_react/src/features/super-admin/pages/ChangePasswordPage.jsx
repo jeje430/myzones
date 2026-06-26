@@ -2,25 +2,24 @@ import { useState } from "react";
 import { KeyRound, ShieldCheck } from "lucide-react";
 import { zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import PageHeader from "../components/ui/PageHeader";
-import { changeSuperAdminPassword, verifySuperAdminPassword } from "../data/superAdminAuth";
+import { changeSuperAdminPassword } from "../data/superAdminAuth";
 import { PasswordField } from "../../../components/ui/icon-field";
 
 export default function ChangePasswordPage() {
   const [oldPass, setOldPass] = useState("");
   const [newPass, setNewPass] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    if (!verifySuperAdminPassword(oldPass)) {
-      zonesToastError("كلمة المرور الحالية غير صحيحة");
-      return;
-    }
     if (newPass !== confirmPass) {
       zonesToastError("تأكيد كلمة المرور غير متطابق");
       return;
     }
-    const res = changeSuperAdminPassword(oldPass, newPass);
+    setLoading(true);
+    const res = await changeSuperAdminPassword(oldPass, newPass);
+    setLoading(false);
     if (!res.ok) {
       zonesToastError(res.error);
       return;
@@ -52,9 +51,10 @@ export default function ChangePasswordPage() {
 
           <button
             type="submit"
-            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6B5478] py-2.5 text-xs font-bold text-white transition hover:bg-[#5a4665]"
+            disabled={loading}
+            className="flex w-full items-center justify-center gap-2 rounded-xl bg-[#6B5478] py-2.5 text-xs font-bold text-white transition hover:bg-[#5a4665] disabled:opacity-60"
           >
-            <KeyRound size={14} /> تغيير كلمة المرور
+            <KeyRound size={14} /> {loading ? "جاري التحديث..." : "تغيير كلمة المرور"}
           </button>
         </form>
       </div>

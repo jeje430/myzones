@@ -1,9 +1,27 @@
 import { calcOfferPrice, parsePriceNumber } from "./offerMeta";
 import { loadActivePackages } from "../../devices-packages/data/packagesStorage";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+import { fetchManagerOffers } from "./managerOffersApi";
+import { getActiveStaffSession, isApiStaffSession } from "../../devices-packages/data/hallCatalogSync";
 
-const STORAGE_KEY = "zones-offers-v1";
+const BASE_KEY = "zones-offers-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const OFFERS_STORAGE_EVENT = "zones-offers-updated";
+
+const LEGACY_KEYS = ["zones-offers-v1", "zones-offers-v2"];
+const LEGACY_PURGE_FLAG = "zones-offers-legacy-purged-v3";
+
+function purgeLegacyOfferStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
+}
+
+purgeLegacyOfferStorage();
 
 function notifyUpdated() {
   if (typeof window === "undefined") return;
@@ -18,52 +36,7 @@ function slashToIso(slashDate) {
   return `${y}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-const DEFAULT_OFFERS = [
-  {
-    id: 1,
-    name: "خصم نهاية الأسبوع",
-    packageId: 3,
-    discountPercent: 30,
-    description: "خصم على باقة الأساسية أيام الجمعة والسبت.",
-    startDate: "2026-05-01",
-    endDate: "2026-12-31",
-    isActive: true,
-    createdAt: "2026-04-20T10:00:00",
-  },
-  {
-    id: 2,
-    name: "باقة الصيف الموسمية",
-    packageId: 1,
-    discountPercent: 20,
-    description: "خصم على باقة VIP مع مشروب مجاني.",
-    startDate: "2026-06-01",
-    endDate: "2026-08-31",
-    isActive: true,
-    createdAt: "2026-05-15T09:00:00",
-  },
-  {
-    id: 3,
-    name: "عرض الطلاب",
-    packageId: 4,
-    discountPercent: 15,
-    description: "خصم على باقة الطالب مع إثبات تسجيل.",
-    startDate: "2026-01-10",
-    endDate: "2026-04-30",
-    isActive: false,
-    createdAt: "2026-01-05T08:00:00",
-  },
-  {
-    id: 4,
-    name: "عرض المحترف",
-    packageId: 2,
-    discountPercent: 25,
-    description: "خصم على باقة المحترف — ساعة إضافية عند الحجز.",
-    startDate: "2026-05-12",
-    endDate: "2026-05-28",
-    isActive: true,
-    createdAt: "2026-05-10T11:00:00",
-  },
-];
+const DEFAULT_OFFERS = [];
 
 function normalizeOffer(row) {
   const packages = loadActivePackages();
@@ -103,21 +76,35 @@ export function getOfferPackagePrice(packageId, packages = loadActivePackages())
 
 export function loadOffers() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [...DEFAULT_OFFERS];
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) return [...DEFAULT_OFFERS];
+    if (!Array.isArray(parsed) || !parsed.length) return [];
     return parsed.map(normalizeOffer);
   } catch {
-    return [...DEFAULT_OFFERS];
+    return [];
   }
 }
 
 export function saveOffers(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(storageKey(), JSON.stringify(list));
     notifyUpdated();
   } catch {
     /* ignore */
   }
+}
+
+/** Sync offers from Laravel for manager API sessions. */
+export async function refreshOffersFromApi() {
+  const session = getActiveStaffSession();
+  if (!isApiStaffSession(session) || session.role !== "manager") {
+    return { ok: false, skipped: true };
+  }
+
+  const result = await fetchManagerOffers();
+  if (result.ok) {
+    saveOffers(result.offers.map(normalizeOffer));
+  }
+  return result;
 }

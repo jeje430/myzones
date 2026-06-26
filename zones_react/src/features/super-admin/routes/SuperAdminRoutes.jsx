@@ -2,11 +2,17 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import SuperAdminProtectedRoute from "../components/SuperAdminProtectedRoute";
 import SuperAdminLayout from "../layouts/SuperAdminLayout";
 import { SUPER_ADMIN_ROUTES } from "../data/superAdminConstants";
+import SuperAdminLoginPage from "../pages/SuperAdminLoginPage";
+import SuperAdminRegisterPage from "../pages/SuperAdminRegisterPage";
+import SuperAdminForgotPasswordPage from "../pages/SuperAdminForgotPasswordPage";
+import SuperAdminOtpPage from "../pages/SuperAdminOtpPage";
+import SuperAdminResetPasswordPage from "../pages/SuperAdminResetPasswordPage";
 import SuperAdminDashboardPage from "../pages/SuperAdminDashboardPage";
 import PendingRequestsPage from "../pages/PendingRequestsPage";
 import HallsManagementPage from "../pages/HallsManagementPage";
 import HallManagersPage from "../pages/HallManagersPage";
 import EmployeesManagementPage from "../pages/EmployeesManagementPage";
+import StaffManagementPage from "../pages/StaffManagementPage";
 import ArchivePage from "../pages/ArchivePage";
 import CommissionsPage from "../pages/CommissionsPage";
 import SystemSettingsPage from "../pages/SystemSettingsPage";
@@ -16,7 +22,11 @@ import ChangePasswordPage from "../pages/ChangePasswordPage";
 export default function SuperAdminRoutes() {
   return (
     <Routes>
-      <Route path="login" element={<Navigate to="/auth/login" replace />} />
+      <Route path="login" element={<SuperAdminLoginPage />} />
+      <Route path="register" element={<SuperAdminRegisterPage />} />
+      <Route path="forgot-password" element={<SuperAdminForgotPasswordPage />} />
+      <Route path="otp" element={<SuperAdminOtpPage />} />
+      <Route path="reset-password" element={<SuperAdminResetPasswordPage />} />
       <Route
         element={
           <SuperAdminProtectedRoute>
@@ -29,6 +39,7 @@ export default function SuperAdminRoutes() {
         <Route path="pending-requests" element={<PendingRequestsPage />} />
         <Route path="halls" element={<HallsManagementPage />} />
         <Route path="managers" element={<HallManagersPage />} />
+        <Route path="staff-management" element={<StaffManagementPage />} />
         <Route path="employees" element={<EmployeesManagementPage />} />
         <Route path="archive" element={<Navigate to="halls" replace />} />
         <Route path="archive/halls" element={<ArchivePage type="halls" />} />

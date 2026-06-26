@@ -1,9 +1,26 @@
 import { normalizeRole } from "../../employees/data/employeeMeta";
 import { loadEmployees, saveEmployees } from "../../employees/data/employeesStorage";
 import { normalizeGmailEmail } from "../../../shared/utils/normalizeGmailEmail";
+import { getActiveHallId } from "../../../shared/tenant/hallScopedStorage";
+import { EMPLOYEE_LOGIN_PATH, MANAGER_LOGIN_PATH } from "./authRoutes";
+import {
+  buildManagerWorkspacePath,
+  buildMaintenanceWorkspacePath,
+  buildReceptionWorkspacePath,
+  clearScopedAccount,
+  findScopedManagerSession,
+  getActiveAccountIdFromUrl,
+  getScopedToken,
+  migrateLegacySessionToScoped,
+  readLegacySession,
+  readScopedSession,
+  setScopedToken,
+  writeScopedSession,
+} from "./accountSessionStorage";
 
-const USERS_KEY = "zones-mock-users";
+const USERS_KEY = "zones-mock-users-v2";
 const SESSION_KEY = "zones-auth-session";
+const MANAGER_TOKEN_KEY = "zones-manager-token";
 const LEGACY_SESSION_KEY = "zones-auth-session"; // كان في sessionStorage
 export const PROFILE_UPDATED_EVENT = "zones-profile-updated";
 export const AUTH_SESSION_EVENT = "zones-auth-session-updated";
@@ -19,56 +36,7 @@ function authEmail(email) {
 const DEFAULT_MANAGER_AVATAR =
   "https://images.unsplash.com/photo-1560250097-0b93528c311a?w=200&h=200&fit=crop&crop=face";
 
-const DEFAULT_USERS = [
-  {
-    id: 1,
-    email: "manager@gmail.com",
-    password: "admin123",
-    role: "manager",
-    fullName: "أحمد المدير",
-    employeeId: null,
-    phone: "+218 91 000 0000",
-    avatar: DEFAULT_MANAGER_AVATAR,
-    residence: "طرابلس، ليبيا",
-    username: "ahmed_manager",
-    gender: "male",
-    birthDate: "1990-05-15",
-    jobTitle: "مدير صالة",
-    joinDate: "2024-01-15",
-  },
-  {
-    id: 2,
-    email: "khaled@gmail.com",
-    password: "1234",
-    role: "maintenance",
-    fullName: "خالد بوزريدة",
-    employeeId: 4,
-    phone: "+218 91 770 9920",
-    avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=200&h=200&fit=crop&crop=face",
-    residence: "طرابلس — عين زارة",
-    username: "khaled_maint",
-    gender: "male",
-    birthDate: "",
-    jobTitle: "موظف صيانة",
-    joinDate: "2023-11-20",
-  },
-  {
-    id: 3,
-    email: "ahmed@gmail.com",
-    password: "1234",
-    role: "reception",
-    fullName: "أحمد العقيبي",
-    employeeId: 1,
-    phone: "+218 91 234 5678",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face",
-    residence: "طرابلس — حي الأندلس",
-    username: "ahmed_reception",
-    gender: "male",
-    birthDate: "1995-08-12",
-    jobTitle: "موظف استقبال",
-    joinDate: "2024-03-15",
-  },
-];
+const DEFAULT_USERS = [];
 
 function normalizeUser(row) {
   return {
@@ -81,9 +49,15 @@ function normalizeUser(row) {
     gender: row.gender || "",
     birthDate: row.birthDate || "",
     jobTitle: row.jobTitle || "مدير صالة",
-    joinDate: row.joinDate || "2024-01-15",
+    joinDate: row.joinDate || new Date().toISOString().slice(0, 10),
     active: row.active !== false,
   };
+}
+
+export function loadMockUsers() {
+  const stored = loadUsersRaw();
+  if (!stored?.length) return [];
+  return stored.map(normalizeUser);
 }
 
 function loadUsersRaw() {
@@ -182,20 +156,6 @@ function ensureDemoAccountIdentity(list) {
   return { users: next, changed };
 }
 
-export function loadMockUsers() {
-  const stored = loadUsersRaw();
-  if (!stored?.length) {
-    saveMockUsers(DEFAULT_USERS);
-    return DEFAULT_USERS.map(normalizeUser);
-  }
-  const { users, changed } = ensureDefaultUsers(stored);
-  const { users: withIdentity, changed: identityChanged } = ensureDemoAccountIdentity(users);
-  const { users: repaired, changed: repairedChanged } = repairDemoAccountNamesOnce(withIdentity);
-  const { users: withPhotos, changed: photosChanged } = ensureDefaultProfilePhotos(repaired);
-  if (changed || identityChanged || repairedChanged || photosChanged) saveMockUsers(withPhotos);
-  return withPhotos;
-}
-
 export function saveMockUsers(list) {
   try {
     localStorage.setItem(USERS_KEY, JSON.stringify(list.map(normalizeUser)));
@@ -286,7 +246,7 @@ export function registerManagerUser({ email, password, fullName, phone, hallId =
   return { ok: true, user };
 }
 
-export function registerEmployeeUser({ email, password, fullName, role, employeeId }) {
+export function registerEmployeeUser({ email, password, fullName, role, employeeId, hallId = null }) {
   const list = loadMockUsers();
   const normalized = authEmail(email);
   if (!normalized) return { ok: false, error: "البريد غير صالح." };
@@ -300,6 +260,7 @@ export function registerEmployeeUser({ email, password, fullName, role, employee
     role: normalizeRole(role),
     fullName: fullName.trim(),
     employeeId,
+    hallId: hallId ?? getActiveHallId(),
     phone: "",
     avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&h=200&fit=crop&crop=face",
   });
@@ -416,7 +377,15 @@ export function restoreManagerSessionFromStore() {
   return setAuthSession(mgr);
 }
 
-function readSessionRaw() {
+function readSessionRaw(accountId) {
+  const urlAccountId = accountId ?? getActiveAccountIdFromUrl();
+  if (urlAccountId) {
+    const scoped = readScopedSession(urlAccountId);
+    if (scoped) return JSON.stringify(scoped);
+    const migrated = migrateLegacySessionToScoped(urlAccountId);
+    if (migrated) return JSON.stringify(migrated);
+  }
+
   try {
     let raw = localStorage.getItem(SESSION_KEY);
     if (!raw) {
@@ -432,6 +401,33 @@ function readSessionRaw() {
   }
 }
 
+export function getManagerApiToken(accountId) {
+  const id = accountId ?? getActiveAccountIdFromUrl();
+  if (id) {
+    const scoped = getScopedToken(id);
+    if (scoped) return scoped;
+    migrateLegacySessionToScoped(id);
+    return getScopedToken(id);
+  }
+  return localStorage.getItem(MANAGER_TOKEN_KEY) || null;
+}
+
+export function clearManagerApiToken(accountId) {
+  const id = accountId ?? getActiveAccountIdFromUrl();
+  if (id) {
+    setScopedToken(id, null);
+  }
+  localStorage.removeItem(MANAGER_TOKEN_KEY);
+}
+
+export function setApiManagerSession(user, token) {
+  const accountId = user?.id;
+  if (token && accountId != null) {
+    setScopedToken(accountId, token);
+  }
+  return setAuthSession({ ...user, source: "api" });
+}
+
 export function setAuthSession(user) {
   const loggedInAt = new Date().toISOString();
   const session = {
@@ -440,12 +436,18 @@ export function setAuthSession(user) {
     role: normalizeSessionRole(user.role),
     fullName: user.fullName,
     employeeId: user.employeeId ?? null,
+    hallId: user.hallId ?? null,
+    stationName: user.stationName ?? null,
     avatar: user.avatar || "",
     phone: user.phone || "",
     joinDate: user.joinDate || "",
+    source: user.source || "mock",
     loggedInAt,
   };
   try {
+    if (user.id != null) {
+      writeScopedSession(user.id, session);
+    }
     localStorage.setItem(SESSION_KEY, JSON.stringify(session));
     sessionStorage.removeItem(LEGACY_SESSION_KEY);
     if (typeof window !== "undefined") {
@@ -467,12 +469,32 @@ export function setAuthSession(user) {
   return session;
 }
 
-export function getAuthSession() {
+export function getAuthSession(accountId) {
   try {
-    const raw = readSessionRaw();
+    const resolvedId = accountId ?? getActiveAccountIdFromUrl();
+    let raw = readSessionRaw(resolvedId);
+
+    if (!raw && !resolvedId) {
+      const any = findScopedManagerSession();
+      if (any) raw = JSON.stringify(any);
+    }
+
     if (!raw) return null;
     const parsed = JSON.parse(raw);
     if (!parsed?.id && !parsed?.email) return null;
+
+    if (resolvedId && parsed.id != null && String(parsed.id) !== String(resolvedId)) {
+      return null;
+    }
+
+    if (parsed.source === "api" && getManagerApiToken(parsed.id ?? resolvedId)) {
+      return {
+        ...parsed,
+        role: normalizeSessionRole(parsed.role || "manager"),
+        hallId: parsed.hallId ?? null,
+        stationName: parsed.stationName ?? null,
+      };
+    }
 
     let user = parsed.id != null ? getUserById(parsed.id) : null;
     if (!user && parsed.email) {
@@ -494,6 +516,7 @@ export function getAuthSession() {
       fullName: user.fullName,
       role: normalizeSessionRole(user.role),
       employeeId: user.employeeId ?? null,
+      hallId: user.hallId ?? parsed.hallId ?? null,
       avatar: user.avatar || parsed.avatar || "",
       phone: user.phone || parsed.phone || "",
     };
@@ -502,17 +525,35 @@ export function getAuthSession() {
   }
 }
 
-export function clearAuthSession() {
+export function clearAuthSession(accountId) {
   try {
-    localStorage.removeItem(SESSION_KEY);
-    sessionStorage.removeItem(LEGACY_SESSION_KEY);
+    const resolvedId = accountId ?? getActiveAccountIdFromUrl();
+    if (resolvedId) {
+      clearScopedAccount(resolvedId);
+    }
+    const legacy = readLegacySession();
+    if (!resolvedId || legacy?.id == resolvedId) {
+      localStorage.removeItem(SESSION_KEY);
+      sessionStorage.removeItem(LEGACY_SESSION_KEY);
+      clearManagerApiToken(resolvedId);
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new Event(AUTH_SESSION_EVENT));
+    }
   } catch {
     /* ignore */
   }
 }
 
-export function getLoginRedirectPath(role) {
-  if (role === "manager") return "/dashboard";
-  if (role === "maintenance") return "/employee/maintenance";
-  return "/employee/reception";
+export function getLoginRedirectPath(role, userId) {
+  if (role === "manager") {
+    const id = userId ?? getAuthSession()?.id;
+    return id != null ? buildManagerWorkspacePath(id, "dashboard") : MANAGER_LOGIN_PATH;
+  }
+  if (role === "maintenance") {
+    const id = userId ?? getAuthSession()?.id;
+    return id != null ? buildMaintenanceWorkspacePath(id) : EMPLOYEE_LOGIN_PATH;
+  }
+  const id = userId ?? getAuthSession()?.id;
+  return id != null ? buildReceptionWorkspacePath(id) : EMPLOYEE_LOGIN_PATH;
 }

@@ -13,57 +13,10 @@ import {
 } from "lucide-react";
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
 import { ZONES_LOGO_SRC } from "../../super-admin/data/superAdminDashboardData";
-import { clearAuthSession } from "../../auth/data/mockUsersStorage";
-import { RECEPTION_EMPLOYEE_ROUTES } from "../data/receptionEmployeeRoutes";
-
-const ACCOUNT_GROUP = {
-  id: "account",
-  label: "حسابي",
-  icon: User,
-  children: [
-    { label: "الملف الشخصي", path: RECEPTION_EMPLOYEE_ROUTES.profile },
-    { label: "تغيير كلمة المرور", path: RECEPTION_EMPLOYEE_ROUTES.changePassword },
-    { label: "تسجيل الخروج", action: "logout" },
-  ],
-};
-
-const DEVICES_GROUP = {
-  id: "devices",
-  label: "أجهزة",
-  icon: Monitor,
-  children: [
-    { label: "جميع الأجهزة", path: RECEPTION_EMPLOYEE_ROUTES.devices },
-    { label: "الأجهزة المعطلة", path: RECEPTION_EMPLOYEE_ROUTES.devicesBroken },
-  ],
-};
-
-const RESERVATIONS_GROUP = {
-  id: "reservations",
-  label: "حجوزات والجلسات",
-  icon: CalendarClock,
-  children: [
-    { label: "تقويم", path: RECEPTION_EMPLOYEE_ROUTES.reservationsCalendar },
-    { label: "حجوزات", path: RECEPTION_EMPLOYEE_ROUTES.reservationsBookings },
-    { label: "جلسة", path: RECEPTION_EMPLOYEE_ROUTES.reservationsSession },
-    { label: "محظور", path: RECEPTION_EMPLOYEE_ROUTES.reservationsBanned },
-  ],
-};
-
-const TOURNAMENTS_GROUP = {
-  id: "tournaments",
-  label: "البطولات",
-  icon: Trophy,
-  children: [
-    { label: "عرض البطولات", path: RECEPTION_EMPLOYEE_ROUTES.tournaments },
-    { label: "بيانات البطولة", path: RECEPTION_EMPLOYEE_ROUTES.tournamentsData },
-    { label: "قائمة المشاركين", path: RECEPTION_EMPLOYEE_ROUTES.tournamentsParticipants },
-  ],
-};
-
-const MENU_ITEMS = [
-  { label: "الباقات", path: RECEPTION_EMPLOYEE_ROUTES.packages, icon: Package },
-  { label: "العروض", path: RECEPTION_EMPLOYEE_ROUTES.offers, icon: Tag },
-];
+import { clearAuthSession, getAuthSession } from "../../auth/data/mockUsersStorage";
+import { EMPLOYEE_LOGIN_PATH } from "../../auth/data/authRoutes";
+import { getActiveAccountIdFromUrl } from "../../auth/data/accountSessionStorage";
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 
 const linkClass = ({ isActive }) =>
   `flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[13px] font-bold transition ${
@@ -81,9 +34,58 @@ function groupContainsActive(group, pathname) {
 }
 
 export default function ReceptionEmployeeSidebar({ onNavigate }) {
+  const { routes, employeeId } = useReceptionEmployeeRoutes();
   const location = useLocation();
   const navigate = useNavigate();
   const pathname = location.pathname;
+
+  const ACCOUNT_GROUP = {
+    id: "account",
+    label: "حسابي",
+    icon: User,
+    children: [
+      { label: "الملف الشخصي", path: routes.profile },
+      { label: "تغيير كلمة المرور", path: routes.changePassword },
+      { label: "تسجيل الخروج", action: "logout" },
+    ],
+  };
+
+  const DEVICES_GROUP = {
+    id: "devices",
+    label: "أجهزة",
+    icon: Monitor,
+    children: [
+      { label: "جميع الأجهزة", path: routes.devices },
+      { label: "الأجهزة المعطلة", path: routes.devicesBroken },
+    ],
+  };
+
+  const RESERVATIONS_GROUP = {
+    id: "reservations",
+    label: "حجوزات والجلسات",
+    icon: CalendarClock,
+    children: [
+      { label: "تقويم", path: routes.reservationsCalendar },
+      { label: "حجوزات", path: routes.reservationsBookings },
+      { label: "جلسة", path: routes.reservationsSession },
+    ],
+  };
+
+  const TOURNAMENTS_GROUP = {
+    id: "tournaments",
+    label: "البطولات",
+    icon: Trophy,
+    children: [
+      { label: "عرض البطولات", path: routes.tournaments },
+      { label: "بيانات البطولة", path: routes.tournamentsData },
+      { label: "قائمة المشاركين", path: routes.tournamentsParticipants },
+    ],
+  };
+
+  const MENU_ITEMS = [
+    { label: "الباقات", path: routes.packages, icon: Package },
+    { label: "العروض", path: routes.offers, icon: Tag },
+  ];
 
   const [open, setOpen] = useState(() => {
     const initial = { account: groupContainsActive(ACCOUNT_GROUP, pathname) };
@@ -104,9 +106,9 @@ export default function ReceptionEmployeeSidebar({ onNavigate }) {
       danger: true,
     });
     if (!confirmed) return;
-    clearAuthSession();
+    clearAuthSession(employeeId ?? getActiveAccountIdFromUrl() ?? getAuthSession()?.id);
     onNavigate?.();
-    navigate("/auth/login", { replace: true });
+    navigate(EMPLOYEE_LOGIN_PATH, { replace: true });
   };
 
   return (
@@ -126,7 +128,7 @@ export default function ReceptionEmployeeSidebar({ onNavigate }) {
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         <NavLink
-          to={RECEPTION_EMPLOYEE_ROUTES.dashboard}
+          to={routes.dashboard}
           end
           onClick={onNavigate}
           className={linkClass}

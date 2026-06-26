@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:provider/provider.dart';
@@ -8,8 +10,10 @@ import '../../../providers/lounge_ratings_provider.dart';
 import '../../../providers/zones_data_provider.dart';
 import '../../../widgets/zonez_logo.dart';
 import '../../lounge/lounge_details_screen.dart';
-import '../widgets/lounge_card.dart';
+import '../widgets/zonez_lounge_card.dart';
 import '../widgets/offers_carousel.dart';
+import '../widgets/tournaments_carousel.dart';
+import '../../../providers/tournament_provider.dart';
 
 class HomeTab extends StatefulWidget {
   const HomeTab({
@@ -26,13 +30,35 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+  Timer? _pollTimer;
+
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<ZonesDataProvider>().loadOffers();
+      context.read<ZonesDataProvider>().loadOffers(forceRefresh: true);
       context.read<LoungeRatingsProvider>().refreshLounges();
+      context.read<TournamentProvider>().loadTournaments(forceRefresh: true);
     });
+    _pollTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      if (!mounted) return;
+      context.read<TournamentProvider>().loadTournaments(forceRefresh: true);
+    });
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refreshHome() async {
+    if (!mounted) return;
+    await context.read<ZonesDataProvider>().loadOffers(forceRefresh: true);
+    if (!mounted) return;
+    context.read<LoungeRatingsProvider>().refreshLounges();
+    if (!mounted) return;
+    await context.read<TournamentProvider>().loadTournaments(forceRefresh: true);
   }
 
   void _openLoungeDetails(String loungeId) {
@@ -48,9 +74,10 @@ class _HomeTabState extends State<HomeTab> {
   Widget build(BuildContext context) {
     final appState = context.watch<AppStateProvider>();
     final zonesData = context.watch<ZonesDataProvider>();
-    final lounges = context.watch<LoungeRatingsProvider>().lounges;
-    final defaultLounge =
-        lounges.isNotEmpty ? lounges.first.name : 'Game Zone Arena';
+    final loungeProvider = context.watch<LoungeRatingsProvider>();
+    final loungeList = loungeProvider.lounges;
+    final hasLounges = loungeList.isNotEmpty;
+    final defaultLounge = hasLounges ? loungeList.first.name : '';
     final onSurface = Theme.of(context).colorScheme.onSurface;
     final muted = Theme.of(context).brightness == Brightness.dark
         ? ZonezColors.textMuted
@@ -60,65 +87,63 @@ class _HomeTabState extends State<HomeTab> {
       children: [
         _buildHeader(widget.onOpenDrawer, onSurface, muted),
         Expanded(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (zonesData.isLoadingOffers)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 32),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: ZonezColors.neonPurple,
-                      ),
-                    ),
-                  )
-                else if (zonesData.offersError != null)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    child: Text(
-                      zonesData.offersError!,
-                      style: GoogleFonts.cairo(color: ZonezColors.neonRed),
-                    ),
-                  )
-                else
-                  OffersCarousel(
+          child: RefreshIndicator(
+            color: ZonezColors.neonPurple,
+            onRefresh: _refreshHome,
+            child: SingleChildScrollView(
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  OffersSection(
+                    isLoading: zonesData.isLoadingOffers,
                     offers: zonesData.activeOffers,
+                    error: zonesData.offersError,
                     loungeName: defaultLounge,
+                    onRetry: () =>
+                        zonesData.loadOffers(forceRefresh: true),
                   ),
-                const SizedBox(height: 16),
-                _buildSectionTitle(context),
-                const SizedBox(height: 10),
-                if (lounges.isEmpty)
-                  Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 24),
-                    child: Center(
-                      child: Text(
-                        'لا توجد صالات متاحة حالياً',
-                        style: GoogleFonts.cairo(color: muted, fontSize: 14),
+                  const SizedBox(height: 16),
+                  const TournamentsSection(),
+                  const SizedBox(height: 16),
+                  _buildSectionTitle(context),
+                  const SizedBox(height: 10),
+                  if (loungeProvider.isLoading)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 24),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: ZonezColors.neonPurple,
+                        ),
+                      ),
+                    )
+                  else if (!hasLounges)
+                    _buildLoungesEmptyState(loungeProvider)
+                  else ...[
+                    if (loungeProvider.error != null)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Text(
+                          loungeProvider.error!,
+                          style: GoogleFonts.cairo(
+                            color: ZonezColors.neonGold,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ),
+                    ...loungeList.map(
+                      (l) => ZonezLoungeCard(
+                        lounge: l,
+                        isFavorite: appState.isFavorite(l.name),
+                        onFavoriteTap: () => widget.onFavoriteTap(l.name),
+                        onOpenDetails: () => _openLoungeDetails(l.id),
                       ),
                     ),
-                  )
-                else
-                  ...lounges.map(
-                    (l) => LoungeCard(
-                      compact: true,
-                      loungeId: l.id,
-                      name: l.name,
-                      rating: l.loungeAverageRating,
-                      reviews: l.reviewCount,
-                      location: l.location,
-                      devices: l.totalDevices,
-                      price: l.startingPrice,
-                      isFavorite: appState.isFavorite(l.name),
-                      onFavoriteTap: () => widget.onFavoriteTap(l.name),
-                      onTap: () => _openLoungeDetails(l.id),
-                      onBookTap: () => _openLoungeDetails(l.id),
-                    ),
-                  ),
-                const SizedBox(height: 72),
-              ],
+                  ],
+                  const SizedBox(height: 72),
+                ],
+              ),
             ),
           ),
         ),
@@ -175,6 +200,42 @@ class _HomeTabState extends State<HomeTab> {
           Text(
             'اكتشف أفضل الصالات القريبة منك',
             style: GoogleFonts.cairo(fontSize: 13, color: muted),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildLoungesEmptyState(LoungeRatingsProvider loungeProvider) {
+    final message = loungeProvider.error ??
+        'لا توجد صالات منشورة حالياً.';
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            message,
+            style: GoogleFonts.cairo(color: ZonezColors.neonRed),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: loungeProvider.isLoading
+                ? null
+                : () => loungeProvider.refreshLounges(),
+            icon: const Icon(Icons.refresh_rounded, size: 18),
+            label: Text(
+              'إعادة تحميل الصالات',
+              style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: ZonezColors.neonCyan,
+              side: BorderSide(
+                color: ZonezColors.neonPurple.withValues(alpha: 0.5),
+              ),
+            ),
           ),
         ],
       ),

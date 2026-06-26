@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { loadPackages, PACKAGES_STORAGE_EVENT } from "../data/packagesStorage";
 
-const STORAGE_KEY = "zones-packages-v1";
+const PACKAGES_KEY_PREFIX = "zones-packages-";
 
 /** مزامنة قائمة الباقات مع LocalStorage عبر التبويبات والواجهات */
 export function usePackagesSync(setPackagesList) {
@@ -9,7 +9,7 @@ export function usePackagesSync(setPackagesList) {
     const syncFromStorage = () => setPackagesList(loadPackages());
 
     const onStorage = (e) => {
-      if (e.key === STORAGE_KEY || e.key === null) syncFromStorage();
+      if (e.key == null || e.key.startsWith(PACKAGES_KEY_PREFIX)) syncFromStorage();
     };
 
     window.addEventListener(PACKAGES_STORAGE_EVENT, syncFromStorage);

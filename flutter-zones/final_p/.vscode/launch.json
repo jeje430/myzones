@@ -1,0 +1,56 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "ZONEZ — Pick device (USB / Emulator / Chrome)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    },
+    {
+      "name": "ZONEZ — Chrome (Mobile preview)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "chrome",
+      "toolArgs": [
+        "--web-browser-flag=--window-size=390,844",
+        "--web-browser-flag=--window-position=120,40"
+      ]
+    },
+    {
+      "name": "ZONEZ — Android USB phone (Wi‑Fi محلي)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "android"
+    },
+    {
+      "name": "ZONEZ — Android / iOS (سيرفر عام — أي Wi‑Fi)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "android",
+      "toolArgs": [
+        "--dart-define=ZONEZ_API_URL=https://YOUR-API-DOMAIN.com"
+      ]
+    },
+    {
+      "name": "ZONEZ — Android Emulator (محلي)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "android",
+      "toolArgs": [
+        "--dart-define=ZONEZ_API_HOST=10.0.2.2"
+      ]
+    },
+    {
+      "name": "ZONEZ — Windows desktop (Herd محلي)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "deviceId": "windows"
+    }
+  ]
+}

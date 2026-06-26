@@ -1543,3 +1543,113 @@ button.zones-toggle-item[data-state="on"]:hover {
 .device-type-select {
   width: 100%;
 }
+
+/* ========================================================
+   صفحة انضمام الصالات  /join  — ألوان عالية التباين دائماً
+   ======================================================== */
+.hall-join-page {
+  font-size: 16px;
+  line-height: 1.65;
+  font-family: "Cairo", "Segoe UI", Tahoma, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* ── الكرت ── */
+.hall-join-page .hj-card {
+  background-color: #ffffff;
+  border: 2px solid rgba(107, 84, 120, 0.30);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.06);
+}
+[data-theme="dark"] .hall-join-page .hj-card {
+  background-color: #1e1830;
+  border-color: rgba(180, 160, 200, 0.35);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.35);
+}
+
+/* ── عناوين + نصوص عامة ── */
+.hall-join-page .hj-heading {
+  color: #111827;
+}
+[data-theme="dark"] .hall-join-page .hj-heading {
+  color: #f1eeff;
+}
+.hall-join-page .hj-subtext {
+  color: #1f2937;
+}
+[data-theme="dark"] .hall-join-page .hj-subtext {
+  color: #e9e0ff;
+}
+
+/* ── عنوان الحقل (label) ── */
+.hall-join-page .hj-label {
+  color: #111827;
+}
+[data-theme="dark"] .hall-join-page .hj-label {
+  color: #f1eeff;
+}
+
+/* ── نص التلميح (hint / intro) ── */
+.hall-join-page .hj-hint {
+  color: #111827;
+  background: rgba(107, 84, 120, 0.12);
+  border: 1.5px solid rgba(107, 84, 120, 0.35);
+}
+[data-theme="dark"] .hall-join-page .hj-hint {
+  color: #f1eeff;
+  background: rgba(180, 160, 220, 0.15);
+  border-color: rgba(180, 160, 220, 0.40);
+}
+
+/* ── حقل الإدخال ── */
+.hall-join-page .hj-input {
+  color: #111827;
+  background-color: #f5f0fb;
+  border: 2px solid #6b5478;
+  caret-color: #111827;
+}
+.hall-join-page .hj-input::placeholder {
+  color: #374151 !important;
+  opacity: 1 !important;
+  font-weight: 600;
+}
+.hall-join-page .hj-input:focus {
+  border-color: #6b5478;
+  box-shadow: 0 0 0 3px rgba(107, 84, 120, 0.28);
+}
+
+[data-theme="dark"] .hall-join-page .hj-input {
+  color: #f1eeff;
+  background-color: #120f22;
+  border-color: #9a7bb5;
+  caret-color: #f1eeff;
+}
+[data-theme="dark"] .hall-join-page .hj-input::placeholder {
+  color: #c4aee0 !important;
+}
+[data-theme="dark"] .hall-join-page .hj-input:focus {
+  border-color: #c4aee0;
+  box-shadow: 0 0 0 3px rgba(196, 174, 224, 0.25);
+}
+
+/* ── زر رفع الصور ── */
+.hall-join-page .hj-upload {
+  color: #111827;
+  background-color: #f5f0fb;
+  border: 2px dashed #6b5478;
+}
+.hall-join-page .hj-upload:hover {
+  background-color: rgba(107, 84, 120, 0.15);
+  border-color: #6b5478;
+}
+
+[data-theme="dark"] .hall-join-page .hj-upload {
+  color: #f1eeff;
+  background-color: #120f22;
+  border-color: #9a7bb5;
+}
+[data-theme="dark"] .hall-join-page .hj-upload:hover {
+  background-color: rgba(154, 123, 181, 0.22);
+  border-color: #c4aee0;
+}

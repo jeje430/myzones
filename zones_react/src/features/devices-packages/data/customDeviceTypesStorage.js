@@ -1,6 +1,7 @@
-import { DEVICE_TYPE_LABEL } from "./deviceNaming";
+import { DEVICE_TYPE_LABEL } from "./deviceTypesConfig";import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 
-const STORAGE_KEY = "zones-custom-device-types-v1";
+const BASE_KEY = "zones-custom-device-types-v1";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const CUSTOM_DEVICE_TYPES_EVENT = "zones-custom-device-types-updated";
 
@@ -29,7 +30,7 @@ export function isBuiltinDeviceTypeLabel(label) {
 
 export function loadCustomDeviceTypes() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(storageKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     if (!Array.isArray(parsed)) return [];
@@ -53,7 +54,7 @@ export function saveCustomDeviceType({ type, typeLabel }) {
   if (list.some((row) => row.typeLabel.toLowerCase() === lower)) return false;
 
   const next = [...list, { type: type || slugifyDeviceType(label), typeLabel: label }];
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+  localStorage.setItem(storageKey(), JSON.stringify(next));
   notifyUpdated();
   return true;
 }

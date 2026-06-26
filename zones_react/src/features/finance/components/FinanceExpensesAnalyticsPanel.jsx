@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useFinancePrefetch } from "../hooks/useFinancePrefetch";
 import { TrendingDown, TrendingUp, Wallet } from "lucide-react";
 import {
   CartesianGrid,
@@ -65,11 +66,12 @@ export default function FinanceExpensesAnalyticsPanel() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const granularity = "daily";
+  const readyTick = useFinancePrefetch(year, month, granularity);
 
-  const series = useMemo(() => buildExpenseSeries(year, month, granularity), [year, month]);
-  const totals = useMemo(() => deriveExpenseTotals(year, month), [year, month]);
+  const series = useMemo(() => buildExpenseSeries(year, month, granularity), [year, month, readyTick]);
+  const totals = useMemo(() => deriveExpenseTotals(year, month), [year, month, readyTick]);
   const insights = useMemo(() => deriveExpenseInsights(series, granularity), [series]);
-  const categories = useMemo(() => buildExpenseCategoryBreakdown(year, month), [year, month]);
+  const categories = useMemo(() => buildExpenseCategoryBreakdown(year, month), [year, month, readyTick]);
   const years = yearOptions();
 
   const expClass =

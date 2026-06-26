@@ -7,7 +7,6 @@ import 'package:provider/provider.dart';
 
 
 import '../../controllers/payment_controller.dart';
-import '../../core/routes/app_routes.dart';
 import '../../core/theme/zonez_colors.dart';
 import '../../core/theme/zonez_typography.dart';
 import '../../models/booking.dart';
@@ -19,11 +18,17 @@ import '../../providers/offer_booking_provider.dart';
 
 import '../../services/booking_notification_service.dart';
 
+import '../../screens/payment/plutu_payment_webview_screen.dart';
+
+import '../../services/plutu_payment_service.dart';
+
 import '../../utils/date_format_utils.dart';
 
 import '../../widgets/booking/booking_checkout_summary.dart';
 
-import '../../widgets/booking/booking_receipt_sheet.dart';
+import '../../services/booking_receipt_service.dart';
+
+import '../../widgets/neon_gradient_button.dart';
 
 import '../../widgets/booking/time_slot_card.dart';
 
@@ -99,8 +104,6 @@ class _OfferBookingWizardBody extends StatelessWidget {
 
     return Scaffold(
 
-      extendBodyBehindAppBar: true,
-
       appBar: AppBar(
 
         leading: IconButton(
@@ -131,48 +134,41 @@ class _OfferBookingWizardBody extends StatelessWidget {
 
         backgroundColor: Colors.transparent,
 
+        elevation: 0,
+
+        scrolledUnderElevation: 0,
+
       ),
 
-      body: Stack(
-
-        children: [
-
-          const CircuitBackground(),
-
-          Column(
-
-            children: [
-
-              SizedBox(
-
-                height: MediaQuery.paddingOf(context).top + kToolbarHeight,
-
-              ),
-
-              _StepIndicator(currentStep: flow.currentStep),
-
-              Expanded(
-
-                child: AnimatedSwitcher(
-
-                  duration: const Duration(milliseconds: 250),
-
-                  child: _buildStep(flow),
-
+      body: SafeArea(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            const CircuitBackground(),
+            Column(
+              children: [
+                Expanded(
+                  child: Column(
+                    children: [
+                      _StepIndicator(currentStep: flow.currentStep),
+                      Expanded(
+                        child: AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 250),
+                          child: _buildStep(flow),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-
-              ),
-
-              if (flow.currentStep != OfferBookingStep.confirmation)
-
-                _BottomNavBar(flow: flow),
-
-            ],
-
-          ),
-
-        ],
-
+                if (flow.currentStep != OfferBookingStep.confirmation)
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 8),
+                    child: _BottomNavBar(flow: flow),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
 
     );
@@ -487,10 +483,11 @@ class _DateStep extends StatelessWidget {
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 
-    final initial = flow.selectedDate ?? flow.offer.promoStart;
-
-    final first = flow.offer.promoStart;
-
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    final first = flow.offer.promoStart.isAfter(todayDate)
+        ? flow.offer.promoStart
+        : todayDate;
     final last = flow.offer.promoEnd;
 
 
@@ -581,11 +578,7 @@ class _DateStep extends StatelessWidget {
 
             child: CalendarDatePicker(
 
-              initialDate: initial.isBefore(first)
-
-                  ? first
-
-                  : (initial.isAfter(last) ? last : initial),
+              initialDate: flow.selectedDate ?? first,
 
               firstDate: first,
 
@@ -767,7 +760,7 @@ class _VerificationStep extends StatelessWidget {
 
                 child: Text(
 
-                  'لا توجد أوقات متاحة',
+                  'لا توجد حجوزات متاحة',
 
                   style: GoogleFonts.cairo(color: ZonezColors.textMuted),
 
@@ -807,7 +800,7 @@ class _VerificationStep extends StatelessWidget {
 
                 return TimeSlotCard(
 
-                  label: slot.timeRange,
+                  label: slot.label,
 
                   selected: selected,
 
@@ -840,30 +833,17 @@ class _PaymentStep extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final appState = context.watch<AppStateProvider>();
-    final canPayWithPoints = PaymentController.canPayWithPoints(appState);
-    final method = PaymentController.sanitizePaymentMethod(
-      method: flow.paymentMethod,
-      canPayWithPoints: canPayWithPoints,
-    );
-    if (method != flow.paymentMethod) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        flow.setPaymentMethod(method);
-      });
-    }
+    final method = flow.paymentMethod;
 
-    final original = flow.offer.originalPrice;
-    int? discount;
-    if (original != null && original > 0 && original > flow.finalPrice) {
-      discount = ((1 - flow.finalPrice / original) * 100).round();
-    }
+    final original = flow.originalTotalPrice;
+    final discount = flow.discountPercent;
 
     final checkoutPrice = PaymentController.checkoutPrice(
-      basePrice: flow.finalPrice,
+      basePrice: flow.checkoutBasePrice,
       method: method,
     );
     final earnedPoints = PaymentController.checkoutEarnedPoints(
-      basePrice: flow.finalPrice,
+      basePrice: flow.checkoutBasePrice,
       method: method,
     );
 
@@ -874,20 +854,21 @@ class _PaymentStep extends StatelessWidget {
         children: [
           BookingCheckoutSummary(
             loungeName: flow.loungeName,
-            packageName: flow.offer.title,
+            packageName: flow.offer.packageName.isNotEmpty
+                ? flow.offer.packageName
+                : flow.offer.title,
             dateLabel: flow.formattedDate,
             timeLabel: flow.formattedTime,
             finalPrice: checkoutPrice,
             earnedPoints: earnedPoints,
-            originalPrice: method == PaymentStatus.payWithPoints
-                ? flow.finalPrice
-                : original,
+            originalPrice: original,
             discountPercent: discount,
+            deviceName: flow.selectedDeviceName,
           ),
           const SizedBox(height: 24),
           BookingPaymentMethodPicker(
             selected: method,
-            canPayWithPoints: canPayWithPoints,
+            canPayWithPoints: false,
             onChanged: flow.setPaymentMethod,
           ),
 
@@ -941,7 +922,9 @@ class _ConfirmationStepState extends State<_ConfirmationStep> {
 
   bool _saved = false;
 
-  bool _receiptShown = false;
+  bool _isDownloading = false;
+
+  bool _notified = false;
 
 
 
@@ -969,121 +952,123 @@ class _ConfirmationStepState extends State<_ConfirmationStep> {
 
     final appState = context.read<AppStateProvider>();
 
-    final checkoutPrice = PaymentController.checkoutPrice(
-      basePrice: flow.finalPrice,
-      method: flow.paymentMethod,
-    );
-    final earnedPoints = PaymentController.checkoutEarnedPoints(
-      basePrice: flow.finalPrice,
-      method: flow.paymentMethod,
-    );
-
-    appState.addBooking(
-      id: bookingId,
-      title: flow.offer.title,
-      day: flow.formattedDate,
-      time: flow.formattedTime,
-      price: checkoutPrice,
-      loungeName: flow.loungeName,
-      paymentStatus: flow.paymentMethod,
-      startDateTime: flow.slotStartDateTime,
-      earnedPoints: earnedPoints,
-    );
+    appState.syncBookingsFromApi();
 
     PaymentController.applySuccessfulCheckout(
       appState,
       method: flow.paymentMethod,
     );
 
+    setState(() => _saved = true);
+  }
 
+  Future<void> _handleDone() async {
+    final flow = widget.flow;
+    final appState = context.read<AppStateProvider>();
 
-    final booking = appState.getBookingById(bookingId);
+    await appState.syncBookingsFromApi();
 
-    if (booking != null) {
-
-      BookingNotificationService.instance.notifyBookingSuccess(
-
-        appState,
-
-        booking: booking,
-
-        isOffer: true,
-
-      );
-
+    if (!_notified && flow.confirmedBookingId != null) {
+      final booking = appState.getBookingById(flow.confirmedBookingId!);
+      if (booking != null) {
+        BookingNotificationService.instance.notifyBookingSuccess(
+          appState,
+          booking: booking,
+          isOffer: true,
+        );
+        _notified = true;
+      }
     }
 
+    if (!mounted) return;
+    Navigator.of(context).pop();
+  }
 
 
-    setState(() => _saved = true);
 
-    WidgetsBinding.instance.addPostFrameCallback((_) => _showReceipt());
+  String _paymentLabel(PaymentStatus method) {
+
+    switch (method) {
+
+      case PaymentStatus.electronic:
+
+        return 'الدفع الإلكتروني';
+
+      case PaymentStatus.payOnArrival:
+
+        return 'دفع عند الوصول';
+
+      default:
+
+        return 'مدفوع';
+
+    }
 
   }
 
 
 
-  Future<void> _showReceipt() async {
+  Future<void> _openReceiptViewer() async {
 
-    if (_receiptShown || !mounted) return;
+    final confirmation = widget.flow.confirmation;
 
-    _receiptShown = true;
+    if (confirmation?.numericId == null) return;
 
-
-
-    final flow = widget.flow;
-
-    final bookingId = flow.confirmedBookingId;
-
-    if (bookingId == null) return;
-
-
-
-    await showBookingReceiptSheet(
+    BookingReceiptService.instance.openReceiptViewer(
 
       context,
 
-      data: BookingReceiptData(
+      bookingId: confirmation!.numericId!,
 
-        bookingId: bookingId,
+      bookingNumber: confirmation.bookingNumber,
 
-        loungeName: flow.loungeName,
+    );
 
-        dateLabel: flow.formattedDate,
+  }
 
-        timeLabel: flow.formattedTime,
 
-        packageName: flow.offer.title,
 
-        finalPrice: PaymentController.checkoutPrice(
-          basePrice: flow.finalPrice,
-          method: flow.paymentMethod,
-        ),
+  Future<void> _downloadReceiptPdf() async {
 
-        earnedPoints: PaymentController.checkoutEarnedPoints(
-          basePrice: flow.finalPrice,
-          method: flow.paymentMethod,
-        ),
+    final bookingId = widget.flow.confirmation?.numericId;
 
-        subtitle: flow.offer.title,
+    if (bookingId == null) return;
 
-      ),
+    setState(() => _isDownloading = true);
 
-      onClose: () {
+    try {
 
-        Navigator.pushNamedAndRemoveUntil(
+      await BookingReceiptService.instance.openReceipt(bookingId);
 
-          context,
+    } catch (e) {
 
-          AppRoutes.home,
+      if (mounted) {
 
-          (route) => false,
+        ScaffoldMessenger.of(context).showSnackBar(
+
+          SnackBar(
+
+            content: Text(
+
+              e.toString().replaceFirst('Exception: ', ''),
+
+              style: GoogleFonts.cairo(),
+
+            ),
+
+            backgroundColor: ZonezColors.neonRed,
+
+          ),
 
         );
 
-      },
+      }
 
-    );
+    } finally {
+
+      if (mounted) setState(() => _isDownloading = false);
+
+    }
 
   }
 
@@ -1093,15 +1078,35 @@ class _ConfirmationStepState extends State<_ConfirmationStep> {
 
   Widget build(BuildContext context) {
 
-    if (widget.flow.confirmedBookingId == null) {
+    final flow = widget.flow;
+
+    final confirmation = flow.confirmation;
+
+
+
+    if (confirmation == null) {
 
       return Center(
 
-        child: Text(
+        child: Column(
 
-          'جاري تحميل الإيصال...',
+          mainAxisAlignment: MainAxisAlignment.center,
 
-          style: ZonezTypography.body(color: ZonezColors.textMuted),
+          children: [
+
+            const CircularProgressIndicator(color: ZonezColors.neonPurple),
+
+            const SizedBox(height: 16),
+
+            Text(
+
+              'جاري تحميل الإيصال...',
+
+              style: ZonezTypography.body(color: ZonezColors.textMuted),
+
+            ),
+
+          ],
 
         ),
 
@@ -1111,9 +1116,253 @@ class _ConfirmationStepState extends State<_ConfirmationStep> {
 
 
 
-    return const Center(
+    final checkoutPrice = PaymentController.checkoutPrice(
 
-      child: CircularProgressIndicator(color: ZonezColors.neonPurple),
+      basePrice: flow.checkoutBasePrice,
+
+      method: flow.paymentMethod,
+
+    );
+
+    final packageLabel = flow.offer.packageName.isNotEmpty
+
+        ? flow.offer.packageName
+
+        : flow.offer.title;
+
+
+
+    return SingleChildScrollView(
+
+      padding: const EdgeInsets.all(20),
+
+      child: Column(
+
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+
+        children: [
+
+          Container(
+
+            padding: const EdgeInsets.all(20),
+
+            decoration: BoxDecoration(
+
+              color: ZonezColors.neonCyan.withValues(alpha: 0.1),
+
+              borderRadius: BorderRadius.circular(16),
+
+              border: Border.all(
+
+                color: ZonezColors.neonCyan.withValues(alpha: 0.4),
+
+              ),
+
+            ),
+
+            child: Column(
+
+              children: [
+
+                const Icon(
+
+                  Icons.check_circle,
+
+                  color: ZonezColors.neonCyan,
+
+                  size: 56,
+
+                ),
+
+                const SizedBox(height: 12),
+
+                Text(
+
+                  'تم إكمال الحجز بنجاح',
+
+                  style: GoogleFonts.cairo(
+
+                    fontSize: 22,
+
+                    fontWeight: FontWeight.bold,
+
+                    color: ZonezColors.neonCyan,
+
+                  ),
+
+                  textAlign: TextAlign.center,
+
+                ),
+
+                const SizedBox(height: 6),
+
+                Text(
+
+                  'Reservation completed successfully',
+
+                  style: GoogleFonts.cairo(
+
+                    color: ZonezColors.textMuted,
+
+                    fontSize: 13,
+
+                  ),
+
+                  textAlign: TextAlign.center,
+
+                ),
+
+              ],
+
+            ),
+
+          ),
+
+          const SizedBox(height: 20),
+
+          GlassContainer(
+
+            padding: const EdgeInsets.all(18),
+
+            child: Column(
+
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+
+              children: [
+
+                Text(
+
+                  'إيصال حجز',
+
+                  style: ZonezTypography.title(size: 16),
+
+                  textAlign: TextAlign.center,
+
+                ),
+
+                const SizedBox(height: 16),
+
+                _OfferReceiptRow('رقم الحجز', confirmation.bookingNumber),
+
+                _OfferReceiptRow('الصالة', flow.loungeName),
+
+                _OfferReceiptRow('الباقة', packageLabel),
+
+                if (flow.selectedDeviceName != null)
+
+                  _OfferReceiptRow('الجهاز', flow.selectedDeviceName!),
+
+                _OfferReceiptRow('التاريخ', flow.formattedDate),
+
+                _OfferReceiptRow('الوقت', flow.formattedTime),
+
+                _OfferReceiptRow(
+
+                  'طريقة الدفع',
+
+                  _paymentLabel(flow.paymentMethod),
+
+                ),
+
+                if (flow.discountPercent != null && flow.discountPercent! > 0)
+
+                  _OfferReceiptRow(
+
+                    'الخصم',
+
+                    '${flow.discountPercent}%',
+
+                  ),
+
+                _OfferReceiptRow(
+
+                  'الإجمالي',
+
+                  '${checkoutPrice.toStringAsFixed(0)} د.ل',
+
+                  highlight: true,
+
+                ),
+
+              ],
+
+            ),
+
+          ),
+
+          const SizedBox(height: 20),
+
+          NeonGradientButton(
+
+            label: 'عرض',
+
+            icon: Icons.visibility_outlined,
+
+            onPressed: confirmation.numericId == null ? null : _openReceiptViewer,
+
+          ),
+
+          const SizedBox(height: 12),
+
+          OutlinedButton.icon(
+
+            onPressed: _isDownloading || confirmation.numericId == null
+
+                ? null
+
+                : _downloadReceiptPdf,
+
+            icon: _isDownloading
+
+                ? const SizedBox(
+
+                    width: 18,
+
+                    height: 18,
+
+                    child: CircularProgressIndicator(strokeWidth: 2),
+
+                  )
+
+                : const Icon(Icons.download_outlined, size: 18),
+
+            label: Text(
+
+              'تنزيل PDF',
+
+              style: GoogleFonts.cairo(fontWeight: FontWeight.bold),
+
+            ),
+
+            style: OutlinedButton.styleFrom(
+
+              foregroundColor: ZonezColors.neonPurple,
+
+              side: const BorderSide(color: ZonezColors.neonPurple),
+
+              padding: const EdgeInsets.symmetric(vertical: 14),
+
+              shape: RoundedRectangleBorder(
+
+                borderRadius: BorderRadius.circular(14),
+
+              ),
+
+            ),
+
+          ),
+
+          const SizedBox(height: 16),
+
+          NeonGradientButton(
+            label: 'تم',
+            icon: Icons.check_rounded,
+            onPressed: _handleDone,
+          ),
+
+        ],
+
+      ),
 
     );
 
@@ -1123,13 +1372,98 @@ class _ConfirmationStepState extends State<_ConfirmationStep> {
 
 
 
-class _BottomNavBar extends StatelessWidget {
+class _OfferReceiptRow extends StatelessWidget {
+
+  const _OfferReceiptRow(this.label, this.value, {this.highlight = false});
+
+
+
+  final String label;
+
+  final String value;
+
+  final bool highlight;
+
+
+
+  @override
+
+  Widget build(BuildContext context) {
+
+    return Padding(
+
+      padding: const EdgeInsets.symmetric(vertical: 6),
+
+      child: Row(
+
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+
+        children: [
+
+          Text(
+
+            label,
+
+            style: GoogleFonts.cairo(
+
+              fontSize: 13,
+
+              color: ZonezColors.textMuted,
+
+            ),
+
+          ),
+
+          Flexible(
+
+            child: Text(
+
+              value,
+
+              textAlign: TextAlign.end,
+
+              style: GoogleFonts.cairo(
+
+                fontSize: 13,
+
+                fontWeight: FontWeight.bold,
+
+                color: highlight ? ZonezColors.neonGold : null,
+
+              ),
+
+            ),
+
+          ),
+
+        ],
+
+      ),
+
+    );
+
+  }
+
+}
+
+
+
+class _BottomNavBar extends StatefulWidget {
 
   const _BottomNavBar({required this.flow});
 
 
 
   final OfferBookingProvider flow;
+
+  @override
+  State<_BottomNavBar> createState() => _BottomNavBarState();
+}
+
+class _BottomNavBarState extends State<_BottomNavBar> {
+  bool _isProcessingPayment = false;
+
+  OfferBookingProvider get flow => widget.flow;
 
 
 
@@ -1166,6 +1500,10 @@ class _BottomNavBar extends StatelessWidget {
 
 
     if (isPayment) {
+      if (flow.paymentMethod == PaymentStatus.electronic) {
+        await _handlePayOnline(context);
+        return;
+      }
 
       final ok = await flow.confirmAndAdvance();
 
@@ -1197,6 +1535,76 @@ class _BottomNavBar extends StatelessWidget {
 
   }
 
+  Future<void> _handlePayOnline(BuildContext context) async {
+    flow.setPaymentMethod(PaymentStatus.electronic);
+    setState(() => _isProcessingPayment = true);
+    flow.errorMessage = null;
+
+    try {
+      final pending = await flow.createBookingOnServer(paymentMethod: 'online');
+      if (pending == null || pending.numericId == null) {
+        throw Exception('تعذر إنشاء الحجز');
+      }
+
+      if (!mounted) return;
+
+      final session = await PlutuPaymentService.instance.createPayment(
+        amount: pending.finalPrice,
+        bookingId: pending.numericId,
+      );
+
+      if (!mounted) return;
+
+      final outcome = await Navigator.push<PlutuPaymentWebViewResult>(
+        context,
+        MaterialPageRoute(
+          builder: (_) => PlutuPaymentWebViewScreen(
+            paymentUrl: session.paymentUrl,
+            expectedInvoiceNo: session.invoiceNo,
+          ),
+        ),
+      );
+
+      if (!mounted) return;
+
+      if (outcome?.outcome == PlutuPaymentOutcome.success) {
+        final ok = await flow.refreshConfirmationAfterPayment(
+          pending.numericId!,
+          invoiceNo: session.invoiceNo,
+          callbackParams: outcome?.callbackParams,
+        );
+        if (!ok && flow.errorMessage != null) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(flow.errorMessage!, style: GoogleFonts.cairo()),
+              backgroundColor: ZonezColors.neonRed,
+            ),
+          );
+        }
+      } else if (outcome?.outcome == PlutuPaymentOutcome.canceled) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('تم إلغاء الدفع', style: GoogleFonts.cairo()),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              e.toString().replaceFirst('Exception: ', ''),
+              style: GoogleFonts.cairo(),
+            ),
+            backgroundColor: ZonezColors.neonRed,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _isProcessingPayment = false);
+    }
+  }
+
 
 
   @override
@@ -1209,7 +1617,9 @@ class _BottomNavBar extends StatelessWidget {
 
     final canProceed = _canProceed();
 
-    final isBusy = flow.isConfirming || flow.isCheckingAvailability;
+    final isBusy = flow.isConfirming ||
+        flow.isCheckingAvailability ||
+        _isProcessingPayment;
 
 
 
@@ -1217,7 +1627,7 @@ class _BottomNavBar extends StatelessWidget {
 
       borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
 
-      padding: const EdgeInsets.fromLTRB(16, 14, 16, 24),
+      padding: const EdgeInsets.fromLTRB(16, 14, 16, 14),
 
       child: Row(
 

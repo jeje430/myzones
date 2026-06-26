@@ -4,23 +4,30 @@ import SuperAdminSidebar from "../components/SuperAdminSidebar";
 import SuperAdminTopBar from "../components/SuperAdminTopBar";
 import MaintenanceModeBanner from "../components/MaintenanceModeBanner";
 import { getSuperAdminSession } from "../data/superAdminAuth";
-import { getPendingRequestsCount } from "../data/superAdminStorage";
+import { fetchPendingJoinRequestsSummary } from "../data/hallJoinRequestsApi";
 
 export default function SuperAdminLayout() {
   const location = useLocation();
   const session = getSuperAdminSession();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [pendingCount, setPendingCount] = useState(getPendingRequestsCount());
+  const [pendingCount, setPendingCount] = useState(0);
 
-  const refreshCounts = () => {
-    setPendingCount(getPendingRequestsCount());
+  const refreshCounts = async () => {
+    const result = await fetchPendingJoinRequestsSummary();
+    if (result.ok) {
+      setPendingCount(result.pendingCount);
+    }
   };
 
   useEffect(() => {
     refreshCounts();
     const handler = () => refreshCounts();
     window.addEventListener("super-admin-data-updated", handler);
-    return () => window.removeEventListener("super-admin-data-updated", handler);
+    window.addEventListener("hall-join-requests-updated", handler);
+    return () => {
+      window.removeEventListener("super-admin-data-updated", handler);
+      window.removeEventListener("hall-join-requests-updated", handler);
+    };
   }, [location.pathname]);
 
   return (

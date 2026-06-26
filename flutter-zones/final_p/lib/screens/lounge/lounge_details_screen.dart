@@ -1,19 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
 import '../../core/theme/zonez_colors.dart';
 import '../../core/theme/zonez_typography.dart';
+import '../../data/repositories/lounge_catalog_repository.dart';
+import '../../models/booking_stop_status.dart';
 import '../../models/lounge_model.dart';
 import '../../providers/lounge_ratings_provider.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 import '../../widgets/glass_container.dart';
 import '../../widgets/neon_gradient_button.dart';
+import '../../widgets/booking/booking_blocked_button.dart';
 import '../../widgets/rating/device_rating_badges.dart';
-import '../../widgets/rating/lounge_reviews_panel.dart';
+import '../../widgets/rating/lounge_ratings_box.dart';
+import '../../widgets/rating/lounge_comments_preview_box.dart';
 import '../../widgets/rating/star_rating_row.dart';
 import '../booking/lounge_booking_flow_screen.dart';
 
-class LoungeDetailsScreen extends StatelessWidget {
+class LoungeDetailsScreen extends StatefulWidget {
   const LoungeDetailsScreen({
     super.key,
     required this.loungeId,
@@ -22,9 +29,52 @@ class LoungeDetailsScreen extends StatelessWidget {
   final String loungeId;
 
   @override
+  State<LoungeDetailsScreen> createState() => _LoungeDetailsScreenState();
+}
+
+class _LoungeDetailsScreenState extends State<LoungeDetailsScreen> {
+  Timer? _bookingStopTimer;
+  BookingStopStatus? _liveBookingStop;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _refresh();
+      _startBookingStopPolling();
+    });
+  }
+
+  @override
+  void dispose() {
+    _bookingStopTimer?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    await context.read<LoungeRatingsProvider>().refreshLoungeDetails(widget.loungeId);
+    await _pollBookingStop();
+  }
+
+  void _startBookingStopPolling() {
+    _bookingStopTimer?.cancel();
+    _bookingStopTimer = Timer.periodic(const Duration(seconds: 20), (_) => _pollBookingStop());
+  }
+
+  Future<void> _pollBookingStop() async {
+    try {
+      final stop = await LoungeCatalogRepository.instance.fetchBookingStopStatus(widget.loungeId);
+      if (!mounted) return;
+      setState(() => _liveBookingStop = stop);
+    } catch (_) {
+      /* ignore transient network errors */
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     final ratingsProvider = context.watch<LoungeRatingsProvider>();
-    final lounge = ratingsProvider.loungeById(loungeId);
+    final lounge = ratingsProvider.loungeById(widget.loungeId);
 
     if (lounge == null) {
       return Scaffold(
@@ -53,7 +103,9 @@ class LoungeDetailsScreen extends StatelessWidget {
       body: Stack(
         children: [
           const CircuitBackground(),
-          SingleChildScrollView(
+          ZonezScreen(
+            top: false,
+            child: SingleChildScrollView(
             padding: const EdgeInsets.fromLTRB(20, 100, 20, 32),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -61,6 +113,28 @@ class LoungeDetailsScreen extends StatelessWidget {
                 _HeroImage(lounge: lounge),
                 const SizedBox(height: 16),
                 _LoungeRatingHeader(lounge: lounge),
+                if (lounge.services.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: lounge.services
+                        .map(
+                          (service) => Chip(
+                            label: Text(
+                              service,
+                              style: ZonezTypography.caption(size: 11),
+                            ),
+                            backgroundColor:
+                                ZonezColors.neonPurple.withValues(alpha: 0.15),
+                            side: BorderSide(
+                              color: ZonezColors.neonPurple.withValues(alpha: 0.35),
+                            ),
+                          ),
+                        )
+                        .toList(),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 DeviceRatingBadges(devices: lounge.availableDevices),
                 const SizedBox(height: 20),
@@ -78,6 +152,13 @@ class LoungeDetailsScreen extends StatelessWidget {
                         icon: Icons.location_on_outlined,
                         label: lounge.location,
                       ),
+                      if (lounge.workHoursLabel.isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _InfoChip(
+                          icon: Icons.schedule_outlined,
+                          label: lounge.workHoursLabel,
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       _InfoChip(
                         icon: Icons.sports_esports_outlined,
@@ -92,26 +173,56 @@ class LoungeDetailsScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 28),
-                LoungeReviewsPanel(lounge: lounge),
+                LoungeRatingsBox(lounge: lounge),
+                const SizedBox(height: 24),
+                LoungeCommentsPreviewBox(lounge: lounge),
                 const SizedBox(height: 28),
-                NeonGradientButton(
-                  label: 'احجز الآن',
-                  icon: Icons.event_available,
-                  onPressed: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) =>
-                            LoungeBookingFlowScreen(lounge: lounge),
-                      ),
-                    );
-                  },
+                _BookingActionSection(
+                  lounge: lounge,
+                  bookingStop: _liveBookingStop ?? lounge.bookingStop,
+                  bookingsBlocked: lounge.bookingsBlocked || _liveBookingStop != null,
                 ),
               ],
             ),
           ),
+          ),
         ],
       ),
+    );
+  }
+}
+
+class _BookingActionSection extends StatelessWidget {
+  const _BookingActionSection({
+    required this.lounge,
+    required this.bookingStop,
+    required this.bookingsBlocked,
+  });
+
+  final LoungeModel lounge;
+  final BookingStopStatus? bookingStop;
+  final bool bookingsBlocked;
+
+  @override
+  Widget build(BuildContext context) {
+    if (bookingsBlocked) {
+      return BookingBlockedButton(
+        label: bookingStop?.buttonLabel ?? 'الحجز غير متاح مؤقتاً',
+        message: bookingStop?.message,
+      );
+    }
+
+    return NeonGradientButton(
+      label: 'احجز الآن',
+      icon: Icons.event_available,
+      onPressed: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => LoungeBookingFlowScreen(lounge: lounge),
+          ),
+        );
+      },
     );
   }
 }
@@ -140,31 +251,20 @@ class _HeroImage extends StatelessWidget {
         child: Stack(
           fit: StackFit.expand,
           children: [
-            if (lounge.imageUrl != null)
+            if (lounge.imageUrl != null && lounge.imageUrl!.isNotEmpty)
               Image.network(
                 lounge.imageUrl!,
                 fit: BoxFit.cover,
                 errorBuilder: (_, __, ___) => const SizedBox.shrink(),
-              ),
-            Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    ZonezColors.deepBlack.withValues(alpha: 0.6),
-                  ],
+              )
+            else
+              Center(
+                child: Icon(
+                  Icons.sports_esports,
+                  size: 64,
+                  color: Colors.white.withValues(alpha: 0.25),
                 ),
               ),
-            ),
-            Center(
-              child: Icon(
-                Icons.sports_esports,
-                size: 64,
-                color: Colors.white.withValues(alpha: 0.25),
-              ),
-            ),
           ],
         ),
       ),

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/theme/zonez_colors.dart';
 import '../../widgets/circuit_background.dart';
+import '../../widgets/zonez_screen.dart';
 
 class TermsScreen extends StatelessWidget {
   const TermsScreen({super.key});
@@ -20,7 +21,9 @@ class TermsScreen extends StatelessWidget {
       body: Stack(
         children: [
           const CircuitBackground(),
-          ListView(
+          ZonezScreen(
+            top: false,
+            child: ListView(
             padding: const EdgeInsets.all(16),
             children: [
               _SectionCard(
@@ -61,6 +64,7 @@ class TermsScreen extends StatelessWidget {
                 ],
               ),
             ],
+          ),
           ),
         ],
       ),

@@ -7,6 +7,7 @@ import {
   PACKAGE_BOOKINGS_EVENT,
 } from "../data/packageBookingsStorage";
 import { formatDisplayDate } from "../../maintenance/data/faultMeta";
+import { PACKAGE_TYPE_OPTIONS } from "../data/packageTypes";
 
 const labelCls = "mb-1.5 block text-[11px] font-bold text-gray-500 dark:text-gray-400";
 const inputCls =
@@ -14,11 +15,9 @@ const inputCls =
 
 const EMPTY_FORM = {
   name: "",
-  hours: "",
   price: "",
-  deviceLabel: "",
+  packageType: "ps5",
   description: "",
-  notes: "",
   isActive: true,
 };
 
@@ -83,11 +82,9 @@ export default function PackageDetailsModal({
     if (!pkg) return;
     setForm({
       name: pkg.name ?? "",
-      hours: pkg.hours ?? "",
       price: pkg.price ?? "",
-      deviceLabel: pkg.deviceLabel ?? "",
+      packageType: pkg.packageType || "ps5",
       description: pkg.description ?? "",
-      notes: pkg.notes ?? "",
       isActive: pkg.isActive !== false,
     });
   }, [open, mode, pkg, isAdd]);
@@ -111,21 +108,23 @@ export default function PackageDetailsModal({
   const handleSave = () => {
     onSave?.({
       name: form.name.trim(),
-      hours: form.hours.trim(),
       price: form.price.trim(),
-      deviceLabel: form.deviceLabel.trim(),
+      packageType: form.packageType,
+      deviceLabel: form.packageType,
       description: form.description.trim(),
-      notes: form.notes.trim(),
       isActive: isAdd ? true : pkg.isActive !== false,
     });
   };
 
-  const activeState = isAdd ? true : (isEdit ? pkg.isActive !== false : pkg.isActive);
+  const activeState = isAdd ? true : isEdit ? pkg.isActive !== false : pkg.isActive;
+  const deviceLabel =
+    PACKAGE_TYPE_OPTIONS.find((o) => o.value === (pkg?.packageType || form.packageType))?.label ||
+    pkg?.deviceLabel ||
+    "—";
 
   return (
     <AdminModal open={open} onClose={onClose} title={TITLES[mode] || TITLES.details} wide>
       <div className="mt-4 space-y-4">
-        {/* ——— عرض التفاصيل: للقراءة فقط ——— */}
         {isDetails ? (
           <>
             <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/40">
@@ -134,16 +133,13 @@ export default function PackageDetailsModal({
             </div>
 
             <div className="rounded-xl border border-gray-100 px-4 py-1 dark:border-gray-800">
-              <ReadOnlyDetailRow label="المدة" value={pkg.hours} />
               <ReadOnlyDetailRow label="السعر" value={pkg.price} />
-              <ReadOnlyDetailRow label="جهاز مستخدم" value={pkg.deviceLabel} />
+              <ReadOnlyDetailRow label="جهاز مستخدم" value={deviceLabel} />
               <ReadOnlyDetailRow label="وصف مختصر" value={pkg.description} />
-              <ReadOnlyDetailRow label="ملاحظة" value={pkg.notes} />
             </div>
           </>
         ) : null}
 
-        {/* ——— إضافة / تعديل: حقول قابلة للتعديل ——— */}
         {isFormMode ? (
           <div className="rounded-xl border border-gray-100 bg-gray-50 p-4 dark:border-gray-800 dark:bg-gray-800/40">
             <div className="grid gap-3 sm:grid-cols-2">
@@ -160,18 +156,6 @@ export default function PackageDetailsModal({
                 />
               </div>
               <div>
-                <label className={labelCls} htmlFor="pk-hours">
-                  المدة
-                </label>
-                <input
-                  id="pk-hours"
-                  className={inputCls}
-                  value={form.hours}
-                  onChange={(e) => setForm((f) => ({ ...f, hours: e.target.value }))}
-                  placeholder="مثال: 3 ساعات"
-                />
-              </div>
-              <div>
                 <label className={labelCls} htmlFor="pk-price">
                   السعر
                 </label>
@@ -183,17 +167,22 @@ export default function PackageDetailsModal({
                   placeholder="مثال: 55 د.ل"
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className={labelCls} htmlFor="pk-device">
                   جهاز مستخدم
                 </label>
-                <input
+                <select
                   id="pk-device"
                   className={inputCls}
-                  value={form.deviceLabel}
-                  onChange={(e) => setForm((f) => ({ ...f, deviceLabel: e.target.value }))}
-                  placeholder="مثال: PlayStation 5"
-                />
+                  value={form.packageType}
+                  onChange={(e) => setForm((f) => ({ ...f, packageType: e.target.value }))}
+                >
+                  {PACKAGE_TYPE_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div className="sm:col-span-2">
                 <label className={labelCls} htmlFor="pk-desc">
@@ -207,23 +196,10 @@ export default function PackageDetailsModal({
                   onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))}
                 />
               </div>
-              <div className="sm:col-span-2">
-                <label className={labelCls} htmlFor="pk-notes">
-                  ملاحظة
-                </label>
-                <textarea
-                  id="pk-notes"
-                  rows={2}
-                  className={`${inputCls} resize-none`}
-                  value={form.notes}
-                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                />
-              </div>
             </div>
           </div>
         ) : null}
 
-        {/* ——— بيانات النظام — للعرض فقط ——— */}
         <div className="rounded-xl border border-gray-100 dark:border-gray-800">
           <div className="border-b border-gray-100 bg-gray-50/80 px-4 py-2.5 dark:border-gray-800 dark:bg-gray-800/40">
             <p className="text-[11px] font-bold text-gray-600 dark:text-gray-300">بيانات النظام</p>

@@ -1,7 +1,9 @@
 const STATUS_LABELS = {
   started: "بدأت",
+  ongoing: "جارية",
   upcoming: "قادمة",
-  finished: "انتهت",
+  finished: "منتهية",
+  completed: "منتهية",
   cancelled: "ملغاة",
   archived: "مؤرشفة",
 };

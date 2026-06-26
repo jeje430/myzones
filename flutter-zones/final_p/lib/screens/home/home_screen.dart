@@ -8,6 +8,7 @@ import '../../providers/tournament_provider.dart';
 import '../../providers/zones_data_provider.dart';
 import '../../services/booking_automation_service.dart';
 import '../../services/booking_notification_service.dart';
+import '../../services/live_booking_sync_service.dart';
 import '../../widgets/circuit_background.dart';
 import '../../widgets/notification_banner.dart';
 import 'lounge_search_screen.dart';
@@ -33,26 +34,38 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final _scaffoldKey = GlobalKey<ScaffoldState>();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final appState = context.read<AppStateProvider>();
       context.read<ZonesDataProvider>().loadUserProfile();
-      context.read<ZonesDataProvider>().loadOffers();
+      context.read<ZonesDataProvider>().loadOffers(forceRefresh: true);
       BookingAutomationService.instance.start(
         appState,
         tournamentProvider: context.read<TournamentProvider>(),
       );
+      LiveBookingSyncService.instance.start(appState);
       BookingNotificationService.instance.restoreRemindersForBookings(appState);
     });
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      LiveBookingSyncService.instance.syncNow();
+      context.read<ZonesDataProvider>().loadOffers(forceRefresh: true);
+    }
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    LiveBookingSyncService.instance.stop();
     BookingAutomationService.instance.stop();
     BookingNotificationService.instance.dispose();
     super.dispose();

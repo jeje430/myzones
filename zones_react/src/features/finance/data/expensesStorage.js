@@ -1,16 +1,76 @@
 import { categoryLabel } from "./expenseMeta";
+import {
+  FINANCE_DATA_EVENT,
+  ensureExpensesLoaded,
+  getCachedExpenses,
+  invalidateFinanceCache,
+  setExpensesCache,
+} from "./financeApiCache";
+import {
+  createManagerExpense,
+  deleteManagerExpense,
+  deleteManagerExpensesBulk,
+  updateManagerExpense,
+} from "./managerFinanceApi";
 
-const STORAGE_KEY = "zones-hall-expenses-v1";
-export const EXPENSES_STORAGE_EVENT = "zones-expenses-updated";
+export { FINANCE_DATA_EVENT as EXPENSES_STORAGE_EVENT };
 
-const BREAKDOWN_COLORS = ["#6B5478", "#3b82f6", "#f97316", "#eab308", "#22c55e", "#94a3b8", "#ec4899"];
-
-function pad2(n) {
-  return String(n).padStart(2, "0");
+export function loadExpenses() {
+  return getCachedExpenses();
 }
 
-function isoFromParts(y, m, d) {
-  return `${y}-${pad2(m)}-${pad2(d)}`;
+export async function refreshExpenses() {
+  return ensureExpensesLoaded(true);
+}
+
+export async function saveExpenseRow(patch, existingId = null) {
+  const payload = {
+    name: patch.name,
+    amount: patch.amount,
+    isPaid: patch.isPaid,
+    addedAt: patch.addedAt,
+    paidAt: patch.paidAt,
+    notes: patch.notes,
+  };
+
+  const result = existingId
+    ? await updateManagerExpense(existingId, payload)
+    : await createManagerExpense(payload);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const rows = existingId
+    ? getCachedExpenses().map((row) => (row.id === existingId ? result.expense : row))
+    : [result.expense, ...getCachedExpenses()];
+
+  await setExpensesCache(rows);
+  invalidateFinanceCache();
+
+  return result;
+}
+
+export async function removeExpenseRows(ids) {
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (!uniqueIds.length) {
+    return { ok: false, error: "لا توجد عناصر للحذف." };
+  }
+
+  const result =
+    uniqueIds.length === 1
+      ? await deleteManagerExpense(uniqueIds[0])
+      : await deleteManagerExpensesBulk(uniqueIds);
+
+  if (!result.ok) {
+    return result;
+  }
+
+  const idSet = new Set(uniqueIds);
+  await setExpensesCache(getCachedExpenses().filter((row) => !idSet.has(row.id)));
+  invalidateFinanceCache();
+
+  return { ok: true };
 }
 
 function normalizeExpenseRow(row) {
@@ -21,50 +81,6 @@ function normalizeExpenseRow(row) {
     "—";
   const { category, categoryLabel: _legacyLabel, ...rest } = row;
   return { ...rest, name };
-}
-
-function buildSeedRows() {
-  const y = new Date().getFullYear();
-  const m = new Date().getMonth() + 1;
-  const prevM = m === 1 ? 12 : m - 1;
-  const prevY = m === 1 ? y - 1 : y;
-
-  return [
-    { id: 1, name: "إيجار مكان", amount: 4500, isPaid: true, addedAt: isoFromParts(y, m, 1), paidAt: isoFromParts(y, m, 2), notes: "إيجار شهر الحالي." },
-    { id: 2, name: "اشتراك نت", amount: 320, isPaid: true, addedAt: isoFromParts(y, m, 3), paidAt: isoFromParts(y, m, 3), notes: "اشتراك فايبر 100 ميجا." },
-    { id: 3, name: "فواتير كهرباء", amount: 890, isPaid: true, addedAt: isoFromParts(y, m, 5), paidAt: isoFromParts(y, m, 8), notes: "فاتورة الكهرباء." },
-    { id: 4, name: "صيانة جهاز", amount: 650, isPaid: true, addedAt: isoFromParts(y, m, 7), paidAt: isoFromParts(y, m, 9), notes: "صيانة PS5 — منطقة VIP." },
-    { id: 5, name: "مصروف نظافة", amount: 280, isPaid: false, addedAt: isoFromParts(y, m, 10), paidAt: "", notes: "تنظيف أسبوعي للصالة." },
-    { id: 6, name: "صيانة جهاز", amount: 420, isPaid: true, addedAt: isoFromParts(y, m, 12), paidAt: isoFromParts(y, m, 14), notes: "استبدال يد تحكم." },
-    { id: 7, name: "اشتراك نت", amount: 320, isPaid: true, addedAt: isoFromParts(prevY, prevM, 3), paidAt: isoFromParts(prevY, prevM, 3), notes: "اشتراك الشهر السابق." },
-    { id: 8, name: "إيجار مكان", amount: 4500, isPaid: true, addedAt: isoFromParts(prevY, prevM, 1), paidAt: isoFromParts(prevY, prevM, 2), notes: "" },
-    { id: 9, name: "فواتير كهرباء", amount: 760, isPaid: true, addedAt: isoFromParts(prevY, prevM, 6), paidAt: isoFromParts(prevY, prevM, 10), notes: "" },
-    { id: 10, name: "مصروف نظافة", amount: 300, isPaid: true, addedAt: isoFromParts(prevY, prevM, 15), paidAt: isoFromParts(prevY, prevM, 16), notes: "مصروف نظافة." },
-    { id: 11, name: "صيانة جهاز", amount: 1100, isPaid: true, addedAt: isoFromParts(y, m, 18), paidAt: isoFromParts(y, m, 20), notes: "صيانة PC Gaming." },
-    { id: 12, name: "فواتير كهرباء", amount: 150, isPaid: false, addedAt: isoFromParts(y, m, 22), paidAt: "", notes: "فاتورة جزئية — بانتظار الدفع." },
-  ];
-}
-
-export function loadExpenses() {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return buildSeedRows();
-    const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed) || !parsed.length) return buildSeedRows();
-    return parsed.map(normalizeExpenseRow);
-  } catch {
-    return buildSeedRows();
-  }
-}
-
-export function saveExpenses(rows) {
-  try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows.map(normalizeExpenseRow)));
-    window.dispatchEvent(new Event(EXPENSES_STORAGE_EVENT));
-    return true;
-  } catch {
-    return false;
-  }
 }
 
 function parseIso(iso) {
@@ -78,7 +94,12 @@ function parseIso(iso) {
   return { y, m, d };
 }
 
+function countsTowardExpenses(row) {
+  return Boolean(row.isPaid);
+}
+
 function expenseInMonth(row, year, month) {
+  if (!countsTowardExpenses(row)) return false;
   const ref = parseIso(row.paidAt) || parseIso(row.addedAt);
   if (!ref) return false;
   return ref.y === year && ref.m === month;
@@ -105,6 +126,7 @@ export function buildStoredDailyExpenseSeries(year, month, rows = loadExpenses()
   const buckets = Array.from({ length: days }, (_, i) => ({ label: String(i + 1), expenses: 0 }));
 
   for (const row of rows) {
+    if (!countsTowardExpenses(row)) continue;
     const refIso = row.paidAt || row.addedAt;
     const ref = parseIso(refIso);
     if (!ref || ref.y !== year || ref.m !== month) continue;
@@ -124,10 +146,11 @@ export function buildStoredCategoryBreakdown(year, month, rows = loadExpenses())
     const key = row.name?.trim() || "غير محدد";
     map[key] = (map[key] || 0) + (Number(row.amount) || 0);
   }
+  const colors = ["#6B5478", "#3b82f6", "#f97316", "#eab308", "#22c55e", "#94a3b8", "#ec4899"];
   return Object.entries(map).map(([key, value], i) => ({
     key,
     name: key,
     value,
-    color: BREAKDOWN_COLORS[i % BREAKDOWN_COLORS.length],
+    color: colors[i % colors.length],
   }));
 }

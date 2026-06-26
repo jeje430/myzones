@@ -1,27 +1,21 @@
-/** بادئات أسماء الأجهزة الموحّدة */
-export const DEVICE_TYPE_PREFIX = {
-  ps5: "PS5",
-  xbox: "XBOX",
-  pc: "PC",
-  vr: "VR",
-};
+import {
+  DEVICE_TYPE_LABEL,
+  DEVICE_TYPE_PREFIX,
+  getDeviceTypeLabel,
+  getDeviceTypePrefix,
+} from "./deviceTypesConfig";
 
-export const DEVICE_TYPE_LABEL = {
-  ps5: "PlayStation",
-  xbox: "Xbox",
-  pc: "Gaming PC",
-  vr: "VR Headset",
-};
+export { DEVICE_TYPE_LABEL, DEVICE_TYPE_PREFIX, getDeviceTypeLabel, getDeviceTypePrefix };
+
+const LEGACY_CODE_PATTERN = /^(PS5|PS4|XBOX|PC|VR|SIM)-(\d{1,4})$/i;
 
 export function typeLabelFromType(type) {
-  return DEVICE_TYPE_LABEL[type] ?? type?.toUpperCase() ?? "—";
+  return getDeviceTypeLabel(type);
 }
 
-const DEVICE_CODE_PATTERN = /^(PS5|XBOX|PC|VR)-(\d{1,4})$/i;
-
-/** هل الاسم بالصيغة الموحّدة PS5-01 / PC-016 … */
+/** @deprecated Legacy helper — prefer free-form identifiers. */
 export function isCodeDeviceName(name) {
-  return DEVICE_CODE_PATTERN.test(String(name || "").trim());
+  return LEGACY_CODE_PATTERN.test(String(name || "").trim());
 }
 
 /**
@@ -36,7 +30,7 @@ export function migrateDevicesToCodeNames(list) {
   }
 
   const sorted = [...devices].sort((a, b) => (a.id ?? 0) - (b.id ?? 0));
-  const counters = { ps5: 0, xbox: 0, pc: 0, vr: 0 };
+  const counters = Object.fromEntries(Object.keys(DEVICE_TYPE_PREFIX).map((key) => [key, 0]));
   const idToName = new Map();
 
   const migrated = sorted.map((d) => {
@@ -56,9 +50,9 @@ export function migrateDevicesToCodeNames(list) {
   return { devices: migrated, idToName, changed: true };
 }
 
-/** يولّد الاسم التالي: PS5-01, XBOX-02, PC-01, VR-01 */
+/** يولّد اقتراحاً افتراضياً عند الحقل الفارغ فقط */
 export function suggestDeviceName(type, devices) {
-  const prefix = DEVICE_TYPE_PREFIX[type] || "DEV";
+  const prefix = getDeviceTypePrefix(type) || "DEV";
   const list = Array.isArray(devices) ? devices : [];
   const sameType = list.filter((d) => d.type === type);
   const used = sameType
@@ -90,41 +84,10 @@ export function resolveDeviceTypeInput(input, deviceTypeGroups = []) {
   return { type: slug, typeLabel: text };
 }
 
-/** يطابق بادئة النوع: PS5-01 / PC-016 مع ps5 / pc */
+/** @deprecated No longer used for validation — kept for optional suggestions. */
 export function deviceNameMatchesType(name, type) {
   const prefix = DEVICE_TYPE_PREFIX[type];
   const trimmed = String(name || "").trim();
-  if (!trimmed) return false;
-  if (!prefix) return isCodeDeviceName(trimmed);
-  return new RegExp(`^${prefix}-\\d{1,4}$`, "i").test(trimmed);
-}
-
-/** يُطبّع الاسم إلى PS5-01 / PC-016 أو null إن كان غير صالح */
-export function normalizeDeviceCodeName(name, type) {
-  const trimmed = String(name || "").trim();
-  if (!trimmed) return null;
-
-  const prefix = DEVICE_TYPE_PREFIX[type];
-  const cleaned = trimmed.toUpperCase().replace(/-+/g, "-");
-
-  if (prefix) {
-    const match = cleaned.match(new RegExp(`^(${prefix})-(\\d{1,4})$`, "i"));
-    if (match) {
-      const num = parseInt(match[2], 10);
-      if (!Number.isFinite(num) || num < 1) return null;
-      const padWidth = Math.max(2, match[2].length);
-      return `${match[1].toUpperCase()}-${String(num).padStart(padWidth, "0")}`;
-    }
-    return null;
-  }
-
-  const generic = cleaned.match(DEVICE_CODE_PATTERN);
-  if (generic) {
-    const num = parseInt(generic[2], 10);
-    if (!Number.isFinite(num) || num < 1) return null;
-    const padWidth = Math.max(2, generic[2].length);
-    return `${generic[1].toUpperCase()}-${String(num).padStart(padWidth, "0")}`;
-  }
-
-  return null;
+  if (!trimmed || !prefix) return false;
+  return new RegExp(`^${prefix}-\\d+$`, "i").test(trimmed);
 }

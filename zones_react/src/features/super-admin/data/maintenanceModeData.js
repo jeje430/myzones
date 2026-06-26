@@ -14,7 +14,7 @@ export function countActiveBookingsToday() {
   return loadCalendarSlots().filter(
     (slot) =>
       slot.date === today &&
-      (slot.status === SLOT_STATUS.reserved || slot.status === SLOT_STATUS.active),
+      (slot.status === SLOT_STATUS.reserved || slot.status === SLOT_STATUS.busy),
   ).length;
 }
 

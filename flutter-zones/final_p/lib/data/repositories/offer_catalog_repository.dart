@@ -1,74 +1,70 @@
+import '../../core/http/api_client.dart';
 import '../dto/offer_catalog_dto.dart';
-import '../seeds/offer_catalog_seed.dart';
 import '../../models/zones_models.dart';
 
-/// Local offer catalog — replace [fetchCatalog] with HTTP GET when API is ready.
+/// Fetches offers from Laravel GET /api/offers.
 class OfferCatalogRepository {
   OfferCatalogRepository._();
   static final OfferCatalogRepository instance = OfferCatalogRepository._();
 
-  List<OfferCatalogDto>? _cached;
-  final Map<int, List<TimeSlotModel>> _liveSlots = {};
+  final ApiClient _api = ApiClient.instance;
 
-  Future<List<OfferCatalogDto>> fetchCatalog() async {
-    if (_cached != null) return _cached!;
-    await Future<void>.delayed(const Duration(milliseconds: 200));
-    _cached = buildOfferCatalogApiPayload()
-        .map(OfferCatalogDto.fromJson)
-        .toList();
-    for (final dto in _cached!) {
-      _liveSlots[dto.id] = OfferCatalogMapper.toTimeSlots(dto);
+  List<OfferCatalogDto>? _cached;
+
+  Future<List<OfferCatalogDto>> fetchCatalog({bool forceRefresh = false}) async {
+    if (!forceRefresh && _cached != null) return _cached!;
+
+    final body = await _api.get('/offers');
+    if (body is! List) {
+      throw const ApiException(
+        statusCode: 500,
+        message: 'استجابة غير متوقعة من خادم العروض',
+      );
     }
+
+    _cached = body
+        .map((e) => OfferCatalogDto.fromJson(e as Map<String, dynamic>))
+        .toList();
+
     return _cached!;
   }
 
-  Future<List<OfferModel>> fetchActiveOffers() async {
-    final catalog = await fetchCatalog();
-    return catalog
-        .where((o) => !o.toDomain().isExpired)
-        .map((o) => o.toDomain())
-        .toList();
+  Future<List<OfferModel>> fetchActiveOffers({bool forceRefresh = false}) async {
+    final catalog = await fetchCatalog(forceRefresh: forceRefresh);
+    return catalog.map(OfferCatalogMapper.toOffer).toList();
   }
 
   Future<List<TimeSlotModel>> fetchTimeSlots(int offerId) async {
-    await fetchCatalog();
-    return List<TimeSlotModel>.from(_liveSlots[offerId] ?? []);
+    final catalog = await fetchCatalog();
+    final offer = catalog.where((o) => o.id == offerId).firstOrNull;
+    if (offer == null) return const [];
+    return OfferCatalogMapper.toTimeSlots(offer);
   }
 
   double getOfferPrice(int offerId) {
-    final dto = _cached?.where((o) => o.id == offerId).firstOrNull;
-    return dto?.finalPrice ?? 0;
-  }
-
-  OfferCatalogDto? offerById(int offerId) {
-    return _cached?.where((o) => o.id == offerId).firstOrNull;
+    final offer = _cached?.where((o) => o.id == offerId).firstOrNull;
+    return offer?.finalPrice ?? 0;
   }
 
   Future<String> confirmSlotBooking({
     required int offerId,
     required int timeSlotId,
   }) async {
-    await fetchCatalog();
-    final slots = _liveSlots[offerId];
-    if (slots == null) throw Exception('العرض غير موجود');
+    final body = await _api.post(
+      '/offers/$offerId/slots/$timeSlotId/book',
+    ) as Map<String, dynamic>;
 
-    final index = slots.indexWhere((s) => s.id == timeSlotId);
-    if (index == -1) throw Exception('الوقت المحدد غير موجود');
-    if (!slots[index].isAvailable) throw Exception('هذا الوقت محجوز مسبقاً');
-
-    slots[index].isAvailable = false;
-    return 'ZNS-${DateTime.now().millisecondsSinceEpoch}-$timeSlotId';
+    invalidateCache();
+    return body['booking_id'] as String;
   }
 
-  void invalidateCache() {
-    _cached = null;
-    _liveSlots.clear();
-  }
+  void invalidateCache() => _cached = null;
 }
 
 extension _FirstOrNull<E> on Iterable<E> {
   E? get firstOrNull {
-    final i = iterator;
-    return i.moveNext() ? i.current : null;
+    final iterator = this.iterator;
+    if (!iterator.moveNext()) return null;
+    return iterator.current;
   }
 }

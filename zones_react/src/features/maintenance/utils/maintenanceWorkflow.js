@@ -1,24 +1,55 @@
-import { zonesToastError, zonesToastWarning } from "../../../shared/utils/zonesAlerts";
-import { loadDevices, endDeviceMaintenance, setMaintenanceDeviceStatus } from "../../devices-packages/data/devicesStorage";
+import { zonesToastError, zonesToastWarning, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
+import { isApiStaffSession, getActiveStaffSession } from "../../devices-packages/data/hallCatalogSync";
+import { loadDevices, endDeviceMaintenance, setMaintenanceDeviceStatus, startDeviceMaintenance } from "../../devices-packages/data/devicesStorage";
 import { reconcileDevicesWithFaults } from "../../devices-packages/utils/deviceFaultSync";
+import { invalidateFinanceCache } from "../../finance/data/financeApiCache";
 import {
   addFault,
+  getLatestBlockingFaultForDevice,
   getLatestPendingFaultForDevice,
   resolveAndArchiveFaultForDevice,
 } from "../data/maintenanceFaultsStorage";
+import {
+  createMaintenanceFault,
+  resolveMaintenanceFault,
+  startMaintenanceFault,
+} from "../data/maintenanceFaultsApi";
+import { applyApiDevicePatch, syncMaintenanceStateFromApi } from "../data/maintenanceFaultsSync";
 import { formatFaultDateTime } from "../data/faultMeta";
+
+function useApiMaintenance() {
+  const session = getActiveStaffSession();
+  return isApiStaffSession(session);
+}
 
 /** هل يُقفَل مفتاح التفعيل (عطل معلّق أو صيانة جارية) */
 export function isDeviceToggleLocked(device) {
   if (!device) return true;
-  return Boolean(getLatestPendingFaultForDevice(device.id)) || Boolean(device.maintenanceInProgress);
+  return Boolean(getLatestBlockingFaultForDevice(device.id)) || Boolean(device.maintenanceInProgress);
 }
 
-/** تسجيل عطل + تعطيل الجهاز → يظهر في «الأعطال الحالية» */
-export function reportDeviceFault(payload) {
+/** تسجيل عطل + وضع الجهاز في الصيانة */
+export async function reportDeviceFault(payload) {
+  if (useApiMaintenance()) {
+    const result = await createMaintenanceFault(payload);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر تسجيل العطل", "خطأ");
+      return false;
+    }
+    applyApiDevicePatch(result.device);
+    await syncMaintenanceStateFromApi();
+    if (payload.applyMaintenanceNow === false) {
+      zonesToastSuccess(result.message || "تم جدولة العطل — الجهاز يبقى متاحاً", "عطل مجدول");
+    }
+    return true;
+  }
+
   addFault(payload);
-  setMaintenanceDeviceStatus(payload.deviceId, false, { hasPendingFault: true });
+  if (payload.applyMaintenanceNow !== false) {
+    setMaintenanceDeviceStatus(payload.deviceId, false, { hasPendingFault: true });
+  }
   reconcileDevicesWithFaults();
+  return true;
 }
 
 function registerManagerFault(device, managerName, faultTypeCustom) {
@@ -69,11 +100,44 @@ export function reconcileDisabledDevicesWithoutFaults(managerName = "مدير ا
   return orphans.length;
 }
 
-/** إتمام الإصلاح — أرشفة العطل + تنظيف حالة الجهاز */
-export function completeDeviceRepair(deviceId, maintenanceCost = 0) {
+/** بدء الإصلاح */
+export async function startDeviceMaintenanceWorkflow(deviceId) {
+  const fault = getLatestPendingFaultForDevice(deviceId);
+  if (useApiMaintenance() && fault?.id) {
+    const result = await startMaintenanceFault(fault.id);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر بدء الإصلاح", "خطأ");
+      return false;
+    }
+    applyApiDevicePatch(result.device);
+    await syncMaintenanceStateFromApi();
+    return true;
+  }
+
+  startDeviceMaintenance(deviceId);
+  reconcileDevicesWithFaults();
+  return true;
+}
+
+/** إتمام الإصلاح — أرشفة العطل + إعادة الجهاز للمتاح */
+export async function completeDeviceRepair(deviceId, maintenanceCost = 0) {
+  const fault = getLatestPendingFaultForDevice(deviceId);
+  if (useApiMaintenance() && fault?.id) {
+    const result = await resolveMaintenanceFault(fault.id, maintenanceCost);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر إتمام الإصلاح", "خطأ");
+      return false;
+    }
+    applyApiDevicePatch(result.device);
+    await syncMaintenanceStateFromApi();
+    invalidateFinanceCache();
+    return true;
+  }
+
   resolveAndArchiveFaultForDevice(deviceId, maintenanceCost);
   endDeviceMaintenance(deviceId);
   reconcileDevicesWithFaults();
+  return true;
 }
 
 /** إعادة تفعيل — مسموح فقط بعد إتمام الإصلاح من جدول الأعطال */

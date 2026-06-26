@@ -1,4 +1,4 @@
-import { Archive, Ban, GitMerge, Info, Users } from "lucide-react";
+import { Ban, GitBranch, Info, Users } from "lucide-react";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 
@@ -6,17 +6,16 @@ export default function TournamentRowActions({
   mode = "manager",
   onDetails,
   onParticipants,
-  onGenerateBracket,
-  onArchive,
+  onBracket,
   onCancel,
-  canGenerate = false,
-  canArchive = false,
-  canCancel = false,
+  canCancel = true,
+  cancelLabel,
 }) {
   if (mode === "details") {
     return (
       <TableActionsGroup>
         <IconButton icon={Info} label="تفاصيل البطولة" tone="brand" onClick={onDetails} />
+        <IconButton icon={Users} label="عرض المشاركين" tone="brand" onClick={onParticipants} />
       </TableActionsGroup>
     );
   }
@@ -31,26 +30,12 @@ export default function TournamentRowActions({
 
   return (
     <TableActionsGroup>
+      <IconButton icon={Info} label="عرض تفاصيل البطولة" tone="brand" onClick={onDetails} />
       <IconButton icon={Users} label="عرض المشاركين" tone="brand" onClick={onParticipants} />
-      <IconButton
-        icon={GitMerge}
-        label="توليد المواجهات"
-        tone="brand"
-        onClick={onGenerateBracket}
-        disabled={!canGenerate}
-        className={!canGenerate ? "opacity-35" : ""}
-      />
-      <IconButton
-        icon={Archive}
-        label="أرشفة البطولة"
-        tone="muted"
-        onClick={onArchive}
-        disabled={!canArchive}
-        className={!canArchive ? "opacity-35" : ""}
-      />
+      <IconButton icon={GitBranch} label="عرض شجرة البطولة" tone="brand" onClick={onBracket} />
       <IconButton
         icon={Ban}
-        label="إلغاء البطولة"
+        label={cancelLabel || "إلغاء البطولة"}
         tone="warning"
         onClick={onCancel}
         disabled={!canCancel}

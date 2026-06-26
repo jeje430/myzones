@@ -1,23 +1,34 @@
 import {
   getLatestPendingFaultForDevice,
+  isBlockingFault,
+  isDeviceInMaintenanceOnDate,
   loadFaults,
 } from "../../maintenance/data/maintenanceFaultsStorage";
 import { faultTypeLabel } from "../../maintenance/data/faultMeta";
 import { loadDevices, saveDevices } from "../data/devicesStorage";
 
-/** أجهزة لها عطل معلّق في سجل الأعطال */
-export function getPendingFaultDeviceIds() {
-  return new Set(
-    loadFaults()
-      .filter((f) => !f.archived && f.status === "pending")
-      .map((f) => f.deviceId),
-  );
+/** أجهزة لها عطل معلّق يمنع الحجز (ليس مجدولاً مستقبلياً) */
+export function getBlockingFaultDeviceIds() {
+  return new Set(loadFaults().filter(isBlockingFault).map((f) => f.deviceId));
 }
 
-/** هل الجهاز في الصيانة — يعتمد على وجود عطل معلّق فقط */
+/** @deprecated use getBlockingFaultDeviceIds */
+export function getPendingFaultDeviceIds() {
+  return getBlockingFaultDeviceIds();
+}
+
+export {
+  getFaultEffectiveDateIso,
+  getOpenFaultsForDevice,
+  isDeviceInMaintenanceOnDate,
+  isOpenFaultRecord,
+} from "../../maintenance/data/maintenanceFaultsStorage";
+
+/** أجهزة لها عطل معلّق في سجل الأعطال أو حالة صيانة من Laravel */
 export function isDeviceBroken(device) {
   if (!device) return false;
-  return getPendingFaultDeviceIds().has(device.id);
+  if (device.operationalStatus === "maintenance" || device.isMaintenance) return true;
+  return getBlockingFaultDeviceIds().has(device.id);
 }
 
 /** هل الإصلاح جاري (بدأت الصيانة والعطل لا يزال معلّقاً) */
@@ -28,17 +39,17 @@ export function isDeviceRepairInProgress(device) {
 
 /** مزامنة hasFault و maintenanceInProgress مع سجل الأعطال */
 export function reconcileDevicesWithFaults(devices = loadDevices()) {
-  const pendingIds = getPendingFaultDeviceIds();
+  const blockingIds = getBlockingFaultDeviceIds();
   let changed = false;
 
   const next = devices.map((d) => {
-    const hasPending = pendingIds.has(d.id);
+    const hasBlockingFault = blockingIds.has(d.id);
     const patch = {};
 
-    if (Boolean(d.hasFault) !== hasPending) {
-      patch.hasFault = hasPending;
+    if (Boolean(d.hasFault) !== hasBlockingFault) {
+      patch.hasFault = hasBlockingFault;
     }
-    if (!hasPending && d.maintenanceInProgress) {
+    if (!hasBlockingFault && d.maintenanceInProgress) {
       patch.maintenanceInProgress = false;
     }
 
@@ -57,11 +68,11 @@ export function loadSyncedActiveDevices() {
 }
 
 /**
- * قائمة منسدلة «تسجيل عطل» — نفس أجهزة المدير (غير مؤرشفة)
- * بدون عطل معلّق حالياً
+ * قائمة منسدلة «تسجيل عطل» — أجهزة متاحة فقط (active) بدون عطل معلّق
  */
 export function loadSelectableDevicesForFault() {
   return loadSyncedActiveDevices()
+    .filter((d) => !d.isArchived)
     .filter((d) => !getLatestPendingFaultForDevice(d.id))
     .sort((a, b) => String(a.name || "").localeCompare(String(b.name || ""), "en", { numeric: true }));
 }

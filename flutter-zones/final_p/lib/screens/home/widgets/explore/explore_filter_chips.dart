@@ -91,11 +91,11 @@ class _NeonFilterChip extends StatelessWidget {
                   ],
                 )
               : null,
-          color: selected ? null : ZonezColors.cardDark.withValues(alpha: 0.72),
+          color: selected ? null : ZonezColors.cardDark.withValues(alpha: 0.82),
           border: Border.all(
             color: selected
                 ? accentColor.withValues(alpha: 0.9)
-                : ZonezColors.borderMuted.withValues(alpha: 0.6),
+                : ZonezColors.neonPurple.withValues(alpha: 0.28),
             width: selected ? 1.5 : 1,
           ),
           boxShadow: selected

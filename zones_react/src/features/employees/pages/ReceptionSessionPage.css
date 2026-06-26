@@ -138,7 +138,7 @@
 
 .rsess-timer {
   display: inline-flex;
-  min-width: 3.25rem;
+  min-width: 4.75rem;
   align-items: center;
   justify-content: center;
   border-radius: 0.5rem;
@@ -148,6 +148,16 @@
   font-weight: 800;
   font-variant-numeric: tabular-nums;
   color: #2563eb;
+}
+
+.rsess-timer--idle {
+  background: rgba(107, 114, 128, 0.1);
+  color: #6b7280;
+}
+
+[data-theme="dark"] .rsess-timer--idle {
+  background: rgba(107, 114, 128, 0.2);
+  color: #9ca3af;
 }
 
 [data-theme="dark"] .rsess-timer {

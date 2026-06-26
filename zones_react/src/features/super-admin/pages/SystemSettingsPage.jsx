@@ -1,10 +1,9 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   DatabaseBackup,
   FolderOpen,
   Globe,
   Loader2,
-  Percent,
   Save,
   Sparkles,
   Upload,
@@ -14,7 +13,6 @@ import { zonesConfirm, zonesSwal, zonesToastError, zonesToastSuccess } from "../
 import ToggleSwitch from "../components/ui/ToggleSwitch";
 import PageHeader from "../components/ui/PageHeader";
 import {
-  MAX_COMMISSION_RATE,
   getSuperAdminState,
   runDatabaseBackup,
   updateSystemSettings,
@@ -27,11 +25,17 @@ import {
 import { ZONES_LOGO_SRC } from "../data/superAdminDashboardData";
 import { Input } from "../../../components/ui/input";
 import {
+  DEFAULT_MINIMUM_POINTS_REQUIRED,
   DEFAULT_POINTS_PER_SESSION,
-  DEFAULT_REDEMPTION_THRESHOLD,
 } from "../../loyalty/data/loyaltyPointsStorage";
+import {
+  calculateEstimatedSessions,
+  fetchLoyaltySettings,
+  updateLoyaltySettings,
+} from "../../loyalty/data/loyaltySettingsApi";
 
 const labelClass = "mb-2 block text-right text-[11px] font-extrabold text-gray-600 dark:text-gray-300";
+const helperClass = "mt-1.5 text-[10px] font-semibold leading-relaxed text-gray-500 dark:text-gray-400";
 
 function Card({ title, icon: Icon, children, className = "" }) {
   return (
@@ -47,9 +51,19 @@ function Card({ title, icon: Icon, children, className = "" }) {
   );
 }
 
+function syncLoyaltyToLocalStorage({ pointsPerCompletedSession, minimumPointsRequired }) {
+  updateSystemSettings({
+    loyaltyPointsPerSession: pointsPerCompletedSession,
+    loyaltyMinimumPointsRequired: minimumPointsRequired,
+    loyaltyRedemptionThreshold: minimumPointsRequired,
+  });
+}
+
 export default function SystemSettingsPage() {
   const [form, setForm] = useState(getSuperAdminState().systemSettings);
   const [backingUp, setBackingUp] = useState(false);
+  const [loyaltyLoading, setLoyaltyLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
   const fileRef = useRef(null);
 
   useEffect(() => {
@@ -58,15 +72,34 @@ export default function SystemSettingsPage() {
     return () => window.removeEventListener("super-admin-data-updated", refresh);
   }, []);
 
-  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
+  useEffect(() => {
+    let cancelled = false;
 
-  const setRate = (raw) => {
-    let v = Number(raw);
-    if (Number.isNaN(v)) v = 0;
-    if (v > MAX_COMMISSION_RATE) v = MAX_COMMISSION_RATE;
-    if (v < 0) v = 0;
-    set("globalCommissionRate", v);
-  };
+    (async () => {
+      setLoyaltyLoading(true);
+      const result = await fetchLoyaltySettings();
+      if (cancelled) return;
+
+      if (result.ok) {
+        const { pointsPerCompletedSession, minimumPointsRequired } = result.settings;
+        syncLoyaltyToLocalStorage({ pointsPerCompletedSession, minimumPointsRequired });
+        setForm((current) => ({
+          ...current,
+          loyaltyPointsPerSession: pointsPerCompletedSession,
+          loyaltyMinimumPointsRequired: minimumPointsRequired,
+          loyaltyRedemptionThreshold: minimumPointsRequired,
+        }));
+      }
+
+      setLoyaltyLoading(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const onLogoPick = (e) => {
     const file = e.target.files?.[0];
@@ -127,23 +160,63 @@ export default function SystemSettingsPage() {
   const setLoyaltyInt = (key, raw, fallback) => {
     let v = Number.parseInt(String(raw), 10);
     if (!Number.isFinite(v) || v < 1) v = fallback;
-    set(key, v);
+    setForm((f) => ({
+      ...f,
+      [key]: v,
+      ...(key === "loyaltyMinimumPointsRequired" ? { loyaltyRedemptionThreshold: v } : {}),
+    }));
   };
 
-  const save = () => {
-    if (form.globalCommissionRate > MAX_COMMISSION_RATE) {
-      zonesToastError(`الحد الأقصى لنسبة العمولة ${MAX_COMMISSION_RATE}%`);
-      return;
-    }
-    if (!form.loyaltyPointsPerSession || form.loyaltyPointsPerSession < 1) {
+  const pointsPerSession = form.loyaltyPointsPerSession ?? DEFAULT_POINTS_PER_SESSION;
+  const minimumPointsRequired =
+    form.loyaltyMinimumPointsRequired ??
+    form.loyaltyRedemptionThreshold ??
+    DEFAULT_MINIMUM_POINTS_REQUIRED;
+
+  const estimatedSessions = useMemo(
+    () => calculateEstimatedSessions(pointsPerSession, minimumPointsRequired),
+    [pointsPerSession, minimumPointsRequired],
+  );
+
+  const save = async () => {
+    if (!pointsPerSession || pointsPerSession < 1) {
       zonesToastError("نقاط كل جلسة يجب أن تكون 1 على الأقل.");
       return;
     }
-    if (!form.loyaltyRedemptionThreshold || form.loyaltyRedemptionThreshold < 1) {
-      zonesToastError("حد الدفع بالنقاط يجب أن يكون 1 على الأقل.");
+    if (!minimumPointsRequired || minimumPointsRequired < 1) {
+      zonesToastError("الحد الأدنى للمكافآت يجب أن يكون 1 على الأقل.");
       return;
     }
-    updateSystemSettings(form);
+
+    setSaving(true);
+
+    const loyaltyResult = await updateLoyaltySettings({
+      pointsPerCompletedSession: pointsPerSession,
+      minimumPointsRequired,
+    });
+
+    if (!loyaltyResult.ok) {
+      setSaving(false);
+      zonesToastError(loyaltyResult.error || "تعذّر حفظ إعدادات نقاط الولاء.");
+      return;
+    }
+
+    syncLoyaltyToLocalStorage({
+      pointsPerCompletedSession: loyaltyResult.settings.pointsPerCompletedSession,
+      minimumPointsRequired: loyaltyResult.settings.minimumPointsRequired,
+    });
+
+    const { loyaltyPointsPerSession, loyaltyMinimumPointsRequired, loyaltyRedemptionThreshold, ...rest } =
+      form;
+    updateSystemSettings({
+      ...rest,
+      loyaltyPointsPerSession: loyaltyResult.settings.pointsPerCompletedSession,
+      loyaltyMinimumPointsRequired: loyaltyResult.settings.minimumPointsRequired,
+      loyaltyRedemptionThreshold: loyaltyResult.settings.minimumPointsRequired,
+    });
+
+    setForm(getSuperAdminState().systemSettings);
+    setSaving(false);
     zonesToastSuccess("تم حفظ التغييرات");
   };
 
@@ -234,73 +307,7 @@ export default function SystemSettingsPage() {
           </div>
         </Card>
 
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
-          <Card title="العمولة" icon={Percent}>
-            <div className="flex min-h-[168px] flex-col justify-between">
-              <div>
-                <label className={labelClass}>نسبة العمولة الحالية</label>
-                <div className="relative w-full">
-                  <Input
-                    type="number"
-                    min={0}
-                    max={MAX_COMMISSION_RATE}
-                    step={0.5}
-                    dir="ltr"
-                    className="text-left pe-3 ps-9"
-                    value={form.globalCommissionRate}
-                    onChange={(e) => setRate(e.target.value)}
-                  />
-                  <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-extrabold text-gray-400">
-                    %
-                  </span>
-                </div>
-              </div>
-              <div className="mt-4 flex flex-wrap justify-end gap-2">
-                <span className="rounded-full bg-[#6B5478]/10 px-2.5 py-0.5 text-[11px] font-bold text-[#6B5478]">
-                  الافتراضي: 3%
-                </span>
-                <span className="rounded-full bg-amber-500/15 px-2.5 py-0.5 text-[11px] font-bold text-amber-600 dark:text-amber-400">
-                  الحد الأقصى: {MAX_COMMISSION_RATE}%
-                </span>
-              </div>
-            </div>
-          </Card>
-
-          <Card title="نقاط الولاء" icon={Sparkles}>
-            <div className="flex min-h-[168px] flex-col justify-between gap-4">
-              <div>
-                <label className={labelClass}>نقاط لكل جلسة مكتملة</label>
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  dir="ltr"
-                  className="text-left"
-                  value={form.loyaltyPointsPerSession ?? DEFAULT_POINTS_PER_SESSION}
-                  onChange={(e) => setLoyaltyInt("loyaltyPointsPerSession", e.target.value, DEFAULT_POINTS_PER_SESSION)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>الحد الأدنى لاستخدام النقاط (Threshold)</label>
-                <Input
-                  type="number"
-                  min={1}
-                  step={1}
-                  dir="ltr"
-                  className="text-left"
-                  value={form.loyaltyRedemptionThreshold ?? DEFAULT_REDEMPTION_THRESHOLD}
-                  onChange={(e) =>
-                    setLoyaltyInt("loyaltyRedemptionThreshold", e.target.value, DEFAULT_REDEMPTION_THRESHOLD)
-                  }
-                />
-              </div>
-              <p className="text-[10px] font-semibold leading-relaxed text-gray-500 dark:text-gray-400">
-                يُكتسب الرصيد عند إنهاء الجلسة (كاش/مدفوع). عند الدفع بالنقاط يُخصم الحد الأدنى فقط ويبقى
-                الفرق في حساب الزبون. لا تُكتسب نقاط عن جلسة مدفوعة بالنقاط.
-              </p>
-            </div>
-          </Card>
-
+        <div className="mb-4 grid gap-4 lg:grid-cols-2">
           <Card title="النسخ الاحتياطي" icon={DatabaseBackup}>
             <div className="flex min-h-[168px] flex-col justify-between">
               <p className="text-xs font-semibold text-gray-500 dark:text-gray-400">
@@ -343,12 +350,78 @@ export default function SystemSettingsPage() {
           </Card>
         </div>
 
+        <Card
+          title="نظام نقاط الولاء"
+          icon={Sparkles}
+          className="border-[#6B5478]/25 bg-gradient-to-br from-white via-white to-[#6B5478]/5 shadow-[0_0_24px_rgba(107,84,120,0.08)] dark:from-gray-900 dark:via-gray-900 dark:to-[#6B5478]/10 dark:shadow-[0_0_32px_rgba(107,84,120,0.15)]"
+        >
+          {loyaltyLoading ? (
+            <div className="flex min-h-[180px] items-center justify-center gap-2 text-sm font-bold text-[#6B5478]">
+              <Loader2 size={18} className="animate-spin" />
+              جاري تحميل إعدادات الولاء...
+            </div>
+          ) : (
+            <div className="grid gap-5 lg:grid-cols-3">
+              <div>
+                <label className={labelClass}>نقاط لكل جلسة مكتملة</label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  dir="ltr"
+                  className="border-[#6B5478]/20 bg-white/80 text-left focus-visible:ring-[#6B5478]/40 dark:bg-gray-950/60"
+                  value={pointsPerSession}
+                  onChange={(e) =>
+                    setLoyaltyInt("loyaltyPointsPerSession", e.target.value, DEFAULT_POINTS_PER_SESSION)
+                  }
+                />
+                <p className={helperClass}>يكسب الزبائن نقاط ولاء تلقائياً بعد إتمام الجلسات.</p>
+              </div>
+
+              <div>
+                <label className={labelClass}>الحد الأدنى للمكافآت</label>
+                <Input
+                  type="number"
+                  min={1}
+                  step={1}
+                  dir="ltr"
+                  className="border-[#6B5478]/20 bg-white/80 text-left focus-visible:ring-[#6B5478]/40 dark:bg-gray-950/60"
+                  value={minimumPointsRequired}
+                  onChange={(e) =>
+                    setLoyaltyInt(
+                      "loyaltyMinimumPointsRequired",
+                      e.target.value,
+                      DEFAULT_MINIMUM_POINTS_REQUIRED,
+                    )
+                  }
+                />
+                <p className={helperClass}>تصبح المكافآت متاحة بعد الوصول إلى الحد الأدنى المطلوب من النقاط.</p>
+              </div>
+
+              <div>
+                <label className={labelClass}>الجلسات التقديرية المطلوبة</label>
+                <div
+                  className="flex h-10 items-center justify-end rounded-xl border border-[#6B5478]/30 bg-[#6B5478]/10 px-4 text-sm font-extrabold text-[#6B5478] shadow-[inset_0_0_12px_rgba(107,84,120,0.08)] dark:bg-[#6B5478]/15 dark:text-[#c4a8d4]"
+                  aria-live="polite"
+                >
+                  {estimatedSessions} جلسة
+                </div>
+                <p className={helperClass}>
+                  يُحسب تلقائياً: {minimumPointsRequired} ÷ {pointsPerSession} = {estimatedSessions} جلسة
+                </p>
+              </div>
+            </div>
+          )}
+        </Card>
+
         <div className="mt-6 flex justify-center">
           <button
             type="submit"
-            className="flex items-center gap-2 rounded-xl bg-[#6B5478] px-10 py-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#5a4665]"
+            disabled={saving || loyaltyLoading}
+            className="flex items-center gap-2 rounded-xl bg-[#6B5478] px-10 py-3 text-xs font-extrabold text-white shadow-sm transition hover:bg-[#5a4665] disabled:opacity-60"
           >
-            <Save size={14} /> حفظ التغييرات
+            {saving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+            {saving ? "جاري الحفظ..." : "حفظ التغييرات"}
           </button>
         </div>
       </form>

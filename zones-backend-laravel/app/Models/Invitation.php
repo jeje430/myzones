@@ -15,8 +15,11 @@ class Invitation extends Model
         'station_name',
         'email',
         'role',
+        'shift',
         'token',
         'invited_by',
+        'hall_join_request_id',
+        'station_id',
         'expires_at',
         'used_at',
 

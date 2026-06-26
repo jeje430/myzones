@@ -7,16 +7,14 @@ import KpiCard from "../../super-admin/components/ui/KpiCard";
 import TablePagination from "../../../shared/components/TablePagination";
 import {
   zonesConfirm,
+  zonesToastError,
   zonesToastSuccess,
 } from "../../../shared/utils/zonesAlerts";
-import { getAuthSession } from "../../auth/data/mockUsersStorage";
 import {
-  CUSTOMER_COMMENTS_EVENT,
-  deleteComment,
-  getCommentStats,
-  loadComments,
-  replyToComment,
-} from "../data/customerCommentsStorage";
+  deleteManagerComment,
+  fetchManagerComments,
+  replyToManagerComment,
+} from "../data/managerCommentsApi";
 import CustomerCommentCard from "../components/CustomerCommentCard";
 import CommentReplyModal from "../components/CommentReplyModal";
 
@@ -29,24 +27,33 @@ const FILTERS = [
 ];
 
 export default function ManagerInteractionPage() {
-  const session = getAuthSession();
-  const managerName = session?.fullName || "مدير الصالة";
-
-  const [comments, setComments] = useState(() => loadComments());
+  const [comments, setComments] = useState([]);
+  const [stats, setStats] = useState({ total: 0, pending: 0, replied: 0 });
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [page, setPage] = useState(1);
   const [replyComment, setReplyComment] = useState(null);
   const [replyText, setReplyText] = useState("");
 
-  const refresh = useCallback(() => setComments(loadComments()), []);
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    const result = await fetchManagerComments();
+    if (result.ok) {
+      setComments(result.comments);
+      setStats(result.stats);
+    } else {
+      zonesToastError(result.error || "تعذّر تحميل التعليقات");
+    }
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
     refresh();
-    window.addEventListener(CUSTOMER_COMMENTS_EVENT, refresh);
+    const interval = setInterval(refresh, 30000);
     window.addEventListener("focus", refresh);
     return () => {
-      window.removeEventListener(CUSTOMER_COMMENTS_EVENT, refresh);
+      clearInterval(interval);
       window.removeEventListener("focus", refresh);
     };
   }, [refresh]);
@@ -54,8 +61,6 @@ export default function ManagerInteractionPage() {
   useEffect(() => {
     setPage(1);
   }, [search, filter]);
-
-  const stats = useMemo(() => getCommentStats(comments), [comments]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -91,10 +96,14 @@ export default function ManagerInteractionPage() {
     setReplyText("");
   };
 
-  const handleSaveReply = () => {
+  const handleSaveReply = async () => {
     if (!replyComment || !replyText.trim()) return;
-    replyToComment(replyComment.id, replyText, managerName);
-    refresh();
+    const result = await replyToManagerComment(replyComment.id, replyText.trim());
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر إرسال الرد");
+      return;
+    }
+    await refresh();
     closeReply();
     zonesToastSuccess(replyComment.managerReply?.text ? "تم تحديث الرد" : "تم إرسال الرد للزبون");
   };
@@ -108,8 +117,12 @@ export default function ManagerInteractionPage() {
       danger: true,
     });
     if (!confirmed) return;
-    deleteComment(comment.id);
-    refresh();
+    const result = await deleteManagerComment(comment.id);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر حذف التعليق");
+      return;
+    }
+    await refresh();
     zonesToastSuccess("تم حذف التعليق");
   };
 
@@ -185,7 +198,9 @@ export default function ManagerInteractionPage() {
           </div>
 
           <div className="space-y-3 p-5">
-            {paged.length === 0 ? (
+            {loading ? (
+              <div className="py-14 text-center text-sm text-gray-500">جاري التحميل...</div>
+            ) : paged.length === 0 ? (
               <div className="rounded-2xl border border-dashed border-gray-200 px-6 py-14 text-center dark:border-gray-700">
                 <MessageCircle className="mx-auto mb-3 h-10 w-10 text-gray-300 dark:text-gray-600" />
                 <p className="text-sm font-bold text-gray-500 dark:text-gray-400">

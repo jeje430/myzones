@@ -15,43 +15,34 @@ import {
   Users,
 } from "lucide-react";
 import { zonesConfirm } from "../utils/zonesAlerts";
-import { MANAGER_MENU } from "../config/managerNavigation";
+import { getManagerMenu } from "../config/managerNavigation";
 import { clearAuthSession } from "../../features/auth/data/mockUsersStorage";
+import { useManagerPaths } from "../tenant/ManagerWorkspaceProvider";
 
 const ZONES_LOGO_SRC = "/zones-logo.png";
 
-const MENU_GROUPS = [
-  MANAGER_MENU.account,
-  MANAGER_MENU.hall,
-  MANAGER_MENU.staff,
-  MANAGER_MENU.faults,
-  MANAGER_MENU.alerts,
-  MANAGER_MENU.tournaments,
-  MANAGER_MENU.finance,
-];
+function buildExactPaths(routes) {
+  return [
+    routes.employees,
+    routes.reception,
+    routes.employeesArchive,
+    routes.offers,
+    routes.interaction,
+    routes.tournaments,
+    routes.finance,
+    routes.expenses,
+    routes.payments,
+    routes.analysis,
+    routes.revenues,
+    routes.faults,
+    routes.faultsArchive,
+    routes.alertsLog,
+    routes.alertsArchive,
+    routes.alertsStopBookings,
+  ];
+}
 
-const EXACT_PATHS = [
-  "/employees",
-  "/employees/reception",
-  "/employees/archive",
-  "/offers",
-  "/interaction",
-  "/tournaments",
-  "/tournaments/data",
-  "/tournaments/new",
-  "/tournaments/participants",
-  "/finance",
-  "/finance/expenses",
-  "/finance/net-profit",
-  "/finance/revenues",
-  "/faults",
-  "/faults/archive",
-  "/alerts/log",
-  "/alerts/archive",
-  "/alerts/stop-bookings",
-];
-
-function pathMatches(pathname, path, search = "") {
+function pathMatches(pathname, path, search = "", exactPaths = []) {
   if (!path) return false;
   const base = path.split("?")[0];
 
@@ -66,21 +57,21 @@ function pathMatches(pathname, path, search = "") {
 
   if (pathname === base) return true;
 
-  if (EXACT_PATHS.includes(base)) return false;
+  if (exactPaths.includes(base)) return false;
 
   return pathname.startsWith(`${base}/`);
 }
 
-function nodeActive(node, pathname, search = "") {
-  if (node.path && pathMatches(pathname, node.path, search)) return true;
-  return (node.children || []).some((c) => nodeActive(c, pathname, search));
+function nodeActive(node, pathname, search = "", exactPaths = []) {
+  if (node.path && pathMatches(pathname, node.path, search, exactPaths)) return true;
+  return (node.children || []).some((c) => nodeActive(c, pathname, search, exactPaths));
 }
 
-function collectOpenIds(nodes, pathname, acc = {}, search = "") {
+function collectOpenIds(nodes, pathname, acc = {}, search = "", exactPaths = []) {
   nodes.forEach((node) => {
     if (node.children?.length) {
-      if (nodeActive(node, pathname, search)) acc[node.id || node.label] = true;
-      collectOpenIds(node.children, pathname, acc, search);
+      if (nodeActive(node, pathname, search, exactPaths)) acc[node.id || node.label] = true;
+      collectOpenIds(node.children, pathname, acc, search, exactPaths);
     }
   });
   return acc;
@@ -102,7 +93,7 @@ function sidebarMainItemClass(active) {
 }
 
 function StandaloneMenuLink({ to, icon: Icon, label, pathname, onNavigate }) {
-  const active = pathname === to;
+  const active = pathname === to || pathname.startsWith(`${to}/`);
   return (
     <NavLink to={to} end onClick={onNavigate} className={sidebarMainItemClass(active)}>
       <Icon size={17} />
@@ -259,20 +250,35 @@ export default function ManagerSidebar({ onNavigate }) {
   const navigate = useNavigate();
   const pathname = location.pathname;
   const search = location.search;
+  const { managerId, routes } = useManagerPaths();
+  const MANAGER_MENU = useMemo(() => getManagerMenu(managerId), [managerId]);
+  const exactPaths = useMemo(() => buildExactPaths(routes), [routes]);
+
+  const MENU_GROUPS = useMemo(
+    () => [
+      MANAGER_MENU.hall,
+      MANAGER_MENU.staff,
+      MANAGER_MENU.faults,
+      MANAGER_MENU.alerts,
+      MANAGER_MENU.finance,
+    ],
+    [MANAGER_MENU],
+  );
 
   const initialOpen = useMemo(() => {
     const acc = {};
     MENU_GROUPS.forEach((g) => {
-      if (nodeActive(g, pathname, search)) acc[g.id] = true;
+      if (nodeActive(g, pathname, search, exactPaths)) acc[g.id] = true;
     });
     collectOpenIds(
       MENU_GROUPS.flatMap((g) => g.children || []),
       pathname,
       acc,
       search,
+      exactPaths,
     );
     return acc;
-  }, [pathname, search]);
+  }, [pathname, search, MENU_GROUPS, exactPaths]);
 
   const [open, setOpen] = useState(initialOpen);
 
@@ -291,9 +297,9 @@ export default function ManagerSidebar({ onNavigate }) {
       danger: true,
     });
     if (!confirmed) return;
-    clearAuthSession();
+    clearAuthSession(managerId);
     onNavigate?.();
-    navigate("/auth/login", { replace: true });
+    navigate("/manager/login", { replace: true });
   };
 
   const navHandlers = { close: onNavigate, logout: handleLogout };
@@ -377,14 +383,12 @@ export default function ManagerSidebar({ onNavigate }) {
           onNavigate={onNavigate}
         />
 
-        <MenuGroup
-          group={MANAGER_MENU.tournaments}
+        <StandaloneMenuLink
+          to={MANAGER_MENU.tournaments.path}
           icon={Trophy}
-          open={open}
-          toggle={toggle}
-          onNavigate={navHandlers}
+          label={MANAGER_MENU.tournaments.label}
           pathname={pathname}
-          search={search}
+          onNavigate={onNavigate}
         />
 
         <MenuGroup

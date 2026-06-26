@@ -1,4 +1,7 @@
-const STORAGE_KEY = "zones-package-bookings-v1";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
+
+const BASE_KEY = "zones-package-bookings-v2";
+const storageKey = () => hallScopedKey(BASE_KEY);
 
 export const PACKAGE_BOOKINGS_EVENT = "zones-package-bookings-updated";
 
@@ -7,32 +10,22 @@ function notifyUpdated() {
   window.dispatchEvent(new CustomEvent(PACKAGE_BOOKINGS_EVENT));
 }
 
-/** حجوزات تجريبية — تُحدَّث عند تسجيل عمليات الحجز */
-const DEFAULT_BOOKINGS = [
-  { id: 1, packageId: 1, bookedAt: "2026-06-01T12:00:00" },
-  { id: 2, packageId: 1, bookedAt: "2026-06-03T15:00:00" },
-  { id: 3, packageId: 1, bookedAt: "2026-06-05T18:00:00" },
-  { id: 4, packageId: 1, bookedAt: "2026-06-07T20:00:00" },
-  { id: 5, packageId: 1, bookedAt: "2026-06-08T14:00:00" },
-  { id: 6, packageId: 2, bookedAt: "2026-06-02T11:00:00" },
-  { id: 7, packageId: 2, bookedAt: "2026-06-06T16:00:00" },
-  { id: 8, packageId: 3, bookedAt: "2026-06-04T10:00:00" },
-];
+const DEFAULT_BOOKINGS = [];
 
 export function loadPackageBookings() {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) return [...DEFAULT_BOOKINGS];
+    const raw = localStorage.getItem(storageKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) && parsed.length ? parsed : [...DEFAULT_BOOKINGS];
+    return Array.isArray(parsed) && parsed.length ? parsed : [];
   } catch {
-    return [...DEFAULT_BOOKINGS];
+    return [];
   }
 }
 
 export function savePackageBookings(list) {
   try {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(list));
+    localStorage.setItem(storageKey(), JSON.stringify(list));
     notifyUpdated();
   } catch {
     /* ignore */

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
+import { Trash2 } from "lucide-react";
+import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
@@ -9,6 +10,17 @@ import ExpenseFormModal from "../components/ExpenseFormModal";
 import ExpenseRowActions from "../components/ExpenseRowActions";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
+import {
   formatExpenseAmount,
   formatExpenseDate,
   paymentStatusLabel,
@@ -16,7 +28,9 @@ import {
 import {
   EXPENSES_STORAGE_EVENT,
   loadExpenses,
-  saveExpenses,
+  refreshExpenses,
+  removeExpenseRows,
+  saveExpenseRow,
 } from "../data/expensesStorage";
 
 const PAGE_SIZE = 8;
@@ -36,7 +50,8 @@ function PaymentBadge({ isPaid }) {
 }
 
 export default function ExpensesPage() {
-  const [rows, setRows] = useState(loadExpenses);
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [modalOpen, setModalOpen] = useState(false);
@@ -44,11 +59,24 @@ export default function ExpensesPage() {
   const [activeRow, setActiveRow] = useState(null);
 
   useEffect(() => {
-    saveExpenses(rows);
-  }, [rows]);
+    let active = true;
+
+    refreshExpenses().then((list) => {
+      if (active) {
+        setRows(list);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
-    const sync = () => setRows(loadExpenses());
+    const sync = () => {
+      refreshExpenses().then((list) => setRows(list));
+    };
     window.addEventListener(EXPENSES_STORAGE_EVENT, sync);
     return () => window.removeEventListener(EXPENSES_STORAGE_EVENT, sync);
   }, []);
@@ -67,6 +95,8 @@ export default function ExpensesPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: rows, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -94,32 +124,53 @@ export default function ExpensesPage() {
     setModalMode("add");
   };
 
-  const handleSave = (patch) => {
-    if (modalMode === "add") {
-      const nid = Math.max(0, ...rows.map((r) => r.id)) + 1;
-      const row = { id: nid, ...patch };
-      setRows((list) => [...list, row]);
-    } else if (activeRow) {
-      setRows((list) =>
-        list.map((r) => (r.id === activeRow.id ? { ...r, ...patch } : r)),
-      );
+  const handleSave = async (patch) => {
+    const result = await saveExpenseRow(patch, modalMode === "edit" ? activeRow?.id : null);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر حفظ المصروف");
+      return;
     }
+
+    setRows(loadExpenses());
     closeModal();
     zonesToastSuccess("تم الحفظ");
   };
 
-  const handleDelete = async (row) => {
-    const ok = await zonesConfirm({
-      title: "حذف المصروف؟",
-      text: `سيتم حذف «${row.name || "—"}».`,
+  const runDelete = async (targetIds, rowForMessage) => {
+    const isBulk = targetIds.length > 1;
+    const targets = filterItemsByIds(rows, targetIds);
+    const idSet = new Set(targetIds);
+
+    const confirmed = await zonesConfirm({
+      title: isBulk ? `حذف ${targetIds.length} مصروفات؟` : "حذف المصروف؟",
+      text: isBulk
+        ? `سيتم حذف ${targetIds.length} مصروفات.`
+        : `سيتم حذف «${rowForMessage.name || "—"}».`,
       icon: "warning",
       confirmText: "حذف",
       cancelText: "تراجع",
       danger: true,
     });
-    if (!ok) return;
-    setRows((list) => list.filter((r) => r.id !== row.id));
-    zonesToastSuccess("تم الحذف");
+    if (!confirmed) return;
+
+    const result = await removeExpenseRows(targetIds);
+    if (!result.ok) {
+      zonesToastError(result.error || "تعذّر حذف المصروف");
+      return;
+    }
+
+    setRows(loadExpenses());
+    if (activeRow && idSet.has(activeRow.id)) closeModal();
+    selection.clearSelection();
+    zonesToastSuccess(isBulk ? `تم حذف ${targets.length} مصروفات` : "تم الحذف");
+  };
+
+  const handleDelete = (row) => runDelete(resolveBulkActionIds(row.id, selection.selectedIds), row);
+
+  const handleBulkDelete = () => {
+    const targets = filterItemsByIds(rows, selection.selectedIds);
+    if (!targets.length) return;
+    runDelete(selection.selectedIds, targets[0]);
   };
 
   return (
@@ -144,10 +195,17 @@ export default function ExpensesPage() {
           </Button>
         </div>
 
+        <TableBulkActionBar
+          count={selection.count}
+          onClear={selection.clearSelection}
+          actions={[{ label: "حذف المحدد", icon: Trash2, onClick: handleBulkDelete, variant: "danger" }]}
+        />
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[980px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">اسم المصروف</th>
                 <th className="px-3 py-2.5 font-bold">المبلغ</th>
                 <th className="px-3 py-2.5 font-bold">حالة الدفع</th>
@@ -159,7 +217,8 @@ export default function ExpensesPage() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.map((row) => (
-                <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                  <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name || "مصروف"}`} {...selection} />
                   <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">
                     {row.name || "—"}
                   </td>
@@ -183,7 +242,7 @@ export default function ExpensesPage() {
               ))}
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
                     لا توجد مصروفات مطابقة.
                   </td>
                 </tr>

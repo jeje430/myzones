@@ -1,9 +1,8 @@
-import { useRef, useState } from "react";
+import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import {
   AlertTriangle,
   CalendarDays,
-  Camera,
   CheckCircle2,
   Clock,
   Mail,
@@ -13,55 +12,63 @@ import {
   Trash2,
   User,
 } from "lucide-react";
-import { zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
+import { zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import ConfirmModal from "../components/ui/ConfirmModal";
 import PageHeader from "../components/ui/PageHeader";
+import ProfileAvatarEditor from "../../../shared/components/ProfileAvatarEditor";
 import {
-  clearSuperAdminSession,
+  deleteSuperAdminAccount,
   getSuperAdminSession,
-  updateSuperAdminProfile,
+  SUPER_ADMIN_PROFILE_EVENT,
+  updateSuperAdminProfileOnApi,
 } from "../data/superAdminAuth";
-import { SUPER_ADMIN_EMAIL, SUPER_ADMIN_ROUTES } from "../data/superAdminConstants";
+import { SUPER_ADMIN_ROUTES } from "../data/superAdminConstants";
 import { IconField } from "../../../components/ui/icon-field";
 
 export default function AdminProfilePage() {
   const navigate = useNavigate();
   const session = getSuperAdminSession();
-  const fileRef = useRef(null);
 
   const [fullName, setFullName] = useState(session?.fullName || "");
-  const email = SUPER_ADMIN_EMAIL;
+  const email = session?.email || "";
   const [phone, setPhone] = useState(session?.phone || "");
   const [avatar, setAvatar] = useState(session?.avatar || "");
   const [editing, setEditing] = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
 
+  useEffect(() => {
+    const refresh = () => {
+      const current = getSuperAdminSession();
+      if (!current) return;
+      setFullName(current.fullName || "");
+      setPhone(current.phone || "");
+      setAvatar(current.avatar || "");
+    };
+    window.addEventListener(SUPER_ADMIN_PROFILE_EVENT, refresh);
+    return () => window.removeEventListener(SUPER_ADMIN_PROFILE_EVENT, refresh);
+  }, []);
+
   const lastLogin = session?.loggedInAt
     ? new Date(session.loggedInAt).toLocaleString("ar-LY", { hour: "2-digit", minute: "2-digit" })
     : "اليوم 09:30 ص";
 
-  const onPickAvatar = (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setAvatar(reader.result);
-        updateSuperAdminProfile({ avatar: reader.result });
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const save = () => {
-    updateSuperAdminProfile({ fullName, email: SUPER_ADMIN_EMAIL, phone });
+  const save = async () => {
+    const res = await updateSuperAdminProfileOnApi({ fullName, phone });
+    if (!res.ok) {
+      zonesToastError(res.error || "تعذر حفظ التعديلات");
+      return;
+    }
     setEditing(false);
     zonesToastSuccess("تم حفظ التعديلات");
   };
 
-  const deleteAccount = () => {
-    clearSuperAdminSession();
+  const deleteAccount = async () => {
+    const res = await deleteSuperAdminAccount();
     setDeleteOpen(false);
+    if (!res.ok) {
+      zonesToastError(res.error || "تعذر حذف الحساب");
+      return;
+    }
     navigate(SUPER_ADMIN_ROUTES.login, { replace: true, state: { message: "تم حذف حساب الأدمن." } });
   };
 
@@ -103,24 +110,7 @@ export default function AdminProfilePage() {
 
         <section className="rounded-2xl border border-gray-200 bg-white p-5 text-center shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <h2 className="mb-4 text-right text-sm font-extrabold text-gray-900 dark:text-white">ملخص الملف الشخصي</h2>
-          <div className="relative mx-auto h-24 w-24">
-            {avatar ? (
-              <img src={avatar} alt={fullName} className="h-24 w-24 rounded-full object-cover ring-4 ring-[#6B5478]/15" />
-            ) : (
-              <span className="flex h-24 w-24 items-center justify-center rounded-full bg-[#6B5478]/12 text-[#6B5478] ring-4 ring-[#6B5478]/15">
-                <User size={40} />
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              className="absolute bottom-0 left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#6B5478] text-white shadow dark:border-gray-900"
-              aria-label="تغيير الصورة"
-            >
-              <Camera size={13} />
-            </button>
-            <input ref={fileRef} type="file" accept="image/*" onChange={onPickAvatar} className="hidden" />
-          </div>
+          <ProfileAvatarEditor avatarUrl={avatar} fullName={fullName} onAvatarChange={setAvatar} />
 
           <h3 className="mt-3 text-base font-extrabold text-gray-900 dark:text-white">{fullName}</h3>
           <div className="mt-1 flex items-center justify-center gap-2">
@@ -144,14 +134,6 @@ export default function AdminProfilePage() {
               <strong className="text-gray-800 dark:text-gray-200">{lastLogin}</strong>
             </div>
           </div>
-
-          <button
-            type="button"
-            onClick={() => fileRef.current?.click()}
-            className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl border border-gray-300 py-2 text-xs font-bold text-gray-700 transition hover:bg-gray-50 dark:border-gray-700 dark:text-gray-200 dark:hover:bg-gray-800"
-          >
-            <Camera size={14} /> تغيير الصورة
-          </button>
         </section>
 
         <section className="lg:col-span-3 rounded-2xl border border-red-200 bg-red-50/40 p-5 shadow-sm dark:border-red-900/40 dark:bg-red-950/10">

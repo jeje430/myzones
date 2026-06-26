@@ -16,18 +16,17 @@ import {
 
 } from "lucide-react";
 
-import { zonesSwal, zonesToastError } from "../../../shared/utils/zonesAlerts";
-import { cn } from "../../../lib/utils";
+import { zonesSwal, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 
 import {
 
-  acceptHallRequestWithInvitation,
+  acceptHallJoinRequest,
 
-  getSuperAdminState,
+  fetchHallJoinRequests,
 
-  rejectHallRequestWithReason,
+  rejectHallJoinRequest,
 
-} from "../data/superAdminStorage";
+} from "../data/hallJoinRequestsApi";
 
 import { HALL_REQUEST_STATUS } from "../data/hallRequestStatus";
 
@@ -41,6 +40,18 @@ import IconGlyph from "../../../shared/components/ui/IconGlyph";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
+import { cn } from "../../../lib/utils";
 
 
 
@@ -112,121 +123,23 @@ function FilterStatCard({ icon: Icon, iconTone = "primary", label, value, active
 
 
 
-function showAcceptEmailPreview(req, registrationUrl) {
-
-  return zonesSwal({
-
-    icon: "success",
-
-    title: "تم قبول الطلب وإرسال الدعوة ✅",
-
-    html: `
-
-      <div style="text-align:right;direction:rtl;font-size:12px;line-height:1.85;color:#374151">
-
-        <p style="margin:0 0 10px;font-weight:700;color:#111827">📧 معاينة البريد المرسل للمدير</p>
-
-        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:14px;text-align:right">
-
-          <p style="margin:0 0 8px;font-size:11px;color:#6b7280">العنوان:</p>
-
-          <p style="margin:0 0 12px;font-weight:800;color:#6B5478">تم قبول طلب انضمام صالتك</p>
-
-          <p style="margin:0 0 6px">مرحبًا <strong>${req.managerName}</strong></p>
-
-          <p style="margin:0 0 10px">تمت الموافقة على طلب انضمام صالتكم <strong>${req.hallName}</strong> إلى منصة Zones.</p>
-
-          <p style="margin:0 0 8px">لإكمال إنشاء حساب مدير الصالة يرجى الضغط على الرابط التالي:</p>
-
-          <p style="margin:0 0 10px"><a href="${registrationUrl}" style="color:#6B5478;font-weight:700">إكمال التسجيل</a></p>
-
-          <p style="margin:0;font-size:11px;color:#9ca3af">الرابط صالح لمدة 24 ساعة.</p>
-
-        </div>
-
-        <p style="margin:12px 0 6px;font-size:11px">المستلم: <span dir="ltr">${req.managerEmail}</span></p>
-
-        <input id="zones-reg-link" value="${registrationUrl}" readonly
-
-          style="width:100%;padding:9px 10px;border:1px solid #d1d5db;border-radius:10px;font-size:11px;direction:ltr;text-align:left;background:#fff;margin-top:6px" />
-
-      </div>`,
-
-    confirmButtonText: "نسخ الرابط وإغلاق",
-
-    didOpen: () => {
-
-      document.getElementById("zones-reg-link")?.select();
-
-    },
-
-    preConfirm: () => {
-
-      try {
-
-        navigator.clipboard?.writeText(registrationUrl);
-
-      } catch {
-
-        /* ignore */
-
-      }
-
-    },
-
-  });
-
+function showAcceptEmailPreview() {
+  // email is sent silently by the server — no popup needed
 }
 
 
 
-function showRejectEmailPreview(req, reason) {
-
-  return zonesSwal({
-
-    icon: "info",
-
-    title: "تم رفض الطلب وإرسال الإشعار",
-
-    html: `
-
-      <div style="text-align:right;direction:rtl;font-size:12px;line-height:1.85;color:#374151">
-
-        <p style="margin:0 0 10px;font-weight:700;color:#111827">📧 معاينة البريد المرسل للمدير</p>
-
-        <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:12px;padding:14px;text-align:right">
-
-          <p style="margin:0 0 8px;font-size:11px;color:#6b7280">العنوان:</p>
-
-          <p style="margin:0 0 12px;font-weight:800;color:#dc2626">تم رفض طلب انضمام الصالة</p>
-
-          <p style="margin:0 0 6px">مرحبًا <strong>${req.managerName}</strong></p>
-
-          <p style="margin:0 0 10px">نعتذر، تم رفض طلب انضمام صالتكم <strong>${req.hallName}</strong> إلى منصة Zones.</p>
-
-          <p style="margin:0 0 4px;font-weight:700">سبب الرفض:</p>
-
-          <p style="margin:0 0 10px;padding:8px;background:#fef2f2;border-radius:8px;color:#991b1b">${reason}</p>
-
-          <p style="margin:0;font-size:11px;color:#6b7280">يمكنكم تعديل البيانات وإعادة التقديم لاحقًا.</p>
-
-        </div>
-
-        <p style="margin:12px 0 0;font-size:11px">المستلم: <span dir="ltr">${req.managerEmail}</span></p>
-
-      </div>`,
-
-    confirmButtonText: "تم",
-
-  });
-
+function showRejectEmailPreview() {
+  // rejection email is sent silently by the server — no popup needed
 }
 
 
 
 export default function PendingRequestsPage() {
 
-  const [state, setState] = useState(getSuperAdminState());
+  const [requests, setRequests] = useState([]);
+
+  const [loading, setLoading] = useState(true);
 
   const [detailsReq, setDetailsReq] = useState(null);
 
@@ -242,19 +155,29 @@ export default function PendingRequestsPage() {
 
   useEffect(() => {
 
-    const refresh = () => setState(getSuperAdminState());
+    let cancelled = false;
 
-    refresh();
+    const load = async () => {
+      setLoading(true);
+      const result = await fetchHallJoinRequests();
+      if (cancelled) return;
+      if (result.ok) {
+        setRequests(result.requests);
+      } else {
+        zonesToastError(result.error || "تعذر تحميل الطلبات");
+      }
+      setLoading(false);
+    };
 
-    window.addEventListener("super-admin-data-updated", refresh);
+    load();
 
-    return () => window.removeEventListener("super-admin-data-updated", refresh);
+    return () => {
+      cancelled = true;
+    };
 
   }, []);
 
 
-
-  const requests = state.pendingRequests;
 
   const filterCounts = useMemo(
     () => ({
@@ -276,6 +199,9 @@ export default function PendingRequestsPage() {
     () => filteredRequests.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [filteredRequests, page],
   );
+
+  const pageIds = useMemo(() => pageRequests.map((r) => r.id), [pageRequests]);
+  const selection = useTableSelection({ items: filteredRequests, pageIds });
 
   const rangeFrom = filteredRequests.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
 
@@ -316,7 +242,7 @@ export default function PendingRequestsPage() {
 
     if (!acceptReq) return;
 
-    const result = acceptHallRequestWithInvitation(acceptReq.id, formData);
+    const result = await acceptHallJoinRequest(acceptReq.id, formData);
 
     if (!result.ok) {
 
@@ -326,9 +252,19 @@ export default function PendingRequestsPage() {
 
     }
 
-    setAcceptReq(null);
+    setRequests((prev) =>
+      prev.map((r) => (r.id === result.request.id ? result.request : r)),
+    );
 
-    await showAcceptEmailPreview(result.request, result.registrationUrl);
+    setAcceptReq(null);
+    selection.clearSelection();
+
+    if (result.mailError) {
+      zonesToastError(`تعذر إرسال البريد: ${result.mailError.slice(0, 120)}`);
+    } else {
+      zonesToastSuccess(`تم إرسال بريد القبول إلى ${result.request.managerEmail}`);
+    }
+    showAcceptEmailPreview();
 
   };
 
@@ -338,7 +274,7 @@ export default function PendingRequestsPage() {
 
     if (!rejectReq) return;
 
-    const result = rejectHallRequestWithReason(rejectReq.id, reason);
+    const result = await rejectHallJoinRequest(rejectReq.id, reason);
 
     if (!result.ok) {
 
@@ -348,17 +284,75 @@ export default function PendingRequestsPage() {
 
     }
 
-    setRejectReq(null);
+    setRequests((prev) =>
+      prev.map((r) => (r.id === result.request.id ? result.request : r)),
+    );
 
-    await showRejectEmailPreview(result.request, reason);
+    setRejectReq(null);
+    selection.clearSelection();
+
+    zonesToastSuccess(`تم رفض الطلب وإرسال إشعار إلى ${result.request.managerEmail}`);
+    showRejectEmailPreview();
 
   };
+
+  const handleBulkReject = async () => {
+    const targets = filterItemsByIds(filteredRequests, selection.selectedIds).filter(
+      (r) => r.status === HALL_REQUEST_STATUS.pending,
+    );
+    if (!targets.length) return;
+
+    const res = await zonesSwal({
+      title: `رفض ${targets.length} طلبات؟`,
+      input: "text",
+      inputLabel: "سبب الرفض",
+      inputValue: "رفض إداري",
+      showCancelButton: true,
+      confirmButtonText: "رفض",
+      cancelButtonText: "إلغاء",
+    });
+    if (!res.isConfirmed) return;
+
+    let success = 0;
+    for (const req of targets) {
+      const result = await rejectHallJoinRequest(req.id, res.value);
+      if (result.ok) {
+        success += 1;
+        setRequests((prev) => prev.map((r) => (r.id === result.request.id ? result.request : r)));
+      }
+    }
+
+    selection.clearSelection();
+    if (success) zonesToastSuccess(`تم رفض ${success} من ${targets.length} طلبات`);
+  };
+
+  const openRejectBulk = (req) => {
+    const targetIds = resolveBulkActionIds(req.id, selection.selectedIds);
+    const pendingTargets = filterItemsByIds(filteredRequests, targetIds).filter(
+      (r) => r.status === HALL_REQUEST_STATUS.pending,
+    );
+    if (!pendingTargets.length) return;
+    if (pendingTargets.length > 1) {
+      handleBulkReject();
+      return;
+    }
+    openReject(pendingTargets[0]);
+  };
+
+  const bulkActions =
+    activeFilter === "pending"
+      ? [{ label: "رفض المحدد", icon: XCircle, onClick: handleBulkReject, variant: "danger" }]
+      : [];
 
 
 
   return (
 
     <div className="space-y-6">
+
+      {loading ? (
+        <p className="text-center text-sm text-gray-500 dark:text-gray-400">جاري تحميل الطلبات...</p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-3">
 
@@ -432,6 +426,12 @@ export default function PendingRequestsPage() {
 
         </div>
 
+        <TableBulkActionBar
+          count={selection.count}
+          onClear={selection.clearSelection}
+          actions={bulkActions}
+        />
+
         <div className="overflow-x-auto">
 
           <table className="w-full min-w-[600px] text-right text-xs">
@@ -439,6 +439,8 @@ export default function PendingRequestsPage() {
             <thead>
 
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+
+                <TableSelectHeaderCell {...selection} />
 
                 <th className="px-3 py-2.5 font-bold">اسم الصالة</th>
 
@@ -462,7 +464,9 @@ export default function PendingRequestsPage() {
 
                 return (
 
-                  <tr key={r.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                  <tr key={r.id} className={selectableRowClass(selection.isSelected(r.id))}>
+
+                    <TableSelectRowCell id={r.id} ariaLabel={`تحديد ${r.hallName}`} {...selection} />
 
                     <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{r.hallName}</td>
 
@@ -512,11 +516,15 @@ export default function PendingRequestsPage() {
 
                               icon={XCircle}
 
-                              label="رفض"
+                              label={
+                                selection.isSelected(r.id) && selection.count > 1
+                                  ? `رفض ${selection.count} طلبات`
+                                  : "رفض"
+                              }
 
                               tone="danger"
 
-                              onClick={() => openReject(r)}
+                              onClick={() => openRejectBulk(r)}
 
                             />
 
@@ -538,7 +546,7 @@ export default function PendingRequestsPage() {
 
                 <tr>
 
-                  <td colSpan={5} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
 
                     لا توجد طلبات في هذه الفئة.
 

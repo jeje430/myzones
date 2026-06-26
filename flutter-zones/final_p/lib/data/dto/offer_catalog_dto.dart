@@ -1,6 +1,6 @@
 import '../../models/zones_models.dart';
 
-/// REST-shaped offer row — mirrors future GET /api/offers response.
+/// REST-shaped offer row — mirrors GET /api/offers response.
 class OfferCatalogDto {
   const OfferCatalogDto({
     required this.id,
@@ -11,6 +11,11 @@ class OfferCatalogDto {
     required this.expiresAt,
     required this.originalPrice,
     required this.discountedPrice,
+    required this.discountPercent,
+    required this.stationId,
+    required this.packageId,
+    required this.stationName,
+    required this.packageName,
     required this.terms,
     required this.timeSlots,
   });
@@ -23,26 +28,37 @@ class OfferCatalogDto {
   final DateTime expiresAt;
   final double originalPrice;
   final double discountedPrice;
+  final int discountPercent;
+  final int stationId;
+  final int packageId;
+  final String stationName;
+  final String packageName;
   final List<String> terms;
   final List<OfferTimeSlotDto> timeSlots;
 
   factory OfferCatalogDto.fromJson(Map<String, dynamic> json) {
     return OfferCatalogDto(
       id: json['id'] as int,
-      title: json['title'] as String,
-      offerImage: json['offer_image'] as String,
-      description: json['description'] as String,
+      title: json['title'] as String? ?? '',
+      offerImage: json['offer_image'] as String? ?? '',
+      description: json['description'] as String? ?? '',
       validFrom: DateTime.parse(json['valid_from'] as String),
       expiresAt: DateTime.parse(json['expires_at'] as String),
-      originalPrice: (json['original_price'] as num).toDouble(),
-      discountedPrice: (json['discounted_price'] as num).toDouble(),
+      originalPrice: (json['original_price'] as num?)?.toDouble() ?? 0,
+      discountedPrice: (json['discounted_price'] as num?)?.toDouble() ?? 0,
+      discountPercent: (json['discount_percent'] as num?)?.toInt() ?? 0,
+      stationId: (json['station_id'] as num?)?.toInt() ?? 0,
+      packageId: (json['package_id'] as num?)?.toInt() ?? 0,
+      stationName: json['station_name']?.toString() ?? '',
+      packageName: json['package_name']?.toString() ?? '',
       terms: (json['terms'] as List<dynamic>?)
               ?.map((e) => e.toString())
               .toList() ??
           const [],
-      timeSlots: (json['time_slots'] as List<dynamic>)
-          .map((e) => OfferTimeSlotDto.fromJson(e as Map<String, dynamic>))
-          .toList(),
+      timeSlots: (json['time_slots'] as List<dynamic>?)
+              ?.map((e) => OfferTimeSlotDto.fromJson(e as Map<String, dynamic>))
+              .toList() ??
+          const [],
     );
   }
 
@@ -56,16 +72,16 @@ class OfferCatalogDto {
       expiresAt: expiresAt,
       originalPrice: originalPrice,
       discountedPrice: discountedPrice,
+      discountPercent: discountPercent,
+      stationId: stationId > 0 ? stationId : null,
+      packageId: packageId > 0 ? packageId : null,
+      stationName: stationName,
+      packageName: packageName,
       terms: terms,
     );
   }
 
   double get finalPrice => discountedPrice;
-
-  int? get discountPercent {
-    if (originalPrice <= 0 || discountedPrice >= originalPrice) return null;
-    return ((1 - discountedPrice / originalPrice) * 100).round();
-  }
 }
 
 class OfferTimeSlotDto {
@@ -83,7 +99,7 @@ class OfferTimeSlotDto {
     return OfferTimeSlotDto(
       id: json['id'] as int,
       timeRange: json['time_range'] as String,
-      isAvailable: json['is_available'] as bool,
+      isAvailable: json['is_available'] as bool? ?? true,
     );
   }
 

@@ -92,7 +92,8 @@ return new class extends Migration
 
             $table->enum('payment_method', [
                 'cash',
-                'online'
+                'online',
+                'loyalty_reward',
             ]);
 
             $table->enum('payment_status', [

@@ -1,12 +1,37 @@
 import { getSuperAdminState } from "../../super-admin/data/superAdminStorage";
+import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 
-const CUSTOMERS_KEY = "zones-loyalty-customers-v1";
-const HISTORY_KEY = "zones-loyalty-history-v1";
+const CUSTOMERS_BASE = "zones-loyalty-customers-v2";
+const HISTORY_BASE = "zones-loyalty-history-v2";
+const customersKey = () => hallScopedKey(CUSTOMERS_BASE);
+const historyKey = () => hallScopedKey(HISTORY_BASE);
 
 export const LOYALTY_UPDATED_EVENT = "zones-loyalty-updated";
 
-export const DEFAULT_POINTS_PER_SESSION = 20;
-export const DEFAULT_REDEMPTION_THRESHOLD = 120;
+const LEGACY_KEYS = [
+  "zones-loyalty-customers-v1",
+  "zones-loyalty-history-v1",
+  CUSTOMERS_BASE,
+  HISTORY_BASE,
+];
+const LEGACY_PURGE_FLAG = "zones-loyalty-legacy-purged-v3";
+
+function purgeLegacyLoyaltyStorage() {
+  if (typeof window === "undefined") return;
+  if (localStorage.getItem(LEGACY_PURGE_FLAG)) return;
+  for (const key of LEGACY_KEYS) {
+    localStorage.removeItem(key);
+  }
+  localStorage.setItem(LEGACY_PURGE_FLAG, "1");
+}
+
+purgeLegacyLoyaltyStorage();
+
+export const DEFAULT_POINTS_PER_SESSION = 10;
+export const DEFAULT_MINIMUM_POINTS_REQUIRED = 100;
+
+/** @deprecated use DEFAULT_MINIMUM_POINTS_REQUIRED */
+export const DEFAULT_REDEMPTION_THRESHOLD = DEFAULT_MINIMUM_POINTS_REQUIRED;
 
 function clampPositiveInt(value, fallback) {
   const n = Number.parseInt(String(value), 10);
@@ -30,29 +55,30 @@ export function normalizePhone(phone) {
 
 export function getLoyaltySettings() {
   const settings = getSuperAdminState().systemSettings || {};
+  const minimumRaw =
+    settings.loyaltyMinimumPointsRequired ?? settings.loyaltyRedemptionThreshold;
   return {
     pointsPerSession: clampPositiveInt(settings.loyaltyPointsPerSession, DEFAULT_POINTS_PER_SESSION),
-    redemptionThreshold: clampPositiveInt(
-      settings.loyaltyRedemptionThreshold,
-      DEFAULT_REDEMPTION_THRESHOLD,
-    ),
+    minimumPointsRequired: clampPositiveInt(minimumRaw, DEFAULT_MINIMUM_POINTS_REQUIRED),
+    /** @deprecated use minimumPointsRequired */
+    redemptionThreshold: clampPositiveInt(minimumRaw, DEFAULT_MINIMUM_POINTS_REQUIRED),
   };
 }
 
 function loadCustomersRaw() {
   try {
-    const raw = localStorage.getItem(CUSTOMERS_KEY);
-    if (!raw) return buildSeedCustomers();
+    const raw = localStorage.getItem(customersKey());
+    if (!raw) return [];
     const parsed = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed : buildSeedCustomers();
+    return Array.isArray(parsed) ? parsed : [];
   } catch {
-    return buildSeedCustomers();
+    return [];
   }
 }
 
 function loadHistoryRaw() {
   try {
-    const raw = localStorage.getItem(HISTORY_KEY);
+    const raw = localStorage.getItem(historyKey());
     if (!raw) return [];
     const parsed = JSON.parse(raw);
     return Array.isArray(parsed) ? parsed : [];
@@ -62,52 +88,13 @@ function loadHistoryRaw() {
 }
 
 function persistCustomers(customers) {
-  localStorage.setItem(CUSTOMERS_KEY, JSON.stringify(customers));
+  localStorage.setItem(customersKey(), JSON.stringify(customers));
   notifyUpdated();
 }
 
 function persistHistory(history) {
-  localStorage.setItem(HISTORY_KEY, JSON.stringify(history));
+  localStorage.setItem(historyKey(), JSON.stringify(history));
   notifyUpdated();
-}
-
-function buildSeedCustomers() {
-  const now = new Date().toISOString();
-  return [
-    {
-      id: 1,
-      phoneKey: normalizePhone("0912345678"),
-      phone: "0912345678",
-      name: "محمد الزليطني",
-      email: "",
-      pointsBalance: 150,
-      lifetimeEarned: 150,
-      lifetimeRedeemed: 0,
-      updatedAt: now,
-    },
-    {
-      id: 2,
-      phoneKey: normalizePhone("0923456789"),
-      phone: "0923456789",
-      name: "أحمد الفيتوري",
-      email: "",
-      pointsBalance: 0,
-      lifetimeEarned: 30,
-      lifetimeRedeemed: 30,
-      updatedAt: now,
-    },
-    {
-      id: 3,
-      phoneKey: normalizePhone("0934567890"),
-      phone: "0934567890",
-      name: "سالم بوعزيزة",
-      email: "",
-      pointsBalance: 10,
-      lifetimeEarned: 10,
-      lifetimeRedeemed: 0,
-      updatedAt: now,
-    },
-  ];
 }
 
 function appendHistory(entry) {
@@ -120,7 +107,7 @@ function appendHistory(entry) {
 
 export function loadLoyaltyCustomers() {
   const customers = loadCustomersRaw();
-  if (!localStorage.getItem(CUSTOMERS_KEY)) {
+  if (!localStorage.getItem(customersKey())) {
     persistCustomers(customers);
   }
   return customers.sort((a, b) => b.pointsBalance - a.pointsBalance);

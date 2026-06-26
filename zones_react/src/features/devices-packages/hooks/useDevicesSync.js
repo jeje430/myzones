@@ -7,7 +7,7 @@ export function useDevicesSync(setDevicesList) {
     const syncFromStorage = () => setDevicesList(loadDevices());
 
     const onStorage = (e) => {
-      if (e.key === DEVICES_STORAGE_KEY || e.key === null) syncFromStorage();
+      if (e.key == null || e.key.startsWith(DEVICES_STORAGE_KEY)) syncFromStorage();
     };
 
     window.addEventListener(DEVICES_STORAGE_EVENT, syncFromStorage);

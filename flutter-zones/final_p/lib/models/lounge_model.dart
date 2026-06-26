@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'booking_stop_status.dart';
+
 enum DeviceType { ps5, pc, vr, xbox }
 
 extension DeviceTypeFilterUi on DeviceType {
@@ -83,21 +85,27 @@ enum RatingCategory {
 
 class DevicePackage {
   const DevicePackage({
+    required this.id,
     required this.type,
     required this.nameAr,
     required this.icon,
     required this.hourlyRate,
     required this.averageRating,
     required this.availableCount,
+    this.ratingsCount = 0,
+    this.userRating,
     this.specs,
   });
 
+  final String id;
   final DeviceType type;
   final String nameAr;
   final IconData icon;
   final double hourlyRate;
   final double averageRating;
   final int availableCount;
+  final int ratingsCount;
+  final int? userRating;
   final String? specs;
 
   bool get isAvailable => availableCount > 0;
@@ -105,14 +113,20 @@ class DevicePackage {
   DevicePackage copyWith({
     double? averageRating,
     int? availableCount,
+    int? ratingsCount,
+    int? userRating,
+    bool clearUserRating = false,
   }) {
     return DevicePackage(
+      id: id,
       type: type,
       nameAr: nameAr,
       icon: icon,
       hourlyRate: hourlyRate,
       averageRating: averageRating ?? this.averageRating,
       availableCount: availableCount ?? this.availableCount,
+      ratingsCount: ratingsCount ?? this.ratingsCount,
+      userRating: clearUserRating ? null : (userRating ?? this.userRating),
       specs: specs,
     );
   }
@@ -128,6 +142,16 @@ class LoungeModel {
     required this.reviewCount,
     required this.devices,
     this.imageUrl,
+    this.latitude,
+    this.longitude,
+    this.isOpen = true,
+    this.services = const [],
+    this.opensAt,
+    this.closesAt,
+    this.distanceMeters,
+    this.userHallRating,
+    this.bookingStop,
+    this.bookingsBlocked = false,
   });
 
   final String id;
@@ -138,6 +162,32 @@ class LoungeModel {
   final int reviewCount;
   final List<DevicePackage> devices;
   final String? imageUrl;
+  final double? latitude;
+  final double? longitude;
+  final bool isOpen;
+  final List<String> services;
+  final String? opensAt;
+  final String? closesAt;
+  final int? distanceMeters;
+  final int? userHallRating;
+  final BookingStopStatus? bookingStop;
+  final bool bookingsBlocked;
+
+  String get workHoursLabel {
+    if (opensAt == null || closesAt == null) return '';
+    return '${_formatHourAr(opensAt!)} - ${_formatHourAr(closesAt!)}';
+  }
+
+  static String _formatHourAr(String time) {
+    final parts = time.split(':');
+    final hour = int.tryParse(parts.first) ?? 0;
+    if (hour == 0) return '12:00 ص';
+    if (hour == 12) return '12:00 م';
+    if (hour < 12) return '$hour:00 ص';
+    if (hour == 13) return '1:00 م';
+    if (hour == 14) return '2:00 م';
+    return '${hour - 12}:00 م';
+  }
 
   int get totalDevices =>
       availableDevices.fold(0, (sum, d) => sum + d.availableCount);
@@ -179,6 +229,16 @@ class LoungeModel {
     return categories;
   }
 
+  /// Active packages for this hall — loaded dynamically from Laravel.
+  List<DevicePackage> get catalogPackages => devices;
+
+  DevicePackage? deviceById(String packageId) {
+    for (final device in devices) {
+      if (device.id == packageId) return device;
+    }
+    return null;
+  }
+
   DevicePackage? deviceByType(DeviceType type) {
     for (final device in devices) {
       if (device.type == type) return device;
@@ -190,6 +250,12 @@ class LoungeModel {
     double? loungeAverageRating,
     int? reviewCount,
     List<DevicePackage>? devices,
+    bool? isOpen,
+    List<String>? services,
+    String? opensAt,
+    String? closesAt,
+    int? distanceMeters,
+    int? userHallRating,
   }) {
     return LoungeModel(
       id: id,
@@ -200,6 +266,14 @@ class LoungeModel {
       reviewCount: reviewCount ?? this.reviewCount,
       devices: devices ?? this.devices,
       imageUrl: imageUrl,
+      latitude: latitude,
+      longitude: longitude,
+      isOpen: isOpen ?? this.isOpen,
+      services: services ?? this.services,
+      opensAt: opensAt ?? this.opensAt,
+      closesAt: closesAt ?? this.closesAt,
+      distanceMeters: distanceMeters ?? this.distanceMeters,
+      userHallRating: userHallRating ?? this.userHallRating,
     );
   }
 }
@@ -210,12 +284,32 @@ class HourlyTimeSlot {
     required this.label,
     required this.startDateTime,
     required this.isAvailable,
+    this.deviceId,
+    this.deviceCode,
+    this.deviceName,
+    this.packageId,
+    this.hour,
+    this.hourTo,
+    this.totalPrice,
+    this.originalTotalPrice,
+    this.discountPercent,
+    this.endDateTime,
   });
 
   final String id;
   final String label;
   final DateTime startDateTime;
   final bool isAvailable;
+  final int? deviceId;
+  final String? deviceCode;
+  final String? deviceName;
+  final int? packageId;
+  final String? hour;
+  final String? hourTo;
+  final double? totalPrice;
+  final double? originalTotalPrice;
+  final int? discountPercent;
+  final DateTime? endDateTime;
 }
 
 class AvailabilityResult {

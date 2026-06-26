@@ -1,10 +1,21 @@
 import { useEffect, useMemo, useState } from "react";
-import { Wrench } from "lucide-react";
+import { Archive, Wrench } from "lucide-react";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
 import {
   StaffRowActions,
   StaffSearchToolbar,
@@ -61,21 +72,42 @@ export default function MaintenanceEmployeesPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: maintenanceStaff, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const handleArchive = async (row) => {
+  const runArchive = async (targetIds) => {
+    const targets = filterItemsByIds(maintenanceStaff, targetIds);
+    if (!targets.length) return;
+
+    const isBulk = targets.length > 1;
     const ok = await confirmAction({
-      title: "أرشفة الموظف؟",
-      text: `سيتم نقل «${row.fullName}» إلى واجهة الأرشفة.`,
+      title: isBulk ? `أرشفة ${targets.length} موظفين؟` : "أرشفة الموظف؟",
+      text: isBulk
+        ? `سيتم نقل ${targets.length} موظفين إلى واجهة الأرشفة.`
+        : `سيتم نقل «${targets[0].fullName}» إلى واجهة الأرشفة.`,
       confirmText: "نعم، أرشف",
       danger: true,
     });
     if (!ok) return;
-    setRows(archiveEmployee(rows, row.id));
-    await toastSuccess("تمت الأرشفة", "تم نقل الموظف إلى واجهة الأرشفة.");
+
+    let next = rows;
+    for (const id of targetIds) {
+      next = archiveEmployee(next, id);
+    }
+    setRows(next);
+    selection.clearSelection();
+    await toastSuccess("تمت الأرشفة", isBulk ? `تم نقل ${targets.length} موظفين إلى الأرشفة.` : "تم نقل الموظف إلى واجهة الأرشفة.");
+  };
+
+  const handleArchive = (row) => runArchive(resolveBulkActionIds(row.id, selection.selectedIds));
+
+  const handleBulkArchive = () => {
+    if (!selection.selectedIds.length) return;
+    runArchive(selection.selectedIds);
   };
 
   return (
@@ -107,10 +139,16 @@ export default function MaintenanceEmployeesPage() {
         />
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
+          <TableBulkActionBar
+            count={selection.count}
+            onClear={selection.clearSelection}
+            actions={[{ label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchive, variant: "dangerOutline" }]}
+          />
           <div className="overflow-x-auto">
             <table className="w-full min-w-[920px] text-right text-xs">
               <thead className="border-b border-gray-100 bg-gray-50 text-[11px] font-extrabold text-gray-500 dark:border-gray-800 dark:bg-gray-800/60 dark:text-gray-400">
                 <tr>
+                  <TableSelectHeaderCell {...selection} />
                   <th className="px-4 py-3">اسم الموظف</th>
                   <th className="px-4 py-3">البريد الإلكتروني</th>
                   <th className="px-4 py-3">رقم الهاتف</th>
@@ -123,7 +161,7 @@ export default function MaintenanceEmployeesPage() {
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
                       لا يوجد موظفو صيانة مطابقون للبحث.
                     </td>
                   </tr>
@@ -131,8 +169,12 @@ export default function MaintenanceEmployeesPage() {
                   paged.map((row) => (
                     <tr
                       key={row.id}
-                      className="border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80"
+                      className={selectableRowClass(
+                        selection.isSelected(row.id),
+                        "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80",
+                      )}
                     >
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
                       <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.fullName}</td>
                       <td className="px-4 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
                         {row.email}

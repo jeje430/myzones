@@ -2,16 +2,17 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { Building2, Eye, EyeOff, Lock, Phone, User } from "lucide-react";
 import AuthLayout from "../../../shared/layouts/AuthLayout";
-import { completeManagerRegistration } from "../../super-admin/data/superAdminStorage";
-import { getInviteByToken } from "../../super-admin/data/hallManagerInvitesStorage";
-import { authenticateUser, setAuthSession } from "../data/mockUsersStorage";
+import {
+  completeManagerRegistrationApi,
+  getInvitationByToken,
+} from "../data/managerRegistrationApi";
+import { getLoginRedirectPath, setApiManagerSession } from "../data/mockUsersStorage";
 
 export default function CompleteManagerRegistrationPage() {
   const { token } = useParams();
   const navigate = useNavigate();
   const [invite, setInvite] = useState(null);
   const [loadError, setLoadError] = useState("");
-  const [fullName, setFullName] = useState("");
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -20,21 +21,35 @@ export default function CompleteManagerRegistrationPage() {
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
-    const data = getInviteByToken(token);
-    if (!data) {
-      setLoadError("رابط غير صالح أو منتهي الصلاحية.");
-      return;
-    }
-    if (data.alreadyUsed) {
-      setLoadError("تم استخدام هذا الرابط مسبقاً. يمكنك تسجيل الدخول مباشرة.");
-      return;
-    }
-    if (data.expired) {
-      setLoadError("انتهت صلاحية الرابط (24 ساعة). تواصل مع إدارة المنصة.");
-      return;
-    }
-    setInvite(data);
-    setFullName(data.managerName || "");
+    let cancelled = false;
+
+    const load = async () => {
+      const result = await getInvitationByToken(token);
+      if (cancelled) return;
+
+      if (!result.ok) {
+        setLoadError(result.error || "رابط غير صالح أو منتهي الصلاحية.");
+        return;
+      }
+
+      if (result.invite.alreadyUsed) {
+        setLoadError("تم استخدام هذا الرابط مسبقاً. يمكنك تسجيل الدخول مباشرة.");
+        return;
+      }
+
+      if (result.invite.expired) {
+        setLoadError("انتهت صلاحية الرابط (24 ساعة). تواصل مع إدارة المنصة.");
+        return;
+      }
+
+      setInvite(result.invite);
+    };
+
+    load();
+
+    return () => {
+      cancelled = true;
+    };
   }, [token]);
 
   const submit = async (e) => {
@@ -42,12 +57,12 @@ export default function CompleteManagerRegistrationPage() {
     setError("");
     if (!invite) return;
 
-    if (!fullName.trim() || !phone.trim()) {
-      setError("الاسم ورقم الهاتف مطلوبان.");
+    if (!phone.trim()) {
+      setError("رقم الهاتف مطلوب.");
       return;
     }
-    if (!password || password.length < 4) {
-      setError("كلمة المرور (4 أحرف على الأقل).");
+    if (!password || password.length < 6) {
+      setError("كلمة المرور (6 أحرف على الأقل).");
       return;
     }
     if (password !== confirmPassword) {
@@ -56,10 +71,9 @@ export default function CompleteManagerRegistrationPage() {
     }
 
     setSubmitting(true);
-    const result = completeManagerRegistration(token, {
-      fullName: fullName.trim(),
-      password,
+    const result = await completeManagerRegistrationApi(token, {
       phone: phone.trim(),
+      password,
     });
     setSubmitting(false);
 
@@ -68,13 +82,22 @@ export default function CompleteManagerRegistrationPage() {
       return;
     }
 
-    const session = authenticateUser(invite.email, password);
-    if (session) setAuthSession(session);
+    if (result.token && result.user) {
+      setApiManagerSession(result.user, result.token);
+      navigate(getLoginRedirectPath(result.user.role, result.user.id), {
+        replace: true,
+        state: {
+          message: `مرحباً ${result.user.fullName}! لوحة تحكم صالة ${invite.hallName} جاهزة.`,
+        },
+      });
+      return;
+    }
 
-    navigate("/dashboard", {
+    navigate("/manager/login", {
       replace: true,
       state: {
-        message: `مرحباً ${fullName.trim()}! تم تفعيل حساب مدير صالة ${invite.hallName} بنجاح.`,
+        registeredEmail: invite.email,
+        message: `تم إنشاء حسابك بنجاح! سجّل الدخول الآن لإدارة صالة ${invite.hallName}.`,
       },
     });
   };
@@ -83,7 +106,7 @@ export default function CompleteManagerRegistrationPage() {
     return (
       <AuthLayout title="رابط غير صالح" subtitle="إكمال تسجيل مدير الصالة">
         <p className="accept-invite-error text-center">{loadError}</p>
-        <Link className="primary-btn mt-4 block text-center" to="/auth/login">
+        <Link className="primary-btn mt-4 block text-center" to="/manager/login">
           الذهاب لتسجيل الدخول
         </Link>
       </AuthLayout>
@@ -120,15 +143,9 @@ export default function CompleteManagerRegistrationPage() {
         </div>
 
         <label>الاسم</label>
-        <div className="field">
+        <div className="field field--readonly">
           <User size={18} />
-          <input
-            type="text"
-            value={fullName}
-            onChange={(e) => setFullName(e.target.value)}
-            placeholder="الاسم الكامل"
-            required
-          />
+          <input type="text" value={invite.managerName} readOnly aria-readonly />
         </div>
 
         <label>رقم الهاتف</label>
@@ -138,7 +155,7 @@ export default function CompleteManagerRegistrationPage() {
             type="tel"
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
-            placeholder="+218 ..."
+            placeholder="091 000 0000"
             dir="ltr"
             required
           />
@@ -152,7 +169,7 @@ export default function CompleteManagerRegistrationPage() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="اختر كلمة مرور"
-            minLength={4}
+            minLength={6}
             required
           />
           <button
@@ -173,7 +190,7 @@ export default function CompleteManagerRegistrationPage() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             placeholder="أعد إدخال كلمة المرور"
-            minLength={4}
+            minLength={6}
             required
           />
         </div>
@@ -184,7 +201,7 @@ export default function CompleteManagerRegistrationPage() {
           {submitting ? "جاري الإنشاء..." : "إنشاء الحساب"}
         </button>
 
-        <Link className="inline-link" to="/auth/login">
+        <Link className="inline-link" to="/manager/login">
           لديك حساب؟ تسجيل الدخول
         </Link>
       </form>

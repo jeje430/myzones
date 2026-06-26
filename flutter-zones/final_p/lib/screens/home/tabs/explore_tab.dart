@@ -1,20 +1,28 @@
 import 'dart:math' as math;
-import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import '../../../core/maps/zonez_map_style.dart';
+import '../../../core/location/zonez_location_service.dart';
+import '../../../core/maps/zonez_explore_map_config.dart';
+import '../../../core/platform/app_platform.dart';
 import '../../../core/theme/zonez_colors.dart';
 import '../../../models/map_lounge.dart';
 import '../../../providers/app_state_provider.dart';
+import '../../../providers/lounge_ratings_provider.dart';
+import '../../../utils/distance_formatter.dart';
+import '../../../widgets/glass_container.dart';
+import '../../lounge/lounge_details_screen.dart';
 import '../widgets/explore/explore_filter_chips.dart';
-import '../widgets/explore/explore_glass_card.dart';
+import '../widgets/explore/explore_map_overlay.dart';
+import '../widgets/explore/explore_mobile_only_gate.dart';
+import '../widgets/explore/zonez_explore_pins.dart';
+import '../widgets/explore/explore_map_bottom_carousel.dart';
 
 class ExploreTab extends StatefulWidget {
   const ExploreTab({super.key, required this.onFavoriteTap});
@@ -26,25 +34,29 @@ class ExploreTab extends StatefulWidget {
 }
 
 class _ExploreTabState extends State<ExploreTab> with TickerProviderStateMixin {
-  static const _fallbackLocation = LatLng(32.8872, 13.1913);
-  static const _defaultZoom = 14.5;
+  static const _tripoliFallback = LatLng(32.8872, 13.1913);
+  static const _nearbyRadiusKm = 100.0;
 
-  GoogleMapController? _mapController;
+  final MapController _mapController = MapController();
+  final PageController _bottomCardController = PageController(viewportFraction: 0.93);
+
+  /// Real GPS only — never set from fallback or hall coordinates.
   LatLng? _userLocation;
+
   MapLounge? _selectedLounge;
+  bool _blockMapTap = false;
   String? _locationError;
+  String? _loungesError;
   bool _isLocating = true;
-  bool _mapReady = false;
+  bool _isLoadingLounges = false;
 
   bool _ps5Filter = false;
   bool _pcFilter = false;
   bool _openNowFilter = false;
 
-  Set<Marker> _markers = {};
-  Set<Circle> _pulseCircles = {};
-  final Map<String, BitmapDescriptor> _markerIcons = {};
-
   late final AnimationController _pulseController;
+  List<MapLounge> _allLounges = [];
+  List<MapLounge> _filteredLounges = [];
 
   @override
   void initState() {
@@ -52,30 +64,28 @@ class _ExploreTabState extends State<ExploreTab> with TickerProviderStateMixin {
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 2200),
-    )..repeat();
+    );
 
-    _pulseController.addListener(_updatePulseCircles);
-    _initializeLocation();
-    _prepareMarkers();
+    if (!AppPlatform.supportsExploreMap) return;
+
+    _pulseController.repeat();
+    _pulseController.addListener(() {
+      if (mounted) setState(() {});
+    });
+    _bootstrapExplore();
   }
 
   @override
   void dispose() {
-    _pulseController.removeListener(_updatePulseCircles);
     _pulseController.dispose();
-    _mapController?.dispose();
+    _bottomCardController.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
-  List<MapLounge> get _filteredLounges => kSampleMapLounges
-      .where(
-        (lounge) => lounge.matchesFilters(
-          ps5Filter: _ps5Filter,
-          pcFilter: _pcFilter,
-          openNowFilter: _openNowFilter,
-        ),
-      )
-      .toList();
+  Future<void> _bootstrapExplore() async {
+    await _initializeLocation();
+  }
 
   Future<void> _initializeLocation() async {
     setState(() {
@@ -83,192 +93,205 @@ class _ExploreTabState extends State<ExploreTab> with TickerProviderStateMixin {
       _locationError = null;
     });
 
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      if (!serviceEnabled) {
-        throw Exception('خدمة الموقع غير مفعّلة. فعّل GPS من إعدادات الجهاز.');
-      }
-
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (permission == LocationPermission.denied) {
-        throw Exception('تم رفض إذن الموقع. اسمح بالوصول للموقع من الإعدادات.');
-      }
-
-      if (permission == LocationPermission.deniedForever) {
-        throw Exception(
-          'إذن الموقع مرفوض نهائياً. افتح إعدادات التطبيق وفعّل الموقع.',
-        );
-      }
-
-      final position = await Geolocator.getCurrentPosition(
-        locationSettings: const LocationSettings(
-          accuracy: LocationAccuracy.high,
-          timeLimit: Duration(seconds: 12),
-        ),
-      );
-
-      if (!mounted) return;
-
-      final location = LatLng(position.latitude, position.longitude);
-      setState(() {
-        _userLocation = location;
-        _isLocating = false;
-      });
-
-      _updatePulseCircles();
-      await _animateToLocation(location, zoom: _defaultZoom);
-    } catch (error) {
-      if (!mounted) return;
-      setState(() {
-        _locationError = error.toString().replaceFirst('Exception: ', '');
-        _userLocation = _fallbackLocation;
-        _isLocating = false;
-      });
-      _updatePulseCircles();
-      await _animateToLocation(_fallbackLocation, zoom: _defaultZoom);
-    }
-  }
-
-  Future<void> _prepareMarkers() async {
-    final ps5Icon = await _createNeonMarkerIcon(ZonezColors.neonCyan);
-    final pcIcon = await _createNeonMarkerIcon(ZonezColors.neonPurple);
-    final mixedIcon = await _createNeonMarkerIcon(ZonezColors.neonGold);
+    final position = await ZonezLocationService.getFastLocation();
 
     if (!mounted) return;
 
-    _markerIcons['ps5'] = ps5Icon;
-    _markerIcons['pc'] = pcIcon;
-    _markerIcons['mixed'] = mixedIcon;
-
-    await _rebuildMarkers();
-  }
-
-  Future<void> _rebuildMarkers() async {
-    if (_markerIcons.isEmpty) return;
-
-    final markers = <Marker>{};
-    for (final lounge in _filteredLounges) {
-      final iconKey = switch (lounge.category) {
-        LoungeCategory.ps5 => 'ps5',
-        LoungeCategory.pc => 'pc',
-        LoungeCategory.mixed => 'mixed',
-      };
-
-      markers.add(
-        Marker(
-          markerId: MarkerId(lounge.id),
-          position: lounge.position,
-          icon: _markerIcons[iconKey] ??
-              BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueViolet),
-          onTap: () => _onMarkerTap(lounge),
-        ),
-      );
+    if (position == null) {
+      setState(() {
+        _locationError =
+            'تعذّر تحديد موقعك.\nتأكد من تفعيل GPS ومنح الصلاحية.';
+        _isLocating = false;
+      });
+      await _loadNearbyLounges(useFallbackOrigin: true);
+      return;
     }
 
-    if (!mounted) return;
-    setState(() => _markers = markers);
+    final location = LatLng(position.latitude, position.longitude);
+    setState(() {
+      _userLocation = location;
+      _isLocating = false;
+    });
+
+    _moveMap(location, ZonezExploreMapConfig.defaultZoom);
+    await _loadNearbyLounges();
   }
 
-  Future<BitmapDescriptor> _createNeonMarkerIcon(Color glowColor) async {
-    const size = 96.0;
-    final recorder = ui.PictureRecorder();
-    final canvas = Canvas(recorder);
-    final center = Offset(size / 2, size / 2);
+  Future<void> _loadNearbyLounges({bool useFallbackOrigin = false}) async {
+    final origin = _userLocation ?? _tripoliFallback;
+    String? locationHint;
 
-    final outerGlow = Paint()
-      ..color = glowColor.withValues(alpha: 0.28)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 14);
-    canvas.drawCircle(center, 28, outerGlow);
-
-    final midGlow = Paint()
-      ..color = glowColor.withValues(alpha: 0.45)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
-    canvas.drawCircle(center, 20, midGlow);
-
-    final corePaint = Paint()
-      ..shader = RadialGradient(
-        colors: [
-          glowColor,
-          glowColor.withValues(alpha: 0.65),
-        ],
-      ).createShader(Rect.fromCircle(center: center, radius: 14));
-    canvas.drawCircle(center, 14, corePaint);
-
-    final ringPaint = Paint()
-      ..color = Colors.white.withValues(alpha: 0.95)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.5;
-    canvas.drawCircle(center, 14, ringPaint);
-
-    final pinPath = Path()
-      ..moveTo(center.dx, size - 8)
-      ..lineTo(center.dx - 10, center.dy + 8)
-      ..lineTo(center.dx + 10, center.dy + 8)
-      ..close();
-    final pinPaint = Paint()..color = glowColor.withValues(alpha: 0.85);
-    canvas.drawPath(pinPath, pinPaint);
-
-    final picture = recorder.endRecording();
-    final image = await picture.toImage(size.toInt(), size.toInt());
-    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    final bytes = byteData!.buffer.asUint8List();
-
-    return BitmapDescriptor.bytes(bytes);
-  }
-
-  void _updatePulseCircles() {
-    if (_userLocation == null) return;
-
-    final t = _pulseController.value;
-    final innerRadius = 35 + (t * 55);
-    final outerRadius = 70 + (t * 90);
-    final innerAlpha = (1 - t) * 0.35;
-    final outerAlpha = (1 - t) * 0.18;
+    if (useFallbackOrigin && _userLocation == null) {
+      locationHint =
+          'تعذّر تحديد موقعك — يتم عرض الصالات حسب موقع افتراضي.';
+    }
 
     setState(() {
-      _pulseCircles = {
-        Circle(
-          circleId: const CircleId('pulse-inner'),
-          center: _userLocation!,
-          radius: innerRadius,
-          fillColor: ZonezColors.neonCyan.withValues(alpha: innerAlpha),
-          strokeColor: ZonezColors.neonCyan.withValues(alpha: innerAlpha + 0.15),
-          strokeWidth: 2,
-        ),
-        Circle(
-          circleId: const CircleId('pulse-outer'),
-          center: _userLocation!,
-          radius: outerRadius,
-          fillColor: ZonezColors.neonPurple.withValues(alpha: outerAlpha),
-          strokeColor: ZonezColors.neonPurple.withValues(alpha: outerAlpha + 0.1),
-          strokeWidth: 1,
-        ),
-      };
+      _isLoadingLounges = true;
+      if (locationHint == null) {
+        _loungesError = null;
+      }
+    });
+
+    final provider = context.read<LoungeRatingsProvider>();
+    await provider.loadLounges();
+
+    List<MapLounge> lounges = [];
+    String? fetchWarning;
+
+    try {
+      final nearby = await provider.loadNearbyLounges(
+        latitude: origin.latitude,
+        longitude: origin.longitude,
+        radiusKm: _nearbyRadiusKm,
+        openNow: _openNowFilter,
+      );
+      lounges = mapLoungesFromCatalog(nearby);
+    } catch (e) {
+      fetchWarning = _friendlyLoungesFetchError(e);
+      lounges = mapLoungesNearOrigin(
+        provider.lounges,
+        origin,
+        radiusKm: _nearbyRadiusKm,
+      );
+    }
+
+    if (!mounted) return;
+
+    setState(() {
+      _isLoadingLounges = false;
+      if (lounges.isEmpty) {
+        _loungesError = fetchWarning ?? locationHint;
+        _allLounges = [];
+      } else {
+        _loungesError = fetchWarning ?? locationHint;
+        _allLounges = lounges;
+      }
+    });
+
+    _applyFilters();
+    _fitVisibleLounges();
+  }
+
+  String _friendlyLoungesFetchError(Object error) {
+    final raw = error.toString();
+    if (raw.contains('SocketException') ||
+        raw.contains('Failed host lookup') ||
+        raw.contains('Connection refused') ||
+        raw.contains('Network is unreachable')) {
+      return 'تعذّر الاتصال بالخادم — تم عرض الصالات من القائمة المحفوظة.';
+    }
+    return 'تعذّر تحميل الصالات القريبة — تم عرض القائمة العامة.';
+  }
+
+  void _applyFilters() {
+    final next = _allLounges
+        .where(
+          (lounge) => lounge.matchesFilters(
+            ps5Filter: _ps5Filter,
+            pcFilter: _pcFilter,
+            openNowFilter: _openNowFilter,
+          ),
+        )
+        .toList();
+
+    if (_sameLounges(_filteredLounges, next)) return;
+
+    setState(() {
+      _filteredLounges = next;
+      if (_selectedLounge != null &&
+          !next.any((l) => l.id == _selectedLounge!.id)) {
+        _selectedLounge = null;
+      }
     });
   }
 
-  Future<void> _animateToLocation(LatLng location, {required double zoom}) async {
-    final controller = _mapController;
-    if (controller == null) return;
+  bool _sameLounges(List<MapLounge> a, List<MapLounge> b) {
+    if (a.length != b.length) return false;
+    for (var i = 0; i < a.length; i++) {
+      if (a[i].id != b[i].id) return false;
+    }
+    return true;
+  }
 
-    await controller.animateCamera(
-      CameraUpdate.newCameraPosition(
-        CameraPosition(target: location, zoom: zoom, tilt: 12),
-      ),
-    );
+  void _moveMap(LatLng center, double zoom) {
+    try {
+      _mapController.move(center, zoom);
+    } catch (_) {}
+  }
+
+  void _fitVisibleLounges() {
+    if (_filteredLounges.isEmpty) {
+      if (_userLocation != null) {
+        _moveMap(_userLocation!, ZonezExploreMapConfig.defaultZoom);
+      }
+      return;
+    }
+
+    if (_filteredLounges.length == 1) {
+      _moveMap(_filteredLounges.first.position, 15.5);
+      return;
+    }
+
+    final coordinates = [
+      ..._filteredLounges.map((l) => l.position),
+      if (_userLocation != null) _userLocation!,
+    ];
+
+    try {
+      _mapController.fitCamera(
+        CameraFit.coordinates(
+          coordinates: coordinates,
+          padding: const EdgeInsets.fromLTRB(48, 160, 48, 140),
+        ),
+      );
+    } catch (_) {}
   }
 
   void _onMarkerTap(MapLounge lounge) {
     HapticFeedback.lightImpact();
+    _blockMapTap = true;
     setState(() => _selectedLounge = lounge);
-    _animateToLocation(lounge.position, zoom: 15.5);
+    _scrollBottomCardTo(lounge);
+    _moveMap(lounge.position, 15.5);
+    Future.delayed(const Duration(milliseconds: 400), () {
+      if (mounted) _blockMapTap = false;
+    });
   }
 
-  void _onMapTap(LatLng _) {
+  void _scrollBottomCardTo(MapLounge lounge) {
+    final index = _filteredLounges.indexWhere((l) => l.id == lounge.id);
+    if (index < 0) return;
+
+    void jump() {
+      if (!_bottomCardController.hasClients) return;
+      _bottomCardController.animateToPage(
+        index,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    if (_bottomCardController.hasClients) {
+      jump();
+    } else {
+      WidgetsBinding.instance.addPostFrameCallback((_) => jump());
+    }
+  }
+
+  void _onBottomCardPageChanged(int index) {
+    if (index < 0 || index >= _filteredLounges.length) return;
+    if (_blockMapTap) return;
+
+    final lounge = _filteredLounges[index];
+    if (_selectedLounge?.id == lounge.id) return;
+
+    setState(() => _selectedLounge = lounge);
+    _moveMap(lounge.position, 15.5);
+  }
+
+  void _onMapTap() {
+    if (_blockMapTap) return;
     if (_selectedLounge == null) return;
     setState(() => _selectedLounge = null);
   }
@@ -276,66 +299,50 @@ class _ExploreTabState extends State<ExploreTab> with TickerProviderStateMixin {
   void _toggleFilter({
     required bool Function() getter,
     required void Function(bool) setter,
+    bool reloadFromApi = false,
   }) {
     setState(() => setter(!getter()));
-    _rebuildMarkers();
-    if (_selectedLounge != null &&
-        !_filteredLounges.any((l) => l.id == _selectedLounge!.id)) {
-      setState(() => _selectedLounge = null);
+
+    if (reloadFromApi) {
+      _loadNearbyLounges(useFallbackOrigin: _userLocation == null);
+      return;
     }
+
+    _applyFilters();
+    _fitVisibleLounges();
   }
 
-  double _distanceTo(MapLounge lounge) {
-    final origin = _userLocation ?? _fallbackLocation;
-    return Geolocator.distanceBetween(
-      origin.latitude,
-      origin.longitude,
+  String? _distanceLabel(MapLounge lounge) {
+    if (lounge.distanceMeters != null) {
+      return DistanceFormatter.fromMeters(lounge.distanceMeters);
+    }
+
+    if (_userLocation == null) return 'جاري التحديد...';
+
+    final meters = Geolocator.distanceBetween(
+      _userLocation!.latitude,
+      _userLocation!.longitude,
       lounge.position.latitude,
       lounge.position.longitude,
     );
+
+    return DistanceFormatter.formatMeters(meters);
   }
 
-  Future<void> _openExternalNavigation(MapLounge lounge) async {
-    final lat = lounge.position.latitude;
-    final lng = lounge.position.longitude;
-    final label = Uri.encodeComponent(lounge.name);
-
-    final candidates = [
-      Uri.parse(
-        'https://www.google.com/maps/dir/?api=1&destination=$lat,$lng&destination_place_id=$label',
-      ),
-      Uri.parse('geo:$lat,$lng?q=$lat,$lng($label)'),
-      Uri.parse('https://maps.apple.com/?daddr=$lat,$lng'),
-    ];
-
-    for (final uri in candidates) {
-      try {
-        if (await canLaunchUrl(uri)) {
-          final launched = await launchUrl(uri, mode: LaunchMode.externalApplication);
-          if (launched) return;
-        }
-      } catch (_) {
-        continue;
-      }
-    }
-
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'تعذّر فتح تطبيق الخرائط',
-          style: GoogleFonts.cairo(),
-        ),
-        backgroundColor: ZonezColors.cardDark,
+  void _openLoungeDetails(String loungeId) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LoungeDetailsScreen(loungeId: loungeId),
       ),
     );
   }
 
-  Future<void> _zoomBy(double delta) async {
-    final controller = _mapController;
-    if (controller == null) return;
-    final zoom = await controller.getZoomLevel();
-    await controller.animateCamera(CameraUpdate.zoomTo(zoom + delta));
+  void _zoomBy(double delta) {
+    try {
+      final camera = _mapController.camera;
+      _mapController.move(camera.center, camera.zoom + delta);
+    } catch (_) {}
   }
 
   Future<void> _recenterOnUser() async {
@@ -343,164 +350,289 @@ class _ExploreTabState extends State<ExploreTab> with TickerProviderStateMixin {
       await _initializeLocation();
       return;
     }
-    await _animateToLocation(_userLocation!, zoom: _defaultZoom);
+    _moveMap(_userLocation!, ZonezExploreMapConfig.defaultZoom);
+  }
+
+  List<CircleMarker> _buildPulseCircles() {
+    if (_userLocation == null) return const [];
+
+    final t = _pulseController.value;
+    final accent = ZonezColors.neonCyan;
+
+    return [
+      CircleMarker(
+        point: _userLocation!,
+        radius: 28 + (t * 42),
+        color: accent.withValues(alpha: (1 - t) * 0.18),
+        borderColor: accent.withValues(alpha: (1 - t) * 0.35),
+        borderStrokeWidth: 2,
+      ),
+      CircleMarker(
+        point: _userLocation!,
+        radius: 55 + (t * 70),
+        color: ZonezColors.neonPurple.withValues(alpha: (1 - t) * 0.1),
+        borderColor: ZonezColors.neonPurple.withValues(alpha: (1 - t) * 0.2),
+        borderStrokeWidth: 1,
+      ),
+    ];
+  }
+
+  List<CircleMarker> _buildSelectedCircle() {
+    final selected = _selectedLounge;
+    if (selected == null) return const [];
+
+    final accent = switch (selected.category) {
+      LoungeCategory.ps5 => ZonezColors.neonCyan,
+      LoungeCategory.pc => ZonezColors.neonPurple,
+      LoungeCategory.mixed => ZonezColors.neonGold,
+    };
+
+    return [
+      CircleMarker(
+        point: selected.position,
+        radius: 55,
+        color: accent.withValues(alpha: 0.12),
+        borderColor: accent.withValues(alpha: 0.75),
+        borderStrokeWidth: 2,
+      ),
+    ];
+  }
+
+  List<Marker> _buildHallMarkers() {
+    return _filteredLounges.map((lounge) {
+      final isSelected = _selectedLounge?.id == lounge.id;
+      return Marker(
+        point: lounge.position,
+        width: isSelected ? 52 : 44,
+        height: isSelected ? 64 : 56,
+        child: ZonezHallPin(
+          category: lounge.category,
+          selected: isSelected,
+          onTap: () => _onMarkerTap(lounge),
+        ),
+      );
+    }).toList();
   }
 
   @override
   Widget build(BuildContext context) {
+    if (!AppPlatform.supportsExploreMap) {
+      return ExploreMobileOnlyGate(
+        onGoHome: () => context.read<AppStateProvider>().setBottomNavIndex(0),
+      );
+    }
+
     final appState = context.watch<AppStateProvider>();
-    final initialTarget = _userLocation ?? _fallbackLocation;
+    final loungeProvider = context.watch<LoungeRatingsProvider>();
+    final selected = _selectedLounge;
+    final initialCenter = _userLocation ?? _tripoliFallback;
 
     return ColoredBox(
       color: ZonezColors.darkNavy,
-      child: Stack(
-        fit: StackFit.expand,
+      child: Column(
         children: [
-          GoogleMap(
-            style: kZonezDarkMapStyle,
-            initialCameraPosition: CameraPosition(
-              target: initialTarget,
-              zoom: _defaultZoom,
-              tilt: 12,
-            ),
-            onMapCreated: (controller) async {
-              _mapController = controller;
-              if (!mounted) return;
-              setState(() => _mapReady = true);
-              if (_userLocation != null) {
-                await _animateToLocation(_userLocation!, zoom: _defaultZoom);
-              }
-            },
-            markers: _markers,
-            circles: _pulseCircles,
-            myLocationEnabled: false,
-            myLocationButtonEnabled: false,
-            zoomControlsEnabled: false,
-            mapToolbarEnabled: false,
-            compassEnabled: false,
-            liteModeEnabled: false,
-            padding: EdgeInsets.only(
-              top: MediaQuery.paddingOf(context).top + 72,
-              bottom: _selectedLounge != null ? 260 : 100,
-            ),
-            onTap: _onMapTap,
-          ),
-          if (!_mapReady || _isLocating)
-            Container(
-              color: ZonezColors.darkNavy.withValues(alpha: 0.75),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                FlutterMap(
+                  mapController: _mapController,
+                  options: MapOptions(
+                    initialCenter: initialCenter,
+                    initialZoom: ZonezExploreMapConfig.defaultZoom,
+                    minZoom: ZonezExploreMapConfig.minZoom,
+                    maxZoom: ZonezExploreMapConfig.maxZoom,
+                    backgroundColor: ZonezColors.darkNavy,
+                    onTap: (_, __) => _onMapTap(),
+                  ),
                   children: [
-                    const SizedBox(
-                      width: 42,
-                      height: 42,
-                      child: CircularProgressIndicator(
-                        color: ZonezColors.neonCyan,
-                        strokeWidth: 3,
-                      ),
+                    TileLayer(
+                      urlTemplate: ZonezExploreMapConfig.tileUrl,
+                      subdomains: ZonezExploreMapConfig.tileSubdomains,
+                      userAgentPackageName: ZonezExploreMapConfig.userAgent,
+                      maxZoom: ZonezExploreMapConfig.maxZoom,
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      _isLocating ? 'جاري تحديد موقعك...' : 'تحميل الخريطة...',
-                      style: GoogleFonts.cairo(
-                        color: ZonezColors.neonCyan,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    CircleLayer(
+                      circles: [
+                        ..._buildPulseCircles(),
+                        ..._buildSelectedCircle(),
+                      ],
+                    ),
+                    MarkerLayer(
+                      markers: [
+                        ..._buildHallMarkers(),
+                        if (_userLocation != null)
+                          Marker(
+                            point: _userLocation!,
+                            width: 50,
+                            height: 50,
+                            child: ZonezUserPin(pulse: _pulseController.value),
+                          ),
+                      ],
                     ),
                   ],
                 ),
-              ),
-            ),
-          _buildTopOverlay(),
-          if (_locationError != null) _buildLocationBanner(),
-          _buildMapControls(),
-          AnimatedSlide(
-            duration: const Duration(milliseconds: 320),
-            curve: Curves.easeOutCubic,
-            offset: _selectedLounge != null ? Offset.zero : const Offset(0, 1.2),
-            child: AnimatedOpacity(
-              duration: const Duration(milliseconds: 260),
-              opacity: _selectedLounge != null ? 1 : 0,
-              child: _selectedLounge == null
-                  ? const SizedBox.shrink()
-                  : Align(
-                      alignment: Alignment.bottomCenter,
-                      child: ExploreGlassCard(
-                        lounge: _selectedLounge!,
-                        distanceMeters: _distanceTo(_selectedLounge!),
-                        onNavigate: () => _openExternalNavigation(_selectedLounge!),
-                        isFavorite: appState.isFavorite(_selectedLounge!.name),
-                        onFavoriteTap: () =>
-                            widget.onFavoriteTap(_selectedLounge!.name),
+                const ExploreMapOverlay(),
+                if (_isLocating || _isLoadingLounges)
+                  Container(
+                    color: ZonezColors.darkNavy.withValues(alpha: 0.72),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const SizedBox(
+                            width: 42,
+                            height: 42,
+                            child: CircularProgressIndicator(
+                              color: ZonezColors.neonCyan,
+                              strokeWidth: 3,
+                            ),
+                          ),
+                          const SizedBox(height: 14),
+                          Text(
+                            _isLocating
+                                ? 'جاري تحديد موقعك...'
+                                : 'جاري تحميل الصالات القريبة...',
+                            style: GoogleFonts.cairo(
+                              color: ZonezColors.neonCyan,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
+                  ),
+                _buildTopOverlay(),
+                if (_locationError != null) _buildLocationBanner(),
+                if (_loungesError != null && !_isLoadingLounges)
+                  _buildLoungesBanner(),
+                if (_filteredLounges.isEmpty &&
+                    !_isLoadingLounges &&
+                    !_isLocating)
+                  _buildEmptyState(),
+                _buildMapControls(),
+              ],
             ),
           ),
+          if (selected != null && _filteredLounges.isNotEmpty)
+            ExploreMapBottomCarousel(
+              lounges: _filteredLounges,
+              pageController: _bottomCardController,
+              loungeProvider: loungeProvider,
+              appState: appState,
+              onFavoriteTap: widget.onFavoriteTap,
+              onOpenDetails: _openLoungeDetails,
+              distanceLabelFor: _distanceLabel,
+              onPageChanged: _onBottomCardPageChanged,
+            ),
         ],
       ),
     );
   }
 
   Widget _buildTopOverlay() {
+    final countLabel = _filteredLounges.isEmpty
+        ? 'لا توجد صالات قريبة'
+        : '${_filteredLounges.length} صالة قريبة';
+
     return SafeArea(
       bottom: false,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 10),
-            child: Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    'استكشف ZONEZ',
-                    style: GoogleFonts.cairo(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                      shadows: [
-                        Shadow(
-                          color: ZonezColors.neonPurple.withValues(alpha: 0.8),
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            GlassContainer(
+              padding: const EdgeInsets.fromLTRB(14, 12, 10, 12),
+              borderRadius: BorderRadius.circular(18),
+              child: Row(
+                children: [
+                  Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(12),
+                      gradient: ZonezColors.neonGradient,
+                      boxShadow: [
+                        BoxShadow(
+                          color: ZonezColors.neonPurple.withValues(alpha: 0.45),
                           blurRadius: 12,
                         ),
                       ],
                     ),
+                    child: const Icon(
+                      Icons.map_rounded,
+                      color: Colors.white,
+                      size: 22,
+                    ),
                   ),
-                ),
-                _GlowIconButton(
-                  icon: Icons.my_location_rounded,
-                  onPressed: _recenterOnUser,
-                  tooltip: 'موقعي',
-                ),
-              ],
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'استكشف ZONEZ',
+                          style: GoogleFonts.cairo(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                            shadows: [
+                              Shadow(
+                                color: ZonezColors.neonPurple.withValues(alpha: 0.7),
+                                blurRadius: 10,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          countLabel,
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            color: ZonezColors.neonCyan,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _GlowIconButton(
+                    icon: Icons.my_location_rounded,
+                    onPressed: _recenterOnUser,
+                    tooltip: 'موقعي',
+                  ),
+                ],
+              ),
             ),
-          ),
-          ExploreFilterChips(
-            ps5Selected: _ps5Filter,
-            pcSelected: _pcFilter,
-            openNowSelected: _openNowFilter,
-            onPs5Tap: () => _toggleFilter(
-              getter: () => _ps5Filter,
-              setter: (v) => _ps5Filter = v,
+            const SizedBox(height: 10),
+            ExploreFilterChips(
+              ps5Selected: _ps5Filter,
+              pcSelected: _pcFilter,
+              openNowSelected: _openNowFilter,
+              onPs5Tap: () => _toggleFilter(
+                getter: () => _ps5Filter,
+                setter: (v) => _ps5Filter = v,
+              ),
+              onPcTap: () => _toggleFilter(
+                getter: () => _pcFilter,
+                setter: (v) => _pcFilter = v,
+              ),
+              onOpenNowTap: () => _toggleFilter(
+                getter: () => _openNowFilter,
+                setter: (v) => _openNowFilter = v,
+                reloadFromApi: true,
+              ),
             ),
-            onPcTap: () => _toggleFilter(
-              getter: () => _pcFilter,
-              setter: (v) => _pcFilter = v,
-            ),
-            onOpenNowTap: () => _toggleFilter(
-              getter: () => _openNowFilter,
-              setter: (v) => _openNowFilter = v,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 
   Widget _buildLocationBanner() {
     return Positioned(
-      top: MediaQuery.paddingOf(context).top + 118,
+      top: MediaQuery.paddingOf(context).top + 132,
       left: 16,
       right: 16,
       child: Material(
@@ -538,14 +670,82 @@ class _ExploreTabState extends State<ExploreTab> with TickerProviderStateMixin {
     );
   }
 
-  Widget _buildMapControls() {
-    final bottomOffset = _selectedLounge != null ? 270.0 : 108.0;
+  Widget _buildLoungesBanner() {
+    return Positioned(
+      top: MediaQuery.paddingOf(context).top + 132,
+      left: 16,
+      right: 16,
+      child: Material(
+        color: Colors.transparent,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: ZonezColors.cardDark.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: ZonezColors.neonGold.withValues(alpha: 0.55),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(Icons.wifi_off_rounded, color: ZonezColors.neonGold, size: 20),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  _loungesError!,
+                  style: GoogleFonts.cairo(color: Colors.white, fontSize: 12),
+                ),
+              ),
+              TextButton(
+                onPressed: () => _loadNearbyLounges(useFallbackOrigin: _userLocation == null),
+                child: Text(
+                  'إعادة',
+                  style: GoogleFonts.cairo(color: ZonezColors.neonCyan),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
+  Widget _buildEmptyState() {
     return Positioned(
       left: 16,
-      bottom: bottomOffset,
+      right: 16,
+      bottom: 24,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: ZonezColors.cardDark.withValues(alpha: 0.9),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(
+            color: ZonezColors.neonPurple.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Text(
+          'لا توجد صالات منشورة بإحداثيات GPS في نطاقك حالياً.\nتأكّد أن المدير أدخل Latitude/Longitude وحفظ التغييرات.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(
+            color: ZonezColors.textMuted,
+            fontSize: 12,
+            height: 1.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMapControls() {
+    return Positioned(
+      right: 16,
+      bottom: 16,
       child: Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
         children: [
+          const ExplorePinLegend(),
+          const SizedBox(height: 10),
           _GlowIconButton(
             icon: Icons.add_rounded,
             onPressed: () => _zoomBy(1),
@@ -580,6 +780,8 @@ class _GlowIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Tooltip(
       message: tooltip,
       child: Material(
@@ -591,19 +793,16 @@ class _GlowIconButton extends StatelessWidget {
             width: size,
             height: size,
             decoration: BoxDecoration(
-              color: ZonezColors.cardDark.withValues(alpha: 0.88),
+              gradient: isDark ? ZonezColors.neonGradient : ZonezColors.lightAccentGradient,
               borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: ZonezColors.neonPurple.withValues(alpha: 0.45),
-              ),
               boxShadow: [
                 BoxShadow(
-                  color: ZonezColors.neonPurple.withValues(alpha: 0.25),
+                  color: ZonezColors.neonPurple.withValues(alpha: 0.35),
                   blurRadius: 12,
                 ),
               ],
             ),
-            child: Icon(icon, color: ZonezColors.neonCyan, size: math.min(size * 0.5, 24)),
+            child: Icon(icon, color: Colors.white, size: math.min(size * 0.5, 24)),
           ),
         ),
       ),

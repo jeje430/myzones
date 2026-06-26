@@ -12,6 +12,7 @@ import '../../../providers/app_state_provider.dart';
 
 import '../../../providers/zones_data_provider.dart';
 
+import '../../../widgets/user_avatar.dart';
 import '../../../widgets/zonez_logo.dart';
 
 import '../../profile/profile_screen.dart';
@@ -23,7 +24,8 @@ import '../../drawer/settings_screen.dart';
 import '../../drawer/terms_screen.dart';
 
 import '../../drawer/tournaments_screen.dart';
-import '../../tournaments/tournament_history_screen.dart';
+import '../../tournaments/active_tournament_registrations_screen.dart';
+import '../../tournaments/tournament_participation_records_screen.dart';
 
 
 
@@ -341,22 +343,11 @@ class ZonezDrawer extends StatelessWidget {
 
               ),
 
-              child: CircleAvatar(
-
-                backgroundColor:
-
-                    isDark ? ZonezColors.inputBg : ZonezColors.lightSurfaceAlt,
-
-                child: Icon(
-
-                  Icons.person,
-
-                  size: 40,
-
-                  color: muted,
-
-                ),
-
+              child: UserAvatar(
+                name: displayName,
+                imageUrl: zonesData.user?.profileImage,
+                radius: 38,
+                fontSize: 18,
               ),
 
             ),
@@ -556,7 +547,7 @@ class _TournamentsDrawerSectionState extends State<_TournamentsDrawerSection> {
         ),
         if (_expanded) ...[
           _DrawerSubItem(
-            title: 'التسجيل في البطولة',
+            title: 'بطولات الحالية',
             subtitle: 'تصفح البطولات المتاحة والاشتراك',
             icon: Icons.how_to_reg_outlined,
             onSurface: widget.onSurface,
@@ -565,13 +556,24 @@ class _TournamentsDrawerSectionState extends State<_TournamentsDrawerSection> {
             onTap: () => widget.onNavigate(const TournamentsScreen()),
           ),
           _DrawerSubItem(
-            title: 'سجل البطولات',
-            subtitle: 'مشاركاتك الحالية والسابقة',
+            title: 'سجل اشتراك بطولات',
+            subtitle: 'بطولاتك النشطة والانسحاب',
+            icon: Icons.event_available_outlined,
+            onSurface: widget.onSurface,
+            muted: widget.muted,
+            surfaceAlt: widget.surfaceAlt,
+            onTap: () =>
+                widget.onNavigate(const ActiveTournamentRegistrationsScreen()),
+          ),
+          _DrawerSubItem(
+            title: 'سجل مشاركات البطولة',
+            subtitle: 'البطولات التي شاركت فيها وانتهت',
             icon: Icons.history,
             onSurface: widget.onSurface,
             muted: widget.muted,
             surfaceAlt: widget.surfaceAlt,
-            onTap: () => widget.onNavigate(const TournamentHistoryScreen()),
+            onTap: () =>
+                widget.onNavigate(const TournamentParticipationRecordsScreen()),
           ),
         ],
       ],
@@ -653,8 +655,6 @@ class _DrawerItem extends StatelessWidget {
 
     required this.surfaceAlt,
 
-    this.highlighted = false,
-
     this.titleColor,
 
     this.onTap,
@@ -676,8 +676,6 @@ class _DrawerItem extends StatelessWidget {
   final Color muted;
 
   final Color surfaceAlt;
-
-  final bool highlighted;
 
   final Color? titleColor;
 
@@ -703,46 +701,18 @@ class _DrawerItem extends StatelessWidget {
 
         borderRadius: BorderRadius.circular(14),
 
-        border: highlighted
-
-            ? Border.all(color: ZonezColors.neonGold.withValues(alpha: 0.6))
-
-            : Border.all(
-
+        border: Border.all(
                 color: isDark
-
                     ? Colors.transparent
-
                     : ZonezColors.lightBorder,
-
               ),
 
-        boxShadow: highlighted
-
-            ? [
-
-                BoxShadow(
-
-                  color: ZonezColors.neonGold.withValues(alpha: 0.15),
-
-                  blurRadius: 12,
-
-                ),
-
-              ]
-
-            : isDark
-
+        boxShadow: isDark
                 ? null
-
                 : [
-
                     BoxShadow(
-
                       color: Colors.black.withValues(alpha: 0.03),
-
                       blurRadius: 6,
-
                       offset: const Offset(0, 2),
 
                     ),

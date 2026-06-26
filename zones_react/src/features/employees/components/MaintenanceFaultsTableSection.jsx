@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { CheckCircle2, Plus, Wrench } from "lucide-react";
+import { CheckCircle2, Plus } from "lucide-react";
 import { zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import Button from "../../super-admin/components/ui/Button";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
@@ -7,18 +7,32 @@ import TablePagination from "../../../shared/components/TablePagination";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
+import {
+  TableBulkActionBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
+  selectableRowClass,
+} from "../../../shared/components/ui/TableSelection";
+import {
+  filterItemsByIds,
+  resolveBulkActionIds,
+  useTableSelection,
+} from "../../../shared/hooks/useTableSelection";
 import { useDevicesStorageSync } from "../../devices-packages/hooks/useDevicesStorageSync";
 import {
   DEVICES_STORAGE_EVENT,
   loadDevices,
-  startDeviceMaintenance,
 } from "../../devices-packages/data/devicesStorage";
 import {
   getArchivedFaults,
   getCurrentFaults,
   MAINTENANCE_FAULTS_EVENT,
 } from "../../maintenance/data/maintenanceFaultsStorage";
-import { reportDeviceFault, completeDeviceRepair, reconcileDisabledDevicesWithoutFaults } from "../../maintenance/utils/maintenanceWorkflow";
+import {
+  reportDeviceFault,
+  completeDeviceRepair,
+  reconcileDisabledDevicesWithoutFaults,
+} from "../../maintenance/utils/maintenanceWorkflow";
 import {
   faultRowDisplayStatus,
   faultStatusBadgeClass,
@@ -62,6 +76,7 @@ export default function MaintenanceFaultsTableSection({
   const [modalOpen, setModalOpen] = useState(false);
   const [repairModalOpen, setRepairModalOpen] = useState(false);
   const [repairRow, setRepairRow] = useState(null);
+  const [repairTargetIds, setRepairTargetIds] = useState([]);
 
   const refreshFaults = useCallback(() => setFaults(loadRows()), [loadRows]);
   const refreshDevices = useCallback(() => setDevicesTick((t) => t + 1), []);
@@ -104,7 +119,10 @@ export default function MaintenanceFaultsTableSection({
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
+  const selection = useTableSelection({ items: faults, pageIds });
   const colSpan =
+    1 +
     (isArchived ? 6 : 7) +
     (showEmployeeColumn ? 1 : 0) +
     (!readOnly && !isArchived ? 1 : 0);
@@ -113,33 +131,52 @@ export default function MaintenanceFaultsTableSection({
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
-  const handleSave = (payload) => {
-    reportDeviceFault(payload);
+  const handleSave = async (payload) => {
+    const ok = await reportDeviceFault(payload);
+    if (!ok) return;
     refreshAll();
     setModalOpen(false);
-    zonesToastSuccess(`تم تسجيل العطل — الحالة: في الانتظار`, `«${payload.deviceName}»`);
-  };
-
-  const handleStartRepair = (row, e) => {
-    e.stopPropagation();
-    startDeviceMaintenance(row.deviceId);
-    refreshAll();
-    zonesToastSuccess("بدأ الإصلاح — الحالة: قيد الإصلاح");
+    zonesToastSuccess(`تم تسجيل العطل — الجهاز في الصيانة`, `«${payload.deviceName}»`);
   };
 
   const openCompleteRepair = (row, e) => {
-    e.stopPropagation();
-    setRepairRow(row);
+    e?.stopPropagation?.();
+    const targetIds = resolveBulkActionIds(row.id, selection.selectedIds);
+    const targets = filterItemsByIds(faults, targetIds);
+    setRepairTargetIds(targetIds);
+    setRepairRow(targets[0] || row);
     setRepairModalOpen(true);
   };
 
-  const handleCompleteRepair = (cost) => {
-    if (!repairRow) return;
-    completeDeviceRepair(repairRow.deviceId, cost);
+  const handleBulkCompleteRepair = () => {
+    const targets = filterItemsByIds(faults, selection.selectedIds);
+    if (!targets.length) return;
+    setRepairTargetIds(selection.selectedIds);
+    setRepairRow(targets[0]);
+    setRepairModalOpen(true);
+  };
+
+  const handleCompleteRepair = async (cost) => {
+    const ids = repairTargetIds.length ? repairTargetIds : repairRow ? [repairRow.id] : [];
+    const targets = filterItemsByIds(faults, ids);
+    if (!targets.length) return;
+
+    for (const row of targets) {
+      const ok = await completeDeviceRepair(row.deviceId, cost);
+      if (!ok) return;
+    }
+
     setRepairModalOpen(false);
     setRepairRow(null);
+    setRepairTargetIds([]);
+    selection.clearSelection();
     refreshAll();
-    zonesToastSuccess("تم الإصلاح — السجل في الأرشيف والجهاز سليم في جدول الأجهزة");
+    const isBulk = targets.length > 1;
+    zonesToastSuccess(
+      isBulk
+        ? `تم إصلاح ${targets.length} أعطال — السجلات في الأرشيف والأجهزة متاحة للحجز`
+        : "تم الإصلاح — السجل في الأرشيف والجهاز متاح للحجز",
+    );
   };
 
   return (
@@ -175,10 +212,19 @@ export default function MaintenanceFaultsTableSection({
           ) : null}
         </div>
 
+        {!readOnly && !isArchived ? (
+          <TableBulkActionBar
+            count={selection.count}
+            onClear={selection.clearSelection}
+            actions={[{ label: "تم الإصلاح للمحدد", icon: CheckCircle2, onClick: handleBulkCompleteRepair }]}
+          />
+        ) : null}
+
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
+                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">الجهاز</th>
                 <th className="px-3 py-2.5 font-bold">نوع العطل</th>
                 {showEmployeeColumn ? (
@@ -209,9 +255,13 @@ export default function MaintenanceFaultsTableSection({
               ) : (
                 paged.map((row) => {
                   const device = loadDevices().find((d) => d.id === row.deviceId);
-                  const underMaintenance = Boolean(device?.maintenanceInProgress);
                   return (
-                    <tr key={row.id} className="transition hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                      <TableSelectRowCell
+                        id={row.id}
+                        ariaLabel={`تحديد عطل ${row.deviceName}`}
+                        {...selection}
+                      />
                       <td className="px-3 py-3">
                         <DeviceNameCell
                           deviceName={row.deviceName}
@@ -252,21 +302,16 @@ export default function MaintenanceFaultsTableSection({
                       {!readOnly && !isArchived ? (
                         <td className={TABLE_ACTIONS_TD}>
                           <TableActionsGroup>
-                            {underMaintenance ? (
-                              <IconButton
-                                icon={CheckCircle2}
-                                label="تم الإصلاح"
-                                tone="success"
-                                onClick={(e) => openCompleteRepair(row, e)}
-                              />
-                            ) : (
-                              <IconButton
-                                icon={Wrench}
-                                label="بدء الإصلاح"
-                                tone="brand"
-                                onClick={(e) => handleStartRepair(row, e)}
-                              />
-                            )}
+                            <IconButton
+                              icon={CheckCircle2}
+                              label={
+                                selection.isSelected(row.id) && selection.count > 1
+                                  ? `تم الإصلاح (${selection.count})`
+                                  : "تم الإصلاح"
+                              }
+                              tone="success"
+                              onClick={(e) => openCompleteRepair(row, e)}
+                            />
                           </TableActionsGroup>
                         </td>
                       ) : null}
@@ -308,6 +353,7 @@ export default function MaintenanceFaultsTableSection({
             onClose={() => {
               setRepairModalOpen(false);
               setRepairRow(null);
+              setRepairTargetIds([]);
             }}
             onConfirm={handleCompleteRepair}
           />

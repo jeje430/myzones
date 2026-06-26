@@ -24,7 +24,7 @@ export default function IconButton({
       type="button"
       aria-label={label}
       title={label}
-      className={`inline-flex shrink-0 items-center justify-center rounded-md p-1.5 transition ${TONES[tone] || TONES.default} disabled:cursor-not-allowed ${className}`}
+      className={`inline-flex shrink-0 items-center justify-center rounded-md p-1.5 transition ${TONES[tone] || TONES.default} disabled:cursor-not-allowed disabled:opacity-40 ${className}`}
       {...props}
     >
       <Icon size={size} strokeWidth={2.25} />

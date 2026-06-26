@@ -10,19 +10,10 @@ import {
 } from "lucide-react";
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
 import { ZONES_LOGO_SRC } from "../../super-admin/data/superAdminDashboardData";
-import { clearAuthSession } from "../../auth/data/mockUsersStorage";
-import { MAINTENANCE_EMPLOYEE_ROUTES } from "../data/maintenanceEmployeeRoutes";
-
-const ACCOUNT_GROUP = {
-  id: "account",
-  label: "حسابي",
-  icon: User,
-  children: [
-    { label: "الملف الشخصي", path: MAINTENANCE_EMPLOYEE_ROUTES.profile },
-    { label: "تغيير كلمة المرور", path: MAINTENANCE_EMPLOYEE_ROUTES.changePassword },
-    { label: "تسجيل الخروج", action: "logout" },
-  ],
-};
+import { clearAuthSession, getAuthSession } from "../../auth/data/mockUsersStorage";
+import { EMPLOYEE_LOGIN_PATH } from "../../auth/data/authRoutes";
+import { getActiveAccountIdFromUrl } from "../../auth/data/accountSessionStorage";
+import { useMaintenanceEmployeeRoutes } from "../data/maintenanceEmployeeRoutes";
 
 const linkClass = ({ isActive }) =>
   `flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[13px] font-bold transition ${
@@ -40,9 +31,21 @@ function groupContainsActive(group, pathname) {
 }
 
 export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigate }) {
+  const { routes, employeeId } = useMaintenanceEmployeeRoutes();
   const location = useLocation();
   const navigate = useNavigate();
   const pathname = location.pathname;
+
+  const ACCOUNT_GROUP = {
+    id: "account",
+    label: "حسابي",
+    icon: User,
+    children: [
+      { label: "الملف الشخصي", path: routes.profile },
+      { label: "تغيير كلمة المرور", path: routes.changePassword },
+      { label: "تسجيل الخروج", action: "logout" },
+    ],
+  };
 
   const [accountOpen, setAccountOpen] = useState(() => groupContainsActive(ACCOUNT_GROUP, pathname));
 
@@ -55,9 +58,9 @@ export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigat
       danger: true,
     });
     if (!confirmed) return;
-    clearAuthSession();
+    clearAuthSession(employeeId ?? getActiveAccountIdFromUrl() ?? getAuthSession()?.id);
     onNavigate?.();
-    navigate("/auth/login", { replace: true });
+    navigate(EMPLOYEE_LOGIN_PATH, { replace: true });
   };
 
   return (
@@ -77,7 +80,7 @@ export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigat
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         <NavLink
-          to={MAINTENANCE_EMPLOYEE_ROUTES.dashboard}
+          to={routes.dashboard}
           end
           onClick={onNavigate}
           className={linkClass}
@@ -89,7 +92,7 @@ export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigat
         </NavLink>
 
         <NavLink
-          to={MAINTENANCE_EMPLOYEE_ROUTES.faults}
+          to={routes.faults}
           end
           onClick={onNavigate}
           className={linkClass}
@@ -106,7 +109,7 @@ export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigat
         </NavLink>
 
         <NavLink
-          to={MAINTENANCE_EMPLOYEE_ROUTES.faultsArchive}
+          to={routes.faultsArchive}
           end
           onClick={onNavigate}
           className={linkClass}

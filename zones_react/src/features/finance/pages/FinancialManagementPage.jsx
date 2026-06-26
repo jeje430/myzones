@@ -1,14 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import {
-  CalendarDays,
-  Coins,
-  Download,
-  Gamepad2,
-  TrendingDown,
-  TrendingUp,
-  Wallet,
-} from "lucide-react";
+import { Coins, Download, TrendingUp, Wallet } from "lucide-react";
 import {
   CartesianGrid,
   Legend,
@@ -21,24 +13,24 @@ import {
 } from "recharts";
 import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import DownloadReportModal from "../components/DownloadReportModal";
-import { BOOKING_REVENUE_EVENT } from "../../employees/data/bookingRevenueStorage";
-import { RECEPTION_CALENDAR_EVENT } from "../../employees/data/receptionCalendarStorage";
-import { EXPENSES_STORAGE_EVENT } from "../data/expensesStorage";
+import PackageUsageChart from "../components/PackageUsageChart";
+import { FINANCE_DATA_EVENT } from "../data/financeApiCache";
+import { useFinancePrefetch } from "../hooks/useFinancePrefetch";
 import {
   MONTHS_AR,
+  derivePackageUsage,
   formatCurrency,
   formatPct,
   yearOptions,
 } from "../utils/financeData";
 import {
   buildOverviewChartSeries,
-  deriveOverviewInsights,
   deriveOverviewTotals,
 } from "../utils/financeOverviewHelpers";
 import "./FinancialManagementPage.css";
 import { useTheme } from "../../../shared/theme/useTheme";
 
-const FINANCE_REFRESH_EVENTS = [BOOKING_REVENUE_EVENT, RECEPTION_CALENDAR_EVENT, EXPENSES_STORAGE_EVENT];
+const FINANCE_REFRESH_EVENTS = [FINANCE_DATA_EVENT];
 
 function FinanceTooltip({ active, payload, label, isLight }) {
   if (!active || !payload?.length) return null;
@@ -94,6 +86,8 @@ export default function FinancialManagementPage() {
   const [month, setMonth] = useState(now.getMonth() + 1);
   const [year, setYear] = useState(now.getFullYear());
   const [granularity, setGranularity] = useState("daily");
+  const [packagePeriod, setPackagePeriod] = useState("monthly");
+  const readyTick = useFinancePrefetch(year, month, granularity, packagePeriod);
 
   useEffect(() => {
     const refresh = () => setRefreshKey((k) => k + 1);
@@ -111,12 +105,12 @@ export default function FinancialManagementPage() {
 
   const chartSeries = useMemo(
     () => buildOverviewChartSeries(year, month, granularity),
-    [year, month, granularity, refreshKey],
+    [year, month, granularity, refreshKey, readyTick],
   );
-  const totals = useMemo(() => deriveOverviewTotals(year, month), [year, month, refreshKey]);
-  const insights = useMemo(
-    () => deriveOverviewInsights(year, month, chartSeries),
-    [year, month, chartSeries, refreshKey],
+  const totals = useMemo(() => deriveOverviewTotals(year, month), [year, month, refreshKey, readyTick]);
+  const packageUsage = useMemo(
+    () => derivePackageUsage(year, month, packagePeriod, granularity),
+    [year, month, packagePeriod, granularity, refreshKey, readyTick],
   );
   const yearsOptions = useMemo(() => yearOptions(), []);
 
@@ -285,48 +279,23 @@ export default function FinancialManagementPage() {
             </ResponsiveContainer>
           </div>
         </section>
-        <div className="finance-mini-grid">
-          <article className="finance-mini">
-            <span className="finance-mini__label">أكثر جهاز استخدامًا</span>
-            <div className="finance-mini__row">
-              <div>
-                <div className="finance-mini__value">{insights.topDevice}</div>
-                <div className="finance-mini__sub">{formatCurrency(insights.topDeviceProfit)}</div>
-              </div>
-              <span className="finance-mini__icon" aria-hidden><Gamepad2 size={22} strokeWidth={2} /></span>
-            </div>
-          </article>
-          <article className="finance-mini">
-            <span className="finance-mini__label">أعلى يوم ربح</span>
-            <div className="finance-mini__row">
-              <div>
-                <div className="finance-mini__value">{insights.bestLabel}</div>
-                <div className="finance-mini__sub">{formatCurrency(insights.bestProfit)}</div>
-              </div>
-              <span className="finance-mini__icon" aria-hidden><TrendingUp size={22} strokeWidth={2} /></span>
-            </div>
-          </article>
-          <article className="finance-mini">
-            <span className="finance-mini__label">أقل يوم ربح</span>
-            <div className="finance-mini__row">
-              <div>
-                <div className="finance-mini__value">{insights.worstLabel}</div>
-                <div className="finance-mini__sub">{formatCurrency(insights.worstProfit)}</div>
-              </div>
-              <span className="finance-mini__icon" aria-hidden><TrendingDown size={22} strokeWidth={2} /></span>
-            </div>
-          </article>
-          <article className="finance-mini">
-            <span className="finance-mini__label">متوسط الحجوزات اليومية</span>
-            <div className="finance-mini__row">
-              <div>
-                <div className="finance-mini__value">{insights.dailyBookings}</div>
-                <div className="finance-mini__sub">حجز / يوم (معدّل متحرك)</div>
-              </div>
-              <span className="finance-mini__icon" aria-hidden><CalendarDays size={22} strokeWidth={2} /></span>
-            </div>
-          </article>
-        </div>
+        <section className="finance-section finance-package-usage-section">
+          <div className="finance-filters finance-package-usage__filters">
+            <label>
+              فترة استخدام الباقات
+              <select
+                className="finance-select"
+                value={packagePeriod}
+                onChange={(e) => setPackagePeriod(e.target.value)}
+              >
+                <option value="daily">يومي</option>
+                <option value="monthly">شهري</option>
+                <option value="yearly">سنوي</option>
+              </select>
+            </label>
+          </div>
+          <PackageUsageChart packageUsage={packageUsage} />
+        </section>
       </div>
       <DownloadReportModal open={reportModalOpen} onClose={() => setReportModalOpen(false)} />
     </ManagerLayout>

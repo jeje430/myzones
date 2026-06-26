@@ -50,6 +50,16 @@ class DeviceRatingBadges extends StatelessWidget {
                   rating: device.averageRating,
                   size: 11,
                 ),
+                if (device.ratingsCount > 0) ...[
+                  const SizedBox(width: 4),
+                  Text(
+                    '(${device.ratingsCount})',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: ZonezColors.textMuted,
+                    ),
+                  ),
+                ],
               ],
             ),
           );
@@ -64,10 +74,12 @@ class DeviceRatingBadge extends StatelessWidget {
     super.key,
     required this.rating,
     this.compact = false,
+    this.ratingsCount = 0,
   });
 
   final double rating;
   final bool compact;
+  final int ratingsCount;
 
   @override
   Widget build(BuildContext context) {
@@ -96,6 +108,16 @@ class DeviceRatingBadge extends StatelessWidget {
               color: ZonezColors.neonGold,
             ),
           ),
+          if (ratingsCount > 0) ...[
+            const SizedBox(width: 2),
+            Text(
+              '($ratingsCount)',
+              style: GoogleFonts.cairo(
+                fontSize: compact ? 9 : 10,
+                color: ZonezColors.textMuted,
+              ),
+            ),
+          ],
         ],
       ),
     );

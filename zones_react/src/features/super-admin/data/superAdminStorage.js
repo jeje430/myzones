@@ -13,366 +13,21 @@ import {
   syncInvitesCommissionRate,
 } from "./hallManagerInvitesStorage";
 import { HALL_REQUEST_STATUS, normalizeHallRequestStatus } from "./hallRequestStatus";
-import { DEFAULT_ACTIVE_HALLS, resolveHallServices } from "./hallServicesData";
+import { resolveHallServices } from "./hallServicesData";
 import { registerManagerUser, setMockUsersActiveByEmails } from "../../auth/data/mockUsersStorage";
 import { normalizeGmailEmail } from "../../../shared/utils/normalizeGmailEmail";
 
-const STORAGE_KEY = "zones-super-admin-data-v10";
+const STORAGE_KEY = "zones-super-admin-data-v11";
 
 const DEFAULT_STATE = {
-  requestStats: { rejectedThisMonth: 2, approvedThisMonth: 8 },
-  pendingRequests: [
-    {
-      id: 1,
-      hallName: "صالة النخبة للاحتفالات",
-      city: "الرياض",
-      address: "حي العليا، شارع الملك فهد، الرياض",
-      commercialPhone: "050 111 2222",
-      employeeCount: 12,
-      managerName: "فهد بن عبدالعزيز",
-      managerEmail: "fahad.elnokhba@gmail.com",
-      registrationLink: "https://zones.ly/register/elnokhba",
-      status: "pending",
-      submittedAt: "2025-05-21",
-      submittedTime: "10:30 ص",
-      mapLink: "https://maps.google.com/?q=24.7136,46.6753",
-      images: [
-        "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1511886929834-cd04b0d64d4b?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1593305841991-05c298ba4575?w=400&h=260&fit=crop",
-      ],
-    },
-    {
-      id: 2,
-      hallName: "قصر الأندلس",
-      city: "جدة",
-      address: "حي الروضة، طريق الأمير سلطان، جدة",
-      commercialPhone: "050 222 3333",
-      employeeCount: 18,
-      managerName: "سعد الغامدي",
-      managerEmail: "saad.andalus@gmail.com",
-      registrationLink: "https://zones.ly/register/andalus",
-      status: "pending",
-      submittedAt: "2025-05-20",
-      submittedTime: "09:15 ص",
-      mapLink: "https://maps.google.com/?q=21.5292,39.1611",
-      images: [
-        "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1593305841991-05c298ba4575?w=400&h=260&fit=crop",
-      ],
-    },
-    {
-      id: 3,
-      hallName: "لمسات الشرقية",
-      city: "الدمام",
-      address: "حي الشاطئ، شارع الخليج، الدمام",
-      commercialPhone: "053 444 5555",
-      employeeCount: 9,
-      managerName: "خالد القحطاني",
-      managerEmail: "khaled.lamasat@gmail.com",
-      registrationLink: "https://zones.ly/register/lamasat",
-      status: "pending",
-      submittedAt: "2025-05-19",
-      submittedTime: "02:40 م",
-      mapLink: "https://maps.google.com/?q=26.4207,50.0888",
-      images: [
-        "https://images.unsplash.com/photo-1593305841991-05c298ba4575?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1511886929834-cd04b0d64d4b?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=260&fit=crop",
-      ],
-    },
-    {
-      id: 4,
-      hallName: "أزهار للمناسبات",
-      city: "مكة المكرمة",
-      address: "حي العزيزية، طريق الحرم، مكة المكرمة",
-      commercialPhone: "056 666 7777",
-      employeeCount: 14,
-      managerName: "ماجد الحربي",
-      managerEmail: "majed.azhar@gmail.com",
-      registrationLink: "https://zones.ly/register/azhar",
-      status: "pending",
-      submittedAt: "2025-05-18",
-      submittedTime: "11:05 ص",
-      mapLink: "https://maps.google.com/?q=21.4225,39.8262",
-      images: [
-        "https://images.unsplash.com/photo-1511886929834-cd04b0d64d4b?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1511512578047-dfb367046420?w=400&h=260&fit=crop",
-        "https://images.unsplash.com/photo-1542751371-adc38448a05e?w=400&h=260&fit=crop",
-      ],
-    },
-  ],
-  activeHalls: DEFAULT_ACTIVE_HALLS.map((h) => ({ ...h })),
-  managers: [
-    {
-      id: 1,
-      fullName: "مدير النظام",
-      email: "modeer.alnizam@gmail.com",
-      phone: "+218 91 111 2233",
-      residence: "طرابلس — تاجوراء",
-      joinDate: "2024-01-15",
-      assignedHalls: ["ZONES Gaming Center"],
-      active: true,
-      role: "manager",
-    },
-    {
-      id: 2,
-      fullName: "خالد الفيتوري",
-      email: "khaled@gmail.com",
-      phone: "+218 92 444 5566",
-      residence: "بنغازي — الصابري",
-      joinDate: "2024-06-20",
-      assignedHalls: ["صالة الأبطال VIP"],
-      active: true,
-      role: "manager",
-    },
-    {
-      id: 3,
-      fullName: "نور الهادي",
-      email: "nour@gmail.com",
-      phone: "+218 91 777 8899",
-      residence: "مصراتة — وسط المدينة",
-      joinDate: "2025-02-10",
-      assignedHalls: ["صالة المستقبل"],
-      active: false,
-      role: "manager",
-    },
-    {
-      id: 4,
-      fullName: "فهد بن سالم",
-      email: "fahad@gmail.com",
-      phone: "+218 91 222 3344",
-      residence: "طرابلس — حي الأندلس",
-      joinDate: "2024-03-18",
-      assignedHalls: ["قاعة الأندلس"],
-      active: true,
-      role: "manager",
-    },
-    {
-      id: 5,
-      fullName: "عبدالله العريفي",
-      email: "abdullah@gmail.com",
-      phone: "+218 92 888 7766",
-      residence: "الزاوية — وسط المدينة",
-      joinDate: "2024-04-10",
-      assignedHalls: ["قاعة الواحة"],
-      active: false,
-      role: "manager",
-    },
-    {
-      id: 6,
-      fullName: "محمد الفيتوري",
-      email: "mohamed@gmail.com",
-      phone: "+218 71 555 6677",
-      residence: "سبها — حي المهدية",
-      joinDate: "2024-05-22",
-      assignedHalls: ["قاعة الرواد"],
-      active: true,
-      role: "manager",
-    },
-  ],
-  employees: [
-    {
-      id: 11,
-      fullName: "عمر الصياد",
-      email: "omar@gmail.com",
-      phone: "+218 91 333 4455",
-      residence: "طرابلس — عين زارة",
-      joinDate: "2025-03-01",
-      assignedHalls: ["ZONES Gaming Center"],
-      active: true,
-      role: "maintenance",
-      roleLabel: "موظف صيانة",
-    },
-    {
-      id: 12,
-      fullName: "ليلى البرعصي",
-      email: "layla@gmail.com",
-      phone: "+218 92 666 7788",
-      residence: "بنغازي — الفويهات",
-      joinDate: "2025-04-12",
-      assignedHalls: ["ZONES Gaming Center"],
-      active: true,
-      role: "reception",
-      roleLabel: "موظف استقبال",
-    },
-    {
-      id: 13,
-      fullName: "يوسف المصراتي",
-      email: "youssef@gmail.com",
-      phone: "+218 91 999 0011",
-      residence: "مصراتة — الزاوية",
-      joinDate: "2025-01-20",
-      assignedHalls: ["صالة الأبطال VIP"],
-      active: true,
-      role: "maintenance",
-      roleLabel: "موظف صيانة",
-    },
-    {
-      id: 14,
-      fullName: "رنا الجفاري",
-      email: "rana@gmail.com",
-      phone: "+218 92 222 3344",
-      residence: "طرابلس — قرقارش",
-      joinDate: "2024-11-05",
-      assignedHalls: ["صالة المستقبل"],
-      active: false,
-      role: "reception",
-      roleLabel: "موظف استقبال",
-    },
-    {
-      id: 15,
-      fullName: "سالم القذافي",
-      email: "salem@gmail.com",
-      phone: "+218 91 444 1122",
-      residence: "طرابلس — حي الأندلس",
-      joinDate: "2024-07-14",
-      assignedHalls: ["قاعة الأندلس"],
-      active: true,
-      role: "maintenance",
-      roleLabel: "موظف صيانة",
-    },
-    {
-      id: 16,
-      fullName: "هدى الورفلي",
-      email: "huda@gmail.com",
-      phone: "+218 71 333 9988",
-      residence: "سبها — حي المهدية",
-      joinDate: "2024-08-30",
-      assignedHalls: ["قاعة الرواد"],
-      active: true,
-      role: "reception",
-      roleLabel: "موظف استقبال",
-    },
-  ],
-  archivedHalls: [
-    {
-      id: 201,
-      name: "صالة الأمجاد القديمة",
-      address: "طرابلس — باب بن غشير",
-      archivedAt: "2025-12-01",
-      archiveReason: "إغلاق تجاري — انتهاء عقد الإيجار",
-      managerName: "فهد السنوسي",
-    },
-    {
-      id: 202,
-      name: "GameZone Classic",
-      address: "سبها — وسط المدينة",
-      archivedAt: "2026-01-15",
-      archiveReason: "نقل الملكية — دمج مع صالة أخرى",
-      managerName: "إيمان الورفلي",
-    },
-  ],
-  archivedUsers: [
-    {
-      id: 301,
-      fullName: "فهد السنوسي",
-      email: "fahd@gmail.com",
-      phone: "+218 91 123 4567",
-      residence: "طرابلس — باب بن غشير",
-      joinDate: "2023-09-12",
-      role: "manager",
-      roleLabel: "مدير صالة",
-      assignedHalls: ["صالة الأمجاد القديمة"],
-      archivedAt: "2025-12-01",
-      archiveReason: "أرشفة مع الصالة",
-    },
-    {
-      id: 302,
-      fullName: "إيمان الورفلي",
-      email: "eman@gmail.com",
-      phone: "+218 92 987 6543",
-      residence: "سبها — وسط المدينة",
-      joinDate: "2023-11-05",
-      role: "manager",
-      roleLabel: "مدير صالة",
-      assignedHalls: ["GameZone Classic"],
-      archivedAt: "2026-01-15",
-      archiveReason: "نقل الملكية — دمج مع صالة أخرى",
-    },
-    {
-      id: 303,
-      fullName: "علي التميمي",
-      email: "ali@gmail.com",
-      phone: "+218 91 765 4321",
-      residence: "مصراتة — وسط المدينة",
-      joinDate: "2024-01-18",
-      role: "manager",
-      roleLabel: "مدير صالة",
-      assignedHalls: ["صالة المستقبل"],
-      archivedAt: "2026-03-10",
-      archiveReason: "مخالفة سياسة الاستخدام",
-    },
-    {
-      id: 304,
-      fullName: "حسام القطعاني",
-      email: "hussam@gmail.com",
-      phone: "+218 92 333 4455",
-      residence: "سبها — حي المهدية",
-      joinDate: "2024-02-03",
-      role: "reception",
-      roleLabel: "موظف استقبال",
-      assignedHalls: ["GameZone Classic"],
-      archivedAt: "2026-02-20",
-      archiveReason: "انتهاء عقد العمل",
-    },
-    {
-      id: 305,
-      fullName: "محمد حسن",
-      email: "mohamed.h@gmail.com",
-      phone: "+218 91 555 6677",
-      residence: "طرابلس — تاجوراء",
-      joinDate: "2024-01-18",
-      role: "maintenance",
-      roleLabel: "موظف صيانة",
-      assignedHalls: ["صالة الأمجاد القديمة"],
-      archivedAt: "2026-04-10",
-      archiveReason: "إعادة هيكلة إدارة الصالة",
-    },
-    {
-      id: 306,
-      fullName: "نورة فهد",
-      email: "noura@gmail.com",
-      phone: "+218 53 246 8101",
-      residence: "بنغازي — الفويهات",
-      joinDate: "2023-06-20",
-      role: "reception",
-      roleLabel: "موظف استقبال",
-      assignedHalls: ["صالة المستقبل"],
-      archivedAt: "2026-03-05",
-      archiveReason: "طلب المدير نفسه",
-    },
-  ],
-  financialAlerts: [
-    {
-      id: 1,
-      type: "reminder",
-      hallName: "صالة الأبطال VIP",
-      amount: 210,
-      daysLeft: 2,
-      dueDate: "2026-06-11",
-      read: false,
-    },
-    {
-      id: 2,
-      type: "reminder",
-      hallName: "قاعة الأندلس",
-      amount: 165,
-      daysLeft: 2,
-      dueDate: "2026-06-12",
-      read: false,
-    },
-    {
-      id: 3,
-      type: "collected",
-      hallName: "ZONES Gaming Center",
-      amount: 186,
-      daysLeft: 0,
-      dueDate: "2026-06-08",
-      read: false,
-    },
-  ],
+  requestStats: { rejectedThisMonth: 0, approvedThisMonth: 0 },
+  pendingRequests: [],
+  activeHalls: [],
+  managers: [],
+  employees: [],
+  archivedHalls: [],
+  archivedUsers: [],
+  financialAlerts: [],
   systemSettings: {
     platformName: "منصة إدارة الصالات",
     platformLogo: "",
@@ -391,8 +46,10 @@ const DEFAULT_STATE = {
     language: "ar",
     allowRegistrations: true,
     emailNotifications: true,
-    loyaltyPointsPerSession: 20,
-    loyaltyRedemptionThreshold: 120,
+    loyaltyPointsPerSession: 10,
+    loyaltyMinimumPointsRequired: 100,
+    /** @deprecated use loyaltyMinimumPointsRequired */
+    loyaltyRedemptionThreshold: 100,
   },
 };
 
@@ -452,9 +109,6 @@ function propagateGlobalCommissionRate(state, rate) {
 
 function migrateHallCatalog(state) {
   if (!state._hallCatalogV11) {
-    if ((state.activeHalls || []).length > 7) {
-      state.activeHalls = DEFAULT_ACTIVE_HALLS.map((h) => ({ ...h }));
-    }
     state._hallCatalogV11 = true;
   }
 
@@ -501,13 +155,6 @@ function migrateAuthEmails(state) {
 function loadRaw() {
   try {
     let raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) {
-      const legacy = localStorage.getItem("zones-super-admin-data-v9");
-      if (legacy) {
-        localStorage.setItem(STORAGE_KEY, legacy);
-        raw = legacy;
-      }
-    }
     if (!raw) {
       const initial = structuredClone(DEFAULT_STATE);
       migrateCommissionFields(initial);
@@ -951,6 +598,25 @@ export function markAllAlertsRead() {
   state.financialAlerts.forEach((a) => {
     a.read = true;
   });
+  save(state);
+}
+
+export function deleteFinancialAlert(id) {
+  const state = loadRaw();
+  state.financialAlerts = state.financialAlerts.filter((a) => a.id !== id);
+  save(state);
+}
+
+export function deleteFinancialAlerts(ids) {
+  const idSet = new Set(ids);
+  const state = loadRaw();
+  state.financialAlerts = state.financialAlerts.filter((a) => !idSet.has(a.id));
+  save(state);
+}
+
+export function clearFinancialAlerts() {
+  const state = loadRaw();
+  state.financialAlerts = [];
   save(state);
 }
 

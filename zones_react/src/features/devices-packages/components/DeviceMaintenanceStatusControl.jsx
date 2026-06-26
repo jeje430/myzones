@@ -36,9 +36,9 @@ export default function DeviceMaintenanceStatusControl({
 
   const label = inProgress ? "قيد الإصلاح" : outOfService ? "معطل" : "سليم";
   const toneClass = inProgress
-    ? "bg-amber-500/15 text-amber-700 dark:text-amber-400"
+    ? "bg-gray-500/15 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300"
     : outOfService
-      ? "bg-red-500/15 text-red-600 dark:text-red-400"
+      ? "bg-gray-500/15 text-gray-700 dark:bg-gray-500/20 dark:text-gray-300"
       : "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400";
 
   if (managerDisabled && !broken && !inProgress) {

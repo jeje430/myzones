@@ -3,10 +3,12 @@ import DashboardProfileChip from "../../../shared/components/DashboardProfileChi
 import DashboardTopBarActions from "../../../shared/components/DashboardTopBarActions";
 import { DASHBOARD_ICON_BTN_CLS } from "../../../shared/components/dashboardTopBarUi";
 import { useDashboardProfile } from "../../../shared/hooks/useDashboardProfile";
+import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 import HallNotificationsBell from "./HallNotificationsBell";
 
 export default function ReceptionEmployeeTopBar({ onMenuClick }) {
   const profile = useDashboardProfile();
+  const { routes } = useReceptionEmployeeRoutes();
 
   return (
     <header
@@ -28,7 +30,7 @@ export default function ReceptionEmployeeTopBar({ onMenuClick }) {
       </div>
 
       <DashboardTopBarActions
-        profile={<DashboardProfileChip roleLabel="استقبال" />}
+        profile={<DashboardProfileChip roleLabel="استقبال" profileTo={routes.profile} />}
         notifications={<HallNotificationsBell audience="reception" />}
       />
     </header>

@@ -3,17 +3,18 @@ import AdminModal from "../../devices-packages/components/AdminModal";
 import { Select, alertFormFieldCls, alertFormReadOnlyCls, alertFormTextareaCls } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import Button from "../../super-admin/components/ui/Button";
+import { zonesToastWarning } from "../../../shared/utils/zonesAlerts";
 import {
   ALERT_SEVERITY_LEVELS,
-  ALERT_TARGET_CATEGORIES,
+  NOTIFICATION_TARGET_FORM_OPTIONS,
   alertStatusLabel,
   formatAlertDateTime,
   formatAlertRecordCode,
-  normalizeTargetCategories,
+  isSelectableTargetAudience,
 } from "../data/alertsMeta";
 import { loadAlerts, nextAlertId } from "../data/managerAlertsStorage";
 
-const targetOptions = ALERT_TARGET_CATEGORIES.map((item) => ({
+const targetOptions = NOTIFICATION_TARGET_FORM_OPTIONS.map((item) => ({
   value: item.value,
   label: item.label,
 }));
@@ -25,15 +26,11 @@ const severityOptions = ALERT_SEVERITY_LEVELS.map((item) => ({
 
 const EMPTY_FORM = {
   name: "",
-  targetCategories: ["all"],
+  targetAudience: "",
   severity: "medium",
   situationDescription: "",
+  alternativeInstructions: "",
 };
-
-function targetToSelectValue(categories) {
-  const list = normalizeTargetCategories(categories);
-  return list.includes("all") ? "all" : list[0] || "all";
-}
 
 export default function ManagerAlertFormModal({ open, onClose, onSave }) {
   const [form, setForm] = useState(EMPTY_FORM);
@@ -49,6 +46,12 @@ export default function ManagerAlertFormModal({ open, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!form.name.trim() || !form.situationDescription.trim()) return;
+
+    if (!isSelectableTargetAudience(form.targetAudience)) {
+      zonesToastWarning("يرجى اختيار المستهدف: الجميع، موظف الصيانة، موظف الاستقبال، أو الزبون.");
+      return;
+    }
+
     onSave(form);
   };
 
@@ -71,12 +74,13 @@ export default function ManagerAlertFormModal({ open, onClose, onSave }) {
           </div>
 
           <div>
-            <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">إرسال التنبيه إلى</Label>
+            <Label className="mb-1.5 block text-[10px] font-bold text-gray-400">المستهدف</Label>
             <Select
-              value={targetToSelectValue(form.targetCategories)}
-              onValueChange={(v) => setField("targetCategories", [v])}
+              value={form.targetAudience}
+              onValueChange={(v) => setField("targetAudience", v)}
               options={targetOptions}
-              placeholder="اختر..."
+              placeholder="اختر المستهدف..."
+              required
             />
           </div>
 
@@ -94,14 +98,14 @@ export default function ManagerAlertFormModal({ open, onClose, onSave }) {
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="sm:col-span-2">
             <Label htmlFor="alert-name" className="mb-1.5 block text-[10px] font-bold text-gray-400">
-              اسم التنبيه
+              عنوان التنبيه
             </Label>
             <input
               id="alert-name"
               value={form.name}
               onChange={(e) => setField("name", e.target.value)}
               className={alertFormFieldCls}
-              placeholder="اسم التنبيه"
+              placeholder="عنوان التنبيه"
               required
             />
           </div>
@@ -124,7 +128,7 @@ export default function ManagerAlertFormModal({ open, onClose, onSave }) {
 
           <div className="sm:col-span-2">
             <Label htmlFor="alert-situation" className="mb-1.5 block text-[10px] font-bold text-gray-400">
-              وصف الحالة
+              وصف التنبيه
             </Label>
             <textarea
               id="alert-situation"
@@ -132,8 +136,22 @@ export default function ManagerAlertFormModal({ open, onClose, onSave }) {
               value={form.situationDescription}
               onChange={(e) => setField("situationDescription", e.target.value)}
               className={alertFormTextareaCls}
-              placeholder="وصف الحالة..."
+              placeholder="وصف التنبيه..."
               required
+            />
+          </div>
+
+          <div className="sm:col-span-2">
+            <Label htmlFor="alert-instructions" className="mb-1.5 block text-[10px] font-bold text-gray-400">
+              تعليمات بديلة (اختياري)
+            </Label>
+            <textarea
+              id="alert-instructions"
+              rows={2}
+              value={form.alternativeInstructions}
+              onChange={(e) => setField("alternativeInstructions", e.target.value)}
+              className={alertFormTextareaCls}
+              placeholder="تعليمات للموظفين أو الزبائن..."
             />
           </div>
         </div>

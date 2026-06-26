@@ -5,8 +5,9 @@ export default function KpiCard({ label, value, hint, icon: Icon, tone = "primar
     primary: "text-[#6B5478]",
     green: "text-emerald-600 dark:text-emerald-400",
     red: "text-red-600 dark:text-red-400",
-    amber: "text-amber-600 dark:text-amber-400",
-  };
+  amber: "text-amber-600 dark:text-amber-400",
+  gray: "text-gray-600 dark:text-gray-400",
+};
   const accent = accents[tone] || accents.primary;
 
   return (
