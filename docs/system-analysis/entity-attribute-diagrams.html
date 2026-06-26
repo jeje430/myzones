@@ -6,14 +6,15 @@
   <title>ZONES — مخططات خصائص الكيانات (Chen Style)</title>
   <style>
     :root {
-      --entity-fill: #2196f3;
-      --entity-stroke: #1976d2;
-      --attr-fill: #e3f2fd;
-      --attr-stroke: #90caf9;
-      --line: #64b5f6;
+      --entity-fill: #6b5478;
+      --entity-stroke: #4f3d59;
+      --attr-fill: #f0eaf4;
+      --attr-stroke: #c9b8d4;
+      --line: #9b87a8;
       --ink: #263238;
       --muted: #607d8b;
       --page-bg: #ffffff;
+      --fk: #5e3572;
     }
 
     * { box-sizing: border-box; }
@@ -134,7 +135,7 @@
       <span><i class="swatch-entity"></i> كيان (Entity)</span>
       <span><i class="swatch-attr"></i> خاصية (Attribute)</span>
       <span><u>id</u> = PK</span>
-      <span style="color:#2e7d32">* = FK</span>
+      <span style="color:var(--fk)">* = FK</span>
     </div>
   </div>
 
@@ -144,12 +145,13 @@
   <script>
     const ENTITIES = window.ENTITIES;
 
-    const ENTITY_FILL = "#2196F3";
-    const ENTITY_STROKE = "#1976D2";
-    const ATTR_FILL = "#E3F2FD";
-    const ATTR_STROKE = "#90CAF9";
-    const LINE_COLOR = "#64B5F6";
+    const ENTITY_FILL = "#6B5478";
+    const ENTITY_STROKE = "#4F3D59";
+    const ATTR_FILL = "#F0EAF4";
+    const ATTR_STROKE = "#C9B8D4";
+    const LINE_COLOR = "#9B87A8";
     const TEXT = "#263238";
+    const FK_COLOR = "#5E3572";
 
     function measureText(text, fontSize = 11) {
       const c = document.createElement("canvas").getContext("2d");
@@ -246,7 +248,7 @@
         const label = formatLabel(p.attr);
         const { rx, ry } = ellipseSize(label);
         const pk = p.attr.pk ? ' text-decoration="underline" font-weight="600"' : "";
-        const fkStyle = p.attr.fk ? ' fill="#1b5e20"' : ` fill="${TEXT}"`;
+        const fkStyle = p.attr.fk ? ` fill="${FK_COLOR}"` : ` fill="${TEXT}"`;
         return `
           <ellipse cx="${p.x}" cy="${p.y}" rx="${rx}" ry="${ry}" fill="${ATTR_FILL}" stroke="${ATTR_STROKE}" stroke-width="1.2"/>
           <text x="${p.x}" y="${p.y + 4}" text-anchor="middle" font-family="Segoe UI, Tahoma, Arial, sans-serif" font-size="11"${fkStyle}${pk}>${label}</text>
