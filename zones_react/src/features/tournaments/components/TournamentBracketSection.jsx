@@ -17,7 +17,7 @@ import { notifyTournamentWinner } from "../data/managerTournamentsApi";
  * @param {(id: number) => string} [props.routes.participants]
  * @param {boolean} [props.readOnly]
  */
-export default function TournamentBracketSection({ routes, readOnly = false }) {
+export default function TournamentBracketSection({ routes, readOnly = false, receptionMode = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -104,7 +104,7 @@ export default function TournamentBracketSection({ routes, readOnly = false }) {
         actions={
           tournament ? (
             <>
-              {!readOnly && apiSync && finalMatchHasWinner ? (
+              {!readOnly && !receptionMode && apiSync && finalMatchHasWinner ? (
                 <Button
                   type="button"
                   size="sm"
@@ -141,18 +141,18 @@ export default function TournamentBracketSection({ routes, readOnly = false }) {
           </p>
         ) : null}
 
-        <div className="overflow-hidden rounded-2xl border border-[#2D2D3D] bg-[#0F0F12] shadow-lg shadow-black/20">
+        <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
           {isLoading ? (
             <div className="overflow-x-auto p-3 sm:p-4">
               <BracketSkeletonLoader bracketSize={skeletonSize} variant="manager" />
             </div>
           ) : !bracketReady || !bracket ? (
             <div className="px-4 py-12 text-center">
-              <GitBranch size={36} className="mx-auto mb-3 text-[#374151]" />
-              <p className="text-sm font-bold text-[#F3F4F6]">
+              <GitBranch size={36} className="mx-auto mb-3 text-gray-400 dark:text-gray-500" />
+              <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
                 الشجرة غير متاحة — لم يكتمل عدد المشاركين
               </p>
-              <p className="mt-1 text-xs text-[#9CA3AF]">
+              <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
                 أكمل التسجيل من التطبيق ثم ارجع لعرض الشجرة.
               </p>
             </div>
@@ -165,6 +165,7 @@ export default function TournamentBracketSection({ routes, readOnly = false }) {
                 onBack={goBack}
                 onBracketChange={setBracketState}
                 apiSync={!readOnly && apiSync}
+                allowSchedule={!receptionMode}
               />
             </div>
           )}

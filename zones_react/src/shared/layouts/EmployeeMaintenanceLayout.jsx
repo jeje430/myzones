@@ -1,18 +1,19 @@
 import { useCallback, useEffect, useState } from "react";
-import { Outlet, useParams } from "react-router-dom";
+import { Outlet } from "react-router-dom";
 import MaintenanceEmployeeSidebar from "../../features/employees/components/MaintenanceEmployeeSidebar";
 import MaintenanceEmployeeTopBar from "../../features/employees/components/MaintenanceEmployeeTopBar";
+import SidebarEdgeToggle from "../components/SidebarEdgeToggle";
 import { getMaintenancePendingBadgeCount } from "../../features/employees/data/maintenanceDashboardData";
-import { getAuthSession } from "../../features/auth/data/mockUsersStorage";
 import { DEVICES_STORAGE_EVENT } from "../../features/devices-packages/data/devicesStorage";
 import { MAINTENANCE_FAULTS_EVENT } from "../../features/maintenance/data/maintenanceFaultsStorage";
 import useActiveSessionGuard from "../hooks/useActiveSessionGuard";
+import useSidebarOpen from "../hooks/useSidebarOpen";
+import { useSidebarMobileClose } from "../hooks/useSidebarMobileClose";
 
 export default function EmployeeMaintenanceLayout() {
   useActiveSessionGuard();
-  const { employeeId } = useParams();
-  const session = getAuthSession(employeeId);
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebarOpen("zones-maintenance-sidebar-open");
+  const closeSidebarOnMobile = useSidebarMobileClose(closeSidebar);
   const [pendingCount, setPendingCount] = useState(getMaintenancePendingBadgeCount);
 
   const refreshPendingCount = useCallback(() => {
@@ -37,26 +38,31 @@ export default function EmployeeMaintenanceLayout() {
       style={{ fontFamily: "Cairo, 'Segoe UI', Tahoma, sans-serif" }}
       dir="rtl"
     >
-      <div
-        className={`fixed inset-y-0 end-0 z-50 transform transition lg:static lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
+      {sidebarOpen ? (
+        <button
+          type="button"
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] lg:hidden"
+          onClick={closeSidebar}
+          aria-label="إغلاق القائمة"
+        />
+      ) : null}
+
+      {!sidebarOpen ? <SidebarEdgeToggle onMenuToggle={toggleSidebar} /> : null}
+
+      <aside
+        className={`relative overflow-visible fixed inset-y-0 end-0 z-50 w-64 shrink-0 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "translate-x-full lg:hidden"
         }`}
       >
         <MaintenanceEmployeeSidebar
           pendingCount={pendingCount}
-          onNavigate={() => setSidebarOpen(false)}
+          onNavigate={closeSidebarOnMobile}
+          onMenuToggle={toggleSidebar}
         />
-      </div>
-      {sidebarOpen ? (
-        <button
-          type="button"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
-          aria-label="إغلاق القائمة"
-        />
-      ) : null}
+      </aside>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <MaintenanceEmployeeTopBar session={session} onMenuClick={() => setSidebarOpen(true)} />
+        <MaintenanceEmployeeTopBar />
         <main className="flex-1 p-4 md:p-6">
           <Outlet />
         </main>

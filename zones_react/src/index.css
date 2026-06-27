@@ -56,7 +56,7 @@ body,
   border-color: #374151 !important;
 }
 [data-theme="dark"] .dark\:border-gray-800 {
-  border-color: #1f2937 !important;
+  border-color: rgba(167, 139, 189, 0.42) !important;
 }
 [data-theme="dark"] .dark\:text-white {
   color: #ffffff !important;
@@ -72,6 +72,87 @@ body,
 }
 [data-theme="dark"] .dark\:text-gray-400 {
   color: #9ca3af !important;
+}
+
+/* ===== حدود وخطوط أوضح — Light + Dark ===== */
+[data-theme="light"] {
+  --zones-border-subtle: rgba(107, 84, 120, 0.26);
+  --zones-border-default: rgba(107, 84, 120, 0.44);
+  --zones-border-strong: rgba(107, 84, 120, 0.58);
+  --zones-divider: rgba(107, 84, 120, 0.22);
+}
+
+[data-theme="light"] .border-gray-50,
+[data-theme="light"] .border-gray-100 {
+  border-color: var(--zones-border-subtle) !important;
+}
+
+[data-theme="light"] .border-gray-200,
+[data-theme="light"] .border-gray-300 {
+  border-color: var(--zones-border-default) !important;
+}
+
+[data-theme="light"] .divide-gray-50 > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+[data-theme="light"] .divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--zones-divider) !important;
+}
+
+[data-theme="light"] .rounded-2xl.border,
+[data-theme="light"] .rounded-xl.border {
+  border-color: var(--zones-border-default) !important;
+}
+
+[data-theme="dark"] {
+  --zones-border-subtle: rgba(167, 139, 189, 0.28);
+  --zones-border-default: rgba(167, 139, 189, 0.44);
+  --zones-border-strong: rgba(167, 139, 189, 0.58);
+  --zones-divider: rgba(167, 139, 189, 0.26);
+  --table-divider: rgba(167, 139, 189, 0.28);
+}
+
+[data-theme="dark"] .dark\:divide-gray-800 > :not([hidden]) ~ :not([hidden]),
+[data-theme="dark"] .divide-gray-800 > :not([hidden]) ~ :not([hidden]) {
+  border-color: var(--zones-divider) !important;
+}
+
+[data-theme="dark"] .rounded-2xl.border,
+[data-theme="dark"] .rounded-xl.border {
+  border-color: var(--zones-border-default) !important;
+}
+
+[data-theme="dark"] table thead tr.border-b,
+[data-theme="dark"] table tr.border-b {
+  border-bottom-color: var(--zones-divider) !important;
+}
+
+[data-theme="light"] table thead tr.border-b,
+[data-theme="light"] table tr.border-b {
+  border-bottom-color: var(--zones-divider) !important;
+}
+
+/* focus-visible — أزرار وروابط تفاعلية */
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+[role="switch"]:focus-visible,
+.zones-btn:focus-visible,
+.primary-btn:focus-visible,
+.zones-add-btn:focus-visible,
+.icon-btn:focus-visible,
+.sidebar-link:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(107, 84, 120, 0.35);
+}
+
+/* زر طي القائمة — دائري دائماً (Bootstrap قد يفرض زوايا حادة) */
+button.sidebar-collapse-toggle {
+  width: 2rem !important;
+  height: 2rem !important;
+  min-width: 2rem !important;
+  min-height: 2rem !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
 }
 
 :root,
@@ -153,7 +234,7 @@ body,
   --page-bg: #f5f7fa;
   --table-header-bg: #ebe4ef;
   --table-row-bg: #ffffff;
-  --table-divider: #e5e7eb;
+  --table-divider: rgba(107, 84, 120, 0.22);
   --table-hover: rgba(107, 84, 120, 0.1);
 }
 
@@ -1020,12 +1101,31 @@ p {
 }
 
 /* لوحات بجداول Tailwind — تنسيق Light mode */
-[data-theme="light"] [data-zones-table] {
+[data-theme="light"] [data-zones-table],
+[data-theme="light"] .overflow-hidden.rounded-2xl.border {
   background: #ffffff !important;
-  border-color: rgba(107, 84, 120, 0.52) !important;
+  border-color: rgba(107, 84, 120, 0.48) !important;
   box-shadow:
-    0 0 0 1px rgba(107, 84, 120, 0.12),
+    0 0 0 1px rgba(107, 84, 120, 0.14),
     0 1px 3px rgba(17, 24, 39, 0.08) !important;
+}
+
+/* لوحات الجداول — Dark mode */
+[data-theme="dark"] .overflow-hidden.rounded-2xl.border {
+  border-color: rgba(167, 139, 189, 0.42) !important;
+  box-shadow: 0 0 0 1px rgba(167, 139, 189, 0.12) !important;
+}
+
+[data-theme="dark"] .overflow-hidden.rounded-2xl.border > .border-b,
+[data-theme="dark"] .overflow-hidden.rounded-2xl.border .border-b.border-gray-100,
+[data-theme="dark"] .overflow-hidden.rounded-2xl.border .border-t.border-gray-100 {
+  border-color: rgba(167, 139, 189, 0.28) !important;
+}
+
+[data-theme="light"] .overflow-hidden.rounded-2xl.border > .border-b,
+[data-theme="light"] .overflow-hidden.rounded-2xl.border .border-b.border-gray-100,
+[data-theme="light"] .overflow-hidden.rounded-2xl.border .border-t.border-gray-100 {
+  border-color: rgba(107, 84, 120, 0.22) !important;
 }
 
 /* بطاقات إحصائيات العروض + غيرها — أبيض + حدود موف (لايت فقط عبر الوضع) */
@@ -1148,6 +1248,28 @@ p {
 
 [data-theme="light"] [data-zones-table] button[aria-label="حذف"]:hover {
   background: rgba(254, 226, 226, 0.9) !important;
+}
+
+/* checkboxes in tables — visible tick + purple accent (overrides Bootstrap/global button styles) */
+.zones-table-checkbox {
+  appearance: auto;
+  -webkit-appearance: checkbox;
+  accent-color: #6b5478 !important;
+  cursor: pointer;
+}
+
+.zones-table-checkbox:checked {
+  background-color: #6b5478 !important;
+  border-color: #6b5478 !important;
+}
+
+[data-theme="dark"] .zones-table-checkbox {
+  accent-color: #6b5478 !important;
+}
+
+[data-theme="dark"] .zones-table-checkbox:checked {
+  background-color: #6b5478 !important;
+  border-color: #6b5478 !important;
 }
 
 [data-theme="light"] [data-zones-table] .tournament-row-actions .zones-btn--primary {
@@ -1475,7 +1597,7 @@ button.zones-toggle-item[data-state="on"]:hover {
 }
 
 /* هـوفر واضح لمعظم الأزرار (دارك/لايت/نوافذ) */
-.manager-theme-scope button:not(:disabled):not([role="switch"]):not(.zones-toggle-item) {
+.manager-theme-scope button:not(:disabled):not([role="switch"]):not(.zones-toggle-item):not(.zones-table-checkbox) {
   transition:
     transform 0.15s ease,
     box-shadow 0.22s ease,

@@ -21,21 +21,21 @@ import {
   zonesToastSuccess,
   zonesToastWarning,
 } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import ManagerHeaderUser from "../../../shared/components/ManagerHeaderUser";
 import IconButton from "../../../shared/components/ui/IconButton";
 import IconGlyph from "../../../shared/components/ui/IconGlyph";
-import { Checkbox } from "@/components/ui/checkbox";
-import { SELECT_COL_TD, SELECT_COL_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
+  TableSelectHeaderCell,
+  TableSelectRowCell,
   selectableRowClass,
 } from "../../../shared/components/ui/TableSelection";
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import { hallScopedKey } from "../../../shared/tenant/hallScopedStorage";
 import {
   BOOKINGS_STOP_EVENT,
@@ -124,6 +124,7 @@ function rowLabel(typeValue) {
 }
 
 const PAGE_SIZE = 4;
+const TABLE_DATA_COLS = 5;
 
 export default function EmergencyManagementPage() {
   const [bookingsStopped, setBookingsStopped] = useState(() => isBookingsStopped());
@@ -226,7 +227,8 @@ export default function EmergencyManagementPage() {
   }, [filteredLogs, logPage]);
 
   const pageIds = useMemo(() => pagedLogs.map((row) => row.id), [pagedLogs]);
-  const selection = useTableSelection({ items: filteredLogs, pageIds });
+  const allIds = useMemo(() => filteredLogs.map((row) => row.id), [filteredLogs]);
+  const selection = useTableSelectionMode({ items: filteredLogs, pageIds, allIds });
 
   const headerExtras = <ManagerHeaderUser />;
 
@@ -286,7 +288,7 @@ export default function EmergencyManagementPage() {
       ...targets.map((t) => ({ ...t, archivedAt: new Date().toISOString() })),
     ]);
     setLogs((list) => list.filter((x) => !idSet.has(x.id)));
-    selection.clearSelection();
+    selection.exitSelectionMode();
     zonesToastSuccess(isBulk ? `تم نقل ${targets.length} سجلات إلى الأرشيف` : "تم النقل إلى الأرشيف");
   };
 
@@ -315,12 +317,8 @@ export default function EmergencyManagementPage() {
   ];
 
   return (
-    <ManagerLayout
-      title="إدارة الطوارئ"
-      headerExtras={headerExtras}
-      titleAside={titleAside}
-    >
-      <div className="em-page flex flex-col gap-4 text-[var(--text)]" dir="rtl">
+    <>
+    <div className="em-page flex flex-col gap-4 text-[var(--text)]" dir="rtl">
         {/* كروت مدمجة — ألوان نيون محددة */}
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
           {/* Neon Blue — إيقاف الحجوزات */}
@@ -423,8 +421,12 @@ export default function EmergencyManagementPage() {
             </button>
           </div>
 
-          <TableBulkActionBar
+          <TableSelectionModeBar
+            selectionMode={selection.selectionMode}
+            onEnter={selection.enterSelectionMode}
+            onExit={selection.exitSelectionMode}
             count={selection.count}
+            totalCount={filteredLogs.length}
             onClear={selection.clearSelection}
             actions={[{ label: "حذف المحدد", icon: Trash2, onClick: handleBulkDelete, variant: "danger" }]}
           />
@@ -433,14 +435,7 @@ export default function EmergencyManagementPage() {
             <table className="em-table w-full min-w-[640px] border-collapse text-[12px]">
               <thead>
                 <tr className="border-b border-slate-800/90 bg-[#0b0e14]/70 text-start text-xs font-medium uppercase tracking-wide text-slate-500">
-                  <th className={`${SELECT_COL_TH} text-center`}>
-                    <Checkbox
-                      checked={selection.masterChecked}
-                      onCheckedChange={selection.toggleSelectAll}
-                      aria-label="تحديد الكل"
-                      className="mx-auto ring-offset-[#0b0e14] data-[state=checked]:shadow-[0_0_0_2px_rgba(107,84,120,0.25)]"
-                    />
-                  </th>
+                  <TableSelectHeaderCell {...selection} />
                   <th className="px-3 py-3 text-end">#</th>
                   <th className="px-3 py-3 text-end">نوع الطوارئ</th>
                   <th className="px-3 py-3 text-end">الوصف</th>
@@ -451,7 +446,7 @@ export default function EmergencyManagementPage() {
               <tbody className="divide-y divide-slate-800/80">
                 {filteredLogs.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-3 py-10 text-center text-[12px] text-slate-500">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-[12px] text-slate-500">
                       لا توجد حالات طوارئ مسجّلة بعد.
                     </td>
                   </tr>
@@ -463,16 +458,13 @@ export default function EmergencyManagementPage() {
                   return (
                     <tr
                       key={row.id}
-                      className={`transition odd:bg-[#0f131a]/40 even:bg-[#121722]/30 hover:bg-[#151a24]/80 ${selectableRowClass(selection.isSelected(row.id), "")}`}
+                      className={`transition odd:bg-[#0f131a]/40 even:bg-[#121722]/30 hover:bg-[#151a24]/80 ${
+                        selection.selectionMode
+                          ? selectableRowClass(selection.isSelected(row.id), "")
+                          : ""
+                      }`}
                     >
-                      <td className={SELECT_COL_TD}>
-                        <Checkbox
-                          checked={selection.isSelected(row.id)}
-                          onCheckedChange={() => selection.toggleRow(row.id)}
-                          aria-label={`تحديد السجل ${rowNum}`}
-                          className="mx-auto ring-offset-[#0b0e14] data-[state=checked]:shadow-[0_0_0_2px_rgba(107,84,120,0.25)]"
-                        />
-                      </td>
+                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد السجل ${rowNum}`} {...selection} />
                       <td className="px-3 py-3 text-end font-medium text-slate-400">{rowNum}</td>
                       <td className="px-3 py-3 text-end">
                         <span className="inline-flex items-center justify-end gap-1.5">
@@ -690,6 +682,6 @@ export default function EmergencyManagementPage() {
         onClose={() => setStopModalOpen(false)}
         onSubmit={handleStopSubmit}
       />
-    </ManagerLayout>
+    </>
   );
 }

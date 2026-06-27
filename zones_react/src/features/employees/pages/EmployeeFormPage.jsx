@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import { confirmAction, zonesSwal, zonesToastWarning } from "../utils/employeeConfirm";
 import {
   EMPTY_EMPLOYEE,
@@ -104,10 +103,7 @@ export default function EmployeeFormPage() {
   };
 
   return (
-    <ManagerLayout
-      title={isEdit ? "تعديل موظف" : "إضافة موظف"}
-    >
-      <form className="emp-form-page" dir="rtl" onSubmit={submit}>
+    <form className="emp-form-page" dir="rtl" onSubmit={submit}>
         <div className="emp-form-card">
           <div className="emp-form-grid">
             <div className="emp-field">
@@ -175,6 +171,5 @@ export default function EmployeeFormPage() {
           </div>
         </div>
       </form>
-    </ManagerLayout>
   );
 }

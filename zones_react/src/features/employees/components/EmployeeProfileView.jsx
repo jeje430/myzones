@@ -28,6 +28,7 @@ import {
 export default function EmployeeProfileView({
   roleBadgeLabel,
   profile,
+  readOnly = false,
 }) {
   const {
     user,
@@ -57,7 +58,7 @@ export default function EmployeeProfileView({
   if (loading) {
     return (
       <div>
-        <PageHeader title="حسابي" description="إدارة بياناتك الشخصية — بيانات الوظيفة يحددها مدير الصالة." />
+        <PageHeader title="حسابي" />
         <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-sm font-bold text-gray-400 dark:border-gray-800 dark:bg-gray-900">
           جاري تحميل الملف الشخصي…
         </div>
@@ -67,7 +68,7 @@ export default function EmployeeProfileView({
 
   return (
     <div>
-      <PageHeader title="حسابي" description="إدارة بياناتك الشخصية — بيانات الوظيفة يحددها مدير الصالة." />
+      <PageHeader title="حسابي" />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900 lg:col-span-2">
@@ -75,7 +76,7 @@ export default function EmployeeProfileView({
             <h2 className="flex items-center gap-2 text-sm font-extrabold text-gray-900 dark:text-white">
               <User size={16} className="text-[#6B5478]" /> المعلومات الشخصية
             </h2>
-            {!editing ? (
+            {!readOnly && !editing ? (
               <button
                 type="button"
                 onClick={() => setEditing(true)}
@@ -83,7 +84,8 @@ export default function EmployeeProfileView({
               >
                 <Pencil size={13} /> تعديل
               </button>
-            ) : (
+            ) : null}
+            {!readOnly && editing ? (
               <button
                 type="button"
                 onClick={save}
@@ -91,7 +93,7 @@ export default function EmployeeProfileView({
               >
                 <Save size={13} /> حفظ
               </button>
-            )}
+            ) : null}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -100,7 +102,7 @@ export default function EmployeeProfileView({
               icon={User}
               value={fullName}
               onChange={setFullName}
-              disabled={!editing}
+              disabled={readOnly || !editing}
             />
             <IconField
               label="البريد الإلكتروني"
@@ -117,7 +119,7 @@ export default function EmployeeProfileView({
               icon={Phone}
               value={phone}
               onChange={setPhone}
-              disabled={!editing}
+              disabled={readOnly || !editing}
               ltr
             />
             <IconField
@@ -151,7 +153,9 @@ export default function EmployeeProfileView({
             fullName={fullName}
             onAvatarChange={setAvatar}
             useApi={apiSession}
+            readOnly={readOnly}
             onLocalAvatar={(url) => {
+              if (readOnly) return;
               setAvatar(url);
               if (user?.id) updateUserProfile(user.id, { avatar: url });
             }}

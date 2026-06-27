@@ -14,7 +14,6 @@ import {
   User,
 } from "lucide-react";
 import { zonesSwal, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import ConfirmModal from "../../super-admin/components/ui/ConfirmModal";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import ProfileAvatarEditor from "../../../shared/components/ProfileAvatarEditor";
@@ -101,8 +100,8 @@ export function ManagerProfilePage() {
   if (!user) return null;
 
   return (
-    <ManagerLayout>
-      <PageHeader title="حسابي" description="إدارة بياناتك الشخصية وأمان حسابك." />
+    <>
+    <PageHeader title="حسابي" />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <section className="lg:col-span-2 rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -203,6 +202,6 @@ export function ManagerProfilePage() {
         onConfirm={deleteAccount}
         onCancel={() => setDeleteOpen(false)}
       />
-    </ManagerLayout>
+    </>
   );
 }

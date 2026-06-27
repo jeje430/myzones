@@ -72,7 +72,7 @@ export default function HallServicesManagerPicker({ compact = false }) {
         <div>
           <h2 className="text-sm font-extrabold text-gray-900 dark:text-white">الخدمات المتوفرة</h2>
           <p className="mt-1 text-[11px] text-gray-500 dark:text-gray-400">
-            اختر واحدة أو أكثر — الرمادي غير متوفر، الملوّن يظهر للزبون في التطبيق (كارد الصالة + التفاصيل).
+            حدّد الخدمات المتوفرة في صالتك.
           </p>
         </div>
         <span className="rounded-full bg-[#6B5478] px-2.5 py-0.5 text-[11px] font-bold text-white shadow-sm shadow-[#6B5478]/20">
@@ -92,8 +92,7 @@ export default function HallServicesManagerPicker({ compact = false }) {
         ))}
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
-        <p className="text-[10px] text-gray-400">PS5، XBOX، VR، VIP… تُعرض كدوائر/شips في تطبيق Flutter.</p>
+      <div className="mt-5 flex flex-wrap items-center justify-end gap-3 border-t border-gray-100 pt-4 dark:border-gray-800">
         <button
           type="button"
           onClick={handleSave}

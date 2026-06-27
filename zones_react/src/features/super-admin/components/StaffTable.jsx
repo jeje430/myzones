@@ -34,8 +34,20 @@ function initials(name = "") {
   return parts.map((part) => part[0]).join("") || "—";
 }
 
-export default function StaffTable({ staff = [], loading = false, onEdit, onSuspend, onDelete }) {
-  const [search, setSearch] = useState("");
+export default function StaffTable({
+  staff = [],
+  loading = false,
+  onEdit,
+  onSuspend,
+  onDelete,
+  search: controlledSearch,
+  onSearchChange,
+  hideSearch = false,
+  toolbar = null,
+}) {
+  const [internalSearch, setInternalSearch] = useState("");
+  const search = controlledSearch !== undefined ? controlledSearch : internalSearch;
+  const setSearch = onSearchChange || setInternalSearch;
 
   const filtered = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -54,11 +66,14 @@ export default function StaffTable({ staff = [], loading = false, onEdit, onSusp
 
   return (
     <div>
-      <div className="mb-4">
-        <SearchBar value={search} onChange={setSearch} placeholder="ابحث عن موظف أو مدير..." />
-      </div>
+      {!hideSearch ? (
+        <div className="mb-4">
+          <SearchBar value={search} onChange={setSearch} placeholder="ابحث عن موظف أو مدير..." />
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
+        {toolbar}
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-right" dir="rtl">
             <thead>

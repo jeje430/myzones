@@ -14,7 +14,6 @@ import ReceptionDevicesPage from "./features/employees/pages/ReceptionDevicesPag
 import ReceptionPackagesPage from "./features/employees/pages/ReceptionPackagesPage";
 import ReceptionOffersPage from "./features/employees/pages/ReceptionOffersPage";
 import ReceptionTournamentsPage from "./features/employees/pages/ReceptionTournamentsPage";
-import ReceptionTournamentDataPage from "./features/employees/pages/ReceptionTournamentDataPage";
 import ReceptionTournamentParticipantsPage from "./features/employees/pages/ReceptionTournamentParticipantsPage";
 import ReceptionTournamentPerParticipantsPage from "./features/employees/pages/ReceptionTournamentPerParticipantsPage";
 import ReceptionTournamentDetailsPage from "./features/employees/pages/ReceptionTournamentDetailsPage";
@@ -42,6 +41,7 @@ import TournamentBracketPage from "./features/tournaments/pages/TournamentBracke
 import TournamentDetailsPage from "./features/tournaments/pages/TournamentDetailsPage";
 import TournamentsPage from "./features/tournaments/pages/TournamentsPage";
 import TournamentPerParticipantsPage from "./features/tournaments/pages/TournamentPerParticipantsPage";
+import TournamentParticipantsPage from "./features/tournaments/pages/TournamentParticipantsPage";
 import EmployeesArchivePage from "./features/employees/pages/EmployeesArchivePage";
 import ManagerFaultsPage from "./features/employees/pages/ManagerFaultsPage";
 import ManagerArchivedFaultsPage from "./features/employees/pages/ManagerArchivedFaultsPage";
@@ -61,6 +61,7 @@ import CustomerHallsListingPage from "./features/customer/pages/CustomerHallsLis
 import CustomerHallDetailsPage from "./features/customer/pages/CustomerHallDetailsPage";
 import ManagerInteractionPage from "./features/interaction/pages/ManagerInteractionPage";
 import ManagerDemoPage from "./features/auth/pages/ManagerDemoPage";
+import ManagerLayout from "./shared/layouts/ManagerLayout";
 import RoleProtectedRoute from "./shared/components/RoleProtectedRoute";
 import LegacyManagerRedirect from "./shared/components/LegacyManagerRedirect";
 import { ManagerWorkspaceProvider } from "./shared/tenant/ManagerWorkspaceProvider";
@@ -106,11 +107,11 @@ function App() {
           <Route path="reservations/bookings" element={<ReceptionBookingsPage />} />
           <Route path="reservations/session" element={<ReceptionSessionPage />} />
           <Route path="devices" element={<ReceptionDevicesPage />} />
-          <Route path="devices/broken" element={<ReceptionDevicesPage />} />
+          <Route path="devices/broken" element={<Navigate to="../devices" replace />} />
           <Route path="packages" element={<ReceptionPackagesPage />} />
           <Route path="offers" element={<ReceptionOffersPage />} />
           <Route path="tournaments" element={<ReceptionTournamentsPage />} />
-          <Route path="tournaments/data" element={<ReceptionTournamentDataPage />} />
+          <Route path="tournaments/data" element={<Navigate to="../tournaments" replace />} />
           <Route path="tournaments/participants" element={<ReceptionTournamentParticipantsPage />} />
           <Route path="tournaments/:id/participants" element={<ReceptionTournamentPerParticipantsPage />} />
           <Route path="tournaments/:id/bracket" element={<ReceptionTournamentBracketPage />} />
@@ -151,6 +152,7 @@ function App() {
           </RoleProtectedRoute>
         }
       >
+        <Route element={<ManagerLayout />}>
         <Route path="dashboard" element={<DashboardPage />} />
         <Route path="profile" element={<ManagerProfilePage />} />
         <Route path="profile/change-password" element={<ManagerChangePasswordPage />} />
@@ -181,10 +183,11 @@ function App() {
         <Route path="tournaments" element={<TournamentsPage />} />
         <Route path="tournaments/data" element={<Navigate to="../tournaments" replace />} />
         <Route path="tournaments/new" element={<Navigate to="../tournaments?add=1" replace />} />
-        <Route path="tournaments/participants" element={<Navigate to="../tournaments" replace />} />
+        <Route path="tournaments/participants" element={<TournamentParticipantsPage />} />
         <Route path="tournaments/:id/participants" element={<TournamentPerParticipantsPage />} />
         <Route path="tournaments/:id/bracket" element={<TournamentBracketPage />} />
         <Route path="tournaments/:id" element={<TournamentDetailsPage />} />
+        </Route>
       </Route>
       <Route path="/profile" element={<LegacyManagerRedirect />} />
       <Route path="/profile/change-password" element={<LegacyManagerRedirect />} />

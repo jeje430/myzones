@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { zonesToastError, zonesToastInfo, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
+import StaffFilterSearchToolbar from "../../../shared/components/StaffFilterSearchToolbar";
 import PageHeader from "../components/ui/PageHeader";
 import StaffTable from "../components/StaffTable";
 import {
@@ -21,6 +22,7 @@ export default function StaffManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
   const loadStaff = useCallback(async (roleParam) => {
     setLoading(true);
@@ -85,10 +87,7 @@ export default function StaffManagementPage() {
 
   return (
     <div>
-      <PageHeader
-        title="الموظفون والإدارة"
-        description="عرض حصري لحسابات لوحة التحكم — المدراء والموظفون فقط، دون زبائن التطبيق."
-      />
+      <PageHeader title="الموظفون والإدارة" />
 
       <div className="mb-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {[
@@ -116,27 +115,28 @@ export default function StaffManagementPage() {
       <StaffTable
         staff={staff}
         loading={loading}
+        search={search}
+        onSearchChange={setSearch}
+        hideSearch
+        toolbar={
+          <StaffFilterSearchToolbar
+            embedded
+            filters={FILTERS}
+            activeFilter={filter}
+            onFilterChange={(key) => {
+              setFilter(key);
+              setSearch("");
+            }}
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="ابحث عن موظف أو مدير..."
+            filterAriaLabel="تصفية الحسابات"
+          />
+        }
         onEdit={placeholderAction("تعديل الصلاحيات")}
         onSuspend={handleSuspend}
         onDelete={handleDelete}
       />
-
-      <div className="mt-4 flex flex-wrap justify-center gap-2">
-        {FILTERS.map((item) => (
-          <button
-            key={item.key}
-            type="button"
-            onClick={() => setFilter(item.key)}
-            className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-              filter === item.key
-                ? "bg-[#6B5478] text-white shadow-sm shadow-[#6B5478]/30"
-                : "border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            }`}
-          >
-            {item.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

@@ -1,19 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Eye } from "lucide-react";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
-import {
-  TableBulkActionBar,
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import {
   alertTargetLabel,
   formatAlertRecordCode,
@@ -78,20 +70,14 @@ export default function ManagerAlertsArchivePage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: alerts, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
   }, [page, totalPages]);
 
   return (
-    <ManagerLayout>
-      <div className="space-y-4" dir="rtl">
-        <PageHeader
-          title="أرشفة التنبيهات"
-          description="التنبيهات الموقوفة — لا يمكن إعادة تفعيلها."
-        />
+    <div className="space-y-4" dir="rtl">
+        <PageHeader title="أرشفة التنبيهات" />
 
         <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
@@ -110,13 +96,10 @@ export default function ManagerAlertsArchivePage() {
             />
           </div>
 
-          <TableBulkActionBar count={selection.count} onClear={selection.clearSelection} actions={[]} />
-
           <div className="overflow-x-auto">
             <table className="w-full min-w-[980px] text-right text-xs">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                  <TableSelectHeaderCell {...selection} />
                   <th className="px-3 py-2.5 font-bold">رقم السجل</th>
                   <th className="px-3 py-2.5 font-bold">اسم التنبيه</th>
                   <th className="px-3 py-2.5 font-bold">فئة مستهدفة</th>
@@ -129,14 +112,13 @@ export default function ManagerAlertsArchivePage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
                       لا توجد تنبيهات مؤرشفة.
                     </td>
                   </tr>
                 ) : (
                   paged.map((row) => (
-                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
+                    <tr key={row.id}>
                       <td className="px-3 py-3 font-bold text-[#6B5478]" dir="ltr">
                         {formatAlertRecordCode(row.id)}
                       </td>
@@ -187,6 +169,5 @@ export default function ManagerAlertsArchivePage() {
           onClose={() => setDetailAlert(null)}
         />
       </div>
-    </ManagerLayout>
   );
 }

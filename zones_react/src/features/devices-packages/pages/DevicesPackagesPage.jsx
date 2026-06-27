@@ -14,7 +14,7 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -22,15 +22,15 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import {
   zonesConfirm,
   zonesToastError,
   zonesToastSuccess,
   zonesToastWarning,
 } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
@@ -74,6 +74,8 @@ import {
 } from "../../maintenance/utils/maintenanceWorkflow";
 
 const PAGE_SIZE = 5;
+const DEVICE_TABLE_DATA_COLS = 7;
+const PACKAGE_TABLE_DATA_COLS = 6;
 
 function StatusBadge({ active }) {
   return (
@@ -243,8 +245,18 @@ export default function DevicesPackagesPage() {
 
   const devicePageIds = useMemo(() => pageDevices.map((row) => row.id), [pageDevices]);
   const packagePageIds = useMemo(() => pagePackages.map((row) => row.id), [pagePackages]);
-  const deviceSelection = useTableSelection({ items: activeDevices, pageIds: devicePageIds });
-  const packageSelection = useTableSelection({ items: activePackages, pageIds: packagePageIds });
+  const deviceAllIds = useMemo(() => filteredDevices.map((row) => row.id), [filteredDevices]);
+  const packageAllIds = useMemo(() => filteredPackages.map((row) => row.id), [filteredPackages]);
+  const deviceSelection = useTableSelectionMode({
+    items: filteredDevices,
+    pageIds: devicePageIds,
+    allIds: deviceAllIds,
+  });
+  const packageSelection = useTableSelectionMode({
+    items: filteredPackages,
+    pageIds: packagePageIds,
+    allIds: packageAllIds,
+  });
 
   const syncedDevices = useMemo(() => loadSyncedActiveDevices(), [devicesList]);
 
@@ -427,7 +439,7 @@ export default function DevicesPackagesPage() {
       return;
     }
 
-    deviceSelection.clearSelection();
+    deviceSelection.exitSelectionMode();
     setDevicesList(loadDevices());
     zonesToastSuccess(
       isBulk
@@ -486,7 +498,7 @@ export default function DevicesPackagesPage() {
       return;
     }
 
-    deviceSelection.clearSelection();
+    deviceSelection.exitSelectionMode();
     setDevicesList(loadDevices());
     zonesToastSuccess(isBulk ? `تمت أرشفة ${success} من ${targets.length} أجهزة` : "تمت الأرشفة");
   };
@@ -619,7 +631,7 @@ export default function DevicesPackagesPage() {
       return;
     }
 
-    packageSelection.clearSelection();
+    packageSelection.exitSelectionMode();
     setPackagesList(loadPackages());
     zonesToastSuccess(
       isBulk
@@ -675,7 +687,7 @@ export default function DevicesPackagesPage() {
       return;
     }
 
-    packageSelection.clearSelection();
+    packageSelection.exitSelectionMode();
     setPackagesList(loadPackages());
     zonesToastSuccess(isBulk ? `تمت أرشفة ${success} من ${targets.length} باقات` : "تمت الأرشفة");
   };
@@ -689,14 +701,9 @@ export default function DevicesPackagesPage() {
   };
 
   return (
-    <ManagerLayout>
-      <PageHeader
+    <>
+    <PageHeader
         title={tab === "devices" ? "إدارة الأجهزة" : "إدارة الباقات"}
-        description={
-          tab === "devices"
-            ? "إدارة أجهزة الصالة — الأرشيف من قائمة إدارة الصالة."
-            : "إدارة باقات الصالة — الأرشيف من قائمة إدارة الصالة."
-        }
       />
 
       {tab === "devices" ? (
@@ -709,7 +716,6 @@ export default function DevicesPackagesPage() {
               value={deviceStats.inMaintenance}
               icon={Power}
               tone="gray"
-              hint="نفس العدد في لوحة موظف الصيانة"
             />
           </div>
 
@@ -732,13 +738,17 @@ export default function DevicesPackagesPage() {
               </Button>
             </div>
 
-            <TableBulkActionBar
+            <TableSelectionModeBar
+              selectionMode={deviceSelection.selectionMode}
+              onEnter={deviceSelection.enterSelectionMode}
+              onExit={deviceSelection.exitSelectionMode}
               count={deviceSelection.count}
+              totalCount={filteredDevices.length}
               onClear={deviceSelection.clearSelection}
               actions={[
-                { label: "تفعيل المحدد", icon: Power, onClick: () => handleBulkToggleDeviceActive(true) },
-                { label: "تعطيل المحدد", icon: PowerOff, onClick: () => handleBulkToggleDeviceActive(false) },
-                { label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchiveDevice },
+                { label: "تفعيل المحدد", icon: Power, tone: "success", onClick: () => handleBulkToggleDeviceActive(true) },
+                { label: "تعطيل المحدد", icon: PowerOff, tone: "warning", onClick: () => handleBulkToggleDeviceActive(false) },
+                { label: "أرشفة المحدد", icon: Archive, tone: "warning", onClick: handleBulkArchiveDevice },
               ]}
             />
 
@@ -760,7 +770,7 @@ export default function DevicesPackagesPage() {
                   {pageDevices.map((row) => {
                     const syncedRow = syncedDevices.find((d) => d.id === row.id) || row;
                     return (
-                    <tr key={row.id} className={selectableRowClass(deviceSelection.isSelected(row.id))}>
+                    <tr key={row.id} className={deviceSelection.selectionMode ? selectableRowClass(deviceSelection.isSelected(row.id)) : undefined}>
                       <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...deviceSelection} />
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100" dir="ltr">
                         {row.name}
@@ -796,7 +806,7 @@ export default function DevicesPackagesPage() {
                   })}
                   {pageDevices.length === 0 ? (
                     <tr>
-                      <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
+                      <td colSpan={tableSelectColSpan(DEVICE_TABLE_DATA_COLS, deviceSelection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                         لا توجد أجهزة مطابقة.
                       </td>
                     </tr>
@@ -843,13 +853,17 @@ export default function DevicesPackagesPage() {
               </Button>
             </div>
 
-            <TableBulkActionBar
+            <TableSelectionModeBar
+              selectionMode={packageSelection.selectionMode}
+              onEnter={packageSelection.enterSelectionMode}
+              onExit={packageSelection.exitSelectionMode}
               count={packageSelection.count}
+              totalCount={filteredPackages.length}
               onClear={packageSelection.clearSelection}
               actions={[
-                { label: "تفعيل المحدد", icon: Power, onClick: () => handleBulkTogglePackageActive(true) },
-                { label: "تعطيل المحدد", icon: PowerOff, onClick: () => handleBulkTogglePackageActive(false) },
-                { label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchivePackage },
+                { label: "تفعيل المحدد", icon: Power, tone: "success", onClick: () => handleBulkTogglePackageActive(true) },
+                { label: "تعطيل المحدد", icon: PowerOff, tone: "warning", onClick: () => handleBulkTogglePackageActive(false) },
+                { label: "أرشفة المحدد", icon: Archive, tone: "warning", onClick: handleBulkArchivePackage },
               ]}
             />
 
@@ -868,7 +882,7 @@ export default function DevicesPackagesPage() {
                 </thead>
                 <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                   {pagePackages.map((row) => (
-                    <tr key={row.id} className={selectableRowClass(packageSelection.isSelected(row.id))}>
+                    <tr key={row.id} className={packageSelection.selectionMode ? selectableRowClass(packageSelection.isSelected(row.id)) : undefined}>
                       <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...packageSelection} />
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
                       <td className="px-3 py-3 font-bold text-[#6B5478]">{row.price}</td>
@@ -892,7 +906,7 @@ export default function DevicesPackagesPage() {
                   ))}
                   {pagePackages.length === 0 ? (
                     <tr>
-                      <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                      <td colSpan={tableSelectColSpan(PACKAGE_TABLE_DATA_COLS, packageSelection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                         لا توجد باقات مطابقة.
                       </td>
                     </tr>
@@ -930,6 +944,6 @@ export default function DevicesPackagesPage() {
         onClose={closePackageModal}
         onSave={handlePackageSave}
       />
-    </ManagerLayout>
+    </>
   );
 }

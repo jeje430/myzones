@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { Archive, UserCheck } from "lucide-react";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -14,8 +13,9 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import {
   StaffRowActions,
   StaffSearchToolbar,
@@ -35,6 +35,7 @@ import {
 import { confirmAction, toastSuccess } from "../utils/employeeConfirm";
 
 const PAGE_SIZE = 5;
+const TABLE_DATA_COLS = 7;
 
 export default function EmployeeReceptionPage() {
   const [rows, setRows] = useState(loadEmployees);
@@ -73,7 +74,8 @@ export default function EmployeeReceptionPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: receptionStaff, pageIds });
+  const allIds = useMemo(() => filtered.map((row) => row.id), [filtered]);
+  const selection = useTableSelectionMode({ items: filtered, pageIds, allIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -99,7 +101,7 @@ export default function EmployeeReceptionPage() {
       next = archiveEmployee(next, id);
     }
     setRows(next);
-    selection.clearSelection();
+    selection.exitSelectionMode();
     await toastSuccess("تمت الأرشفة", isBulk ? `تم نقل ${targets.length} موظفين إلى الأرشفة.` : "تم نقل الموظف إلى واجهة الأرشفة.");
   };
 
@@ -111,9 +113,8 @@ export default function EmployeeReceptionPage() {
   };
 
   return (
-    <ManagerLayout title="موظفو الاستقبال">
-      <div className="space-y-4" dir="rtl">
-        <PageHeader title="استقبال" description="إدارة موظفي الاستقبال المرتبطين بالصالة" />
+    <div className="space-y-4" dir="rtl">
+        <PageHeader title="استقبال" />
 
         <div className="grid gap-3 sm:grid-cols-3">
           <KpiCard label="إجمالي موظفي الاستقبال" value={receptionStaff.length} icon={UserCheck} />
@@ -139,8 +140,12 @@ export default function EmployeeReceptionPage() {
         />
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <TableBulkActionBar
+          <TableSelectionModeBar
+            selectionMode={selection.selectionMode}
+            onEnter={selection.enterSelectionMode}
+            onExit={selection.exitSelectionMode}
             count={selection.count}
+            totalCount={filtered.length}
             onClear={selection.clearSelection}
             actions={[{ label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchive, variant: "dangerOutline" }]}
           />
@@ -161,7 +166,7 @@ export default function EmployeeReceptionPage() {
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-4 py-10 text-center text-gray-500">
                       لا يوجد موظفو استقبال مطابقون للبحث.
                     </td>
                   </tr>
@@ -169,10 +174,14 @@ export default function EmployeeReceptionPage() {
                   paged.map((row) => (
                     <tr
                       key={row.id}
-                      className={selectableRowClass(
-                        selection.isSelected(row.id),
-                        "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80",
-                      )}
+                      className={
+                        selection.selectionMode
+                          ? selectableRowClass(
+                              selection.isSelected(row.id),
+                              "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80",
+                            )
+                          : "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80"
+                      }
                     >
                       <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
                       <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.fullName}</td>
@@ -227,6 +236,5 @@ export default function EmployeeReceptionPage() {
         onClose={() => setAddModalOpen(false)}
         defaultRole="reception"
       />
-    </ManagerLayout>
   );
 }

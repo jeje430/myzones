@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\ResolvesManagerStation;
+use App\Http\Controllers\Api\Concerns\ResolvesStaffStation;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TournamentMatchResource;
 use App\Models\Tournament;
@@ -16,14 +17,24 @@ use Illuminate\Validation\ValidationException;
 class ManagerTournamentBracketController extends Controller
 {
     use ResolvesManagerStation;
+    use ResolvesStaffStation;
 
     public function __construct(
         private readonly TournamentBracketService $bracketService,
     ) {}
 
+    protected function resolveTournamentStation(\App\Models\User $user): ?\App\Models\Station
+    {
+        if ($user->hasRole('manager')) {
+            return $this->resolveManagerStation($user);
+        }
+
+        return $this->resolveStaffStation($user);
+    }
+
     public function show(Request $request, Tournament $tournament): JsonResponse
     {
-        $station = $this->resolveManagerStation($request->user());
+        $station = $this->resolveTournamentStation($request->user());
         if (! $station || (int) $tournament->station_id !== (int) $station->id) {
             abort(403);
         }
@@ -38,7 +49,7 @@ class ManagerTournamentBracketController extends Controller
 
     public function updateMatch(Request $request, Tournament $tournament, TournamentMatch $match): JsonResponse
     {
-        $station = $this->resolveManagerStation($request->user());
+        $station = $this->resolveTournamentStation($request->user());
         if (! $station || (int) $tournament->station_id !== (int) $station->id) {
             abort(403);
         }

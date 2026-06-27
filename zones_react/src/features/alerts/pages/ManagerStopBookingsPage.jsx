@@ -1,17 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Ban, Pencil, Play, Trash2 } from "lucide-react";
 import { zonesConfirm, zonesToastInfo, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import Button from "../../super-admin/components/ui/Button";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TablePagination from "../../../shared/components/TablePagination";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import {
   BOOKINGS_STOP_EVENT,
   deleteBookingsStopRecord,
@@ -73,8 +66,6 @@ export default function ManagerStopBookingsPage() {
 
   const totalPages = Math.max(1, Math.ceil(records.length / PAGE_SIZE));
   const paged = records.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: records, pageIds });
   const activeRecord = useMemo(() => getActiveBookingsStopRecord(), [records, stopped]);
 
   useEffect(() => {
@@ -155,11 +146,9 @@ export default function ManagerStopBookingsPage() {
   };
 
   return (
-    <ManagerLayout>
-      <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir="rtl">
         <PageHeader
           title="إيقاف الحجوزات"
-          description="إدارة إيقاف واستئناف الحجوزات — يُحدَّث تطبيق Flutter تلقائياً من Laravel."
         />
 
         <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -201,7 +190,6 @@ export default function ManagerStopBookingsPage() {
             <table className="w-full min-w-[960px] text-right text-xs">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                  <TableSelectHeaderCell {...selection} />
                   <th className="px-3 py-2.5 font-bold">الرقم</th>
                   <th className="px-3 py-2.5 font-bold">الاسم</th>
                   <th className="px-3 py-2.5 font-bold">السبب</th>
@@ -214,18 +202,13 @@ export default function ManagerStopBookingsPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center">
+                    <td colSpan={7} className="px-3 py-10 text-center">
                       <p className="text-gray-400">لا توجد سجلات إيقاف حجوزات بعد.</p>
                     </td>
                   </tr>
                 ) : (
                   paged.map((row) => (
-                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                      <TableSelectRowCell
-                        id={row.id}
-                        ariaLabel={`تحديد ${formatBookingsStopCode(row.id)}`}
-                        {...selection}
-                      />
+                    <tr key={row.id}>
                       <td className="px-3 py-3 font-bold text-[#6B5478]" dir="ltr">
                         {formatBookingsStopCode(row.id)}
                       </td>
@@ -301,6 +284,5 @@ export default function ManagerStopBookingsPage() {
           onSubmit={handleSubmitStop}
         />
       </div>
-    </ManagerLayout>
   );
 }

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import PageHeader from "../components/ui/PageHeader";
 import UsersTable from "../components/UsersTable";
+import StaffFilterSearchToolbar from "../../../shared/components/StaffFilterSearchToolbar";
 import {
   archiveStaffMember,
   fetchEmployeesForTable,
@@ -18,6 +19,7 @@ export default function EmployeesManagementPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [filter, setFilter] = useState("all");
+  const [search, setSearch] = useState("");
 
   const loadEmployees = useCallback(async (roleFilter = filter) => {
     setLoading(true);
@@ -80,27 +82,27 @@ export default function EmployeesManagementPage() {
         users={employees}
         loading={loading}
         showWorkingHours
-        searchPlaceholder="ابحث عن موظف..."
+        search={search}
+        onSearchChange={setSearch}
+        hideSearch
+        toolbar={
+          <StaffFilterSearchToolbar
+            embedded
+            filters={FILTERS}
+            activeFilter={filter}
+            onFilterChange={(key) => {
+              setFilter(key);
+              setSearch("");
+            }}
+            search={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="ابحث عن موظف..."
+            filterAriaLabel="تصفية الموظفين"
+          />
+        }
         onToggleActive={handleToggle}
         onArchive={handleArchive}
       />
-
-      <div className="mt-4 flex flex-wrap justify-center gap-2">
-        {FILTERS.map((f) => (
-          <button
-            key={f.key}
-            type="button"
-            onClick={() => setFilter(f.key)}
-            className={`rounded-xl px-4 py-1.5 text-xs font-bold transition ${
-              filter === f.key
-                ? "bg-[#6B5478] text-white"
-                : "border border-gray-300 text-gray-600 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-gray-800"
-            }`}
-          >
-            {f.label}
-          </button>
-        ))}
-      </div>
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { fetchManagerTournament } from "../data/managerTournamentsApi";
  * @param {object} props.routes
  * @param {string} props.routes.tournaments
  */
-export default function TournamentDetailsSection({ routes }) {
+export default function TournamentDetailsSection({ routes, readOnly = false }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const location = useLocation();
@@ -102,8 +102,10 @@ export default function TournamentDetailsSection({ routes }) {
             key={`${tournament.id}-${tournament.coverImage || ""}-${tournament.name}`}
             tournament={tournament}
             showCancel={false}
+            readOnly={readOnly}
             submitLabel="حفظ التغييرات"
             onSaved={(updated) => {
+              if (readOnly) return;
               setTournament(updated);
               zonesToastSuccess("تم حفظ التعديلات");
             }}

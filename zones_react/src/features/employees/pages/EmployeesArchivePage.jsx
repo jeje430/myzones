@@ -4,7 +4,7 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -12,10 +12,10 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import { useNavigate } from "react-router-dom";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
@@ -32,6 +32,7 @@ import {
 import { confirmAction, toastSuccess } from "../utils/employeeConfirm";
 
 const PAGE_SIZE = 5;
+const TABLE_DATA_COLS = 7;
 
 export default function EmployeesArchivePage() {
   const navigate = useNavigate();
@@ -66,7 +67,8 @@ export default function EmployeesArchivePage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: archived, pageIds });
+  const allIds = useMemo(() => filtered.map((row) => row.id), [filtered]);
+  const selection = useTableSelectionMode({ items: filtered, pageIds, allIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -91,7 +93,7 @@ export default function EmployeesArchivePage() {
       next = restoreEmployee(next, id);
     }
     setRows(next);
-    selection.clearSelection();
+    selection.exitSelectionMode();
     await toastSuccess("تمت الاستعادة", isBulk ? `عاد ${targets.length} موظفين إلى القائمة النشطة.` : "عاد الموظف إلى القائمة النشطة.");
 
     if (!isBulk && targets[0]) {
@@ -108,8 +110,8 @@ export default function EmployeesArchivePage() {
   };
 
   return (
-    <ManagerLayout title="أرشفة الموظفين">
-      <div className="space-y-4" dir="rtl">
+    <>
+    <div className="space-y-4" dir="rtl">
         <PageHeader title="أرشفة" />
 
         <KpiCard label="إجمالي المؤرشفين" value={archived.length} tone="amber" icon={Archive} />
@@ -124,8 +126,12 @@ export default function EmployeesArchivePage() {
         />
 
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <TableBulkActionBar
+          <TableSelectionModeBar
+            selectionMode={selection.selectionMode}
+            onEnter={selection.enterSelectionMode}
+            onExit={selection.exitSelectionMode}
             count={selection.count}
+            totalCount={filtered.length}
             onClear={selection.clearSelection}
             actions={[{ label: "استعادة المحدد", icon: ArchiveRestore, onClick: handleBulkRestore }]}
           />
@@ -146,7 +152,7 @@ export default function EmployeesArchivePage() {
               <tbody>
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-4 py-10 text-center text-gray-500">
                       لا يوجد موظفون مؤرشفون.
                     </td>
                   </tr>
@@ -154,10 +160,14 @@ export default function EmployeesArchivePage() {
                   paged.map((row) => (
                     <tr
                       key={row.id}
-                      className={selectableRowClass(
-                        selection.isSelected(row.id),
-                        "border-b border-gray-50 transition hover:bg-amber-500/5 dark:border-gray-800/80",
-                      )}
+                      className={
+                        selection.selectionMode
+                          ? selectableRowClass(
+                              selection.isSelected(row.id),
+                              "border-b border-gray-50 transition hover:bg-amber-500/5 dark:border-gray-800/80",
+                            )
+                          : "border-b border-gray-50 transition hover:bg-amber-500/5 dark:border-gray-800/80"
+                      }
                     >
                       <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
                       <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{row.fullName}</td>
@@ -209,6 +219,6 @@ export default function EmployeesArchivePage() {
         employee={detailEmployee}
         onClose={() => setDetailEmployee(null)}
       />
-    </ManagerLayout>
+    </>
   );
 }

@@ -2,7 +2,6 @@ import { useEffect } from "react";
 
 import { useSearchParams } from "react-router-dom";
 
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 
 import TournamentDataSection from "../components/TournamentDataSection";
 
@@ -26,11 +25,7 @@ export default function TournamentDataPage() {
 
   return (
 
-    <ManagerLayout>
-
-      <TournamentDataSection showAddButton autoOpenAdd={autoOpenAdd} />
-
-    </ManagerLayout>
+    <TournamentDataSection showAddButton autoOpenAdd={autoOpenAdd} />
 
   );
 

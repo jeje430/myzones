@@ -14,7 +14,6 @@ import {
   Users,
 } from "lucide-react";
 import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
 import {
@@ -154,46 +153,23 @@ export default function LoungeManagementPage() {
   };
 
   return (
-    <ManagerLayout>
-      <PageHeader
-        title="بيانات الصالة"
-        description="أكمل بيانات الصالة ثم اضغط «حفظ التغييرات» في صفحة التعديل — عندها فقط تظهر في تطبيق الزبون."
-      />
+    <>
+    <PageHeader title="بيانات الصالة" />
 
       {!isPublished ? (
         <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
-          الصالة <strong>غير ظاهرة</strong> في تطبيق الزبون بعد. أكمل الاسم، العنوان، ساعات العمل، الخدمات، ثم اضغط
-          <strong> حفظ التغييرات</strong> في صفحة التعديل.
-          قبول السوبر أدمن يفتح حسابك فقط — الكارت يظهر بعد إكمال الإعداد وحفظ التغييرات.
+          الصالة غير منشورة بعد. أكمل البيانات ثم احفظ التغييرات من صفحة التعديل.
         </div>
       ) : (
         <div className="mb-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800 dark:border-emerald-900/50 dark:bg-emerald-950/30 dark:text-emerald-200">
-          صالتك <strong>ظاهرة الآن</strong> في تطبيق الزبون (كارت + صفحة تفاصيل).
+          الصالة منشورة وتظهر للزبائن.
         </div>
       )}
 
       <div className="mb-6 grid gap-4 sm:grid-cols-3">
-        <KpiCard
-          label="عدد الأجهزة"
-          value={deviceCount}
-          hint="يُحدَّث تلقائياً عند الإضافة أو الحذف"
-          icon={Gamepad2}
-          tone="primary"
-        />
-        <KpiCard
-          label="عدد الباقات"
-          value={packageCount}
-          hint="يُحدَّث تلقائياً عند الإضافة أو الحذف"
-          icon={Package}
-          tone="green"
-        />
-        <KpiCard
-          label="عدد الموظفين"
-          value={employeeCount}
-          hint="يُحدَّث تلقائياً عند الإضافة أو الحذف"
-          icon={Users}
-          tone="amber"
-        />
+        <KpiCard label="عدد الأجهزة" value={deviceCount} icon={Gamepad2} tone="primary" />
+        <KpiCard label="عدد الباقات" value={packageCount} icon={Package} tone="green" />
+        <KpiCard label="عدد الموظفين" value={employeeCount} icon={Users} tone="amber" />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
@@ -305,16 +281,13 @@ export default function LoungeManagementPage() {
               <div
                 className="flex h-44 w-full items-center justify-center rounded-2xl border border-dashed border-gray-300 bg-gray-50 text-xs text-gray-400 dark:border-gray-700 dark:bg-gray-800/50"
               >
-                لا توجد صورة — ارفع صورة الغلاف للتطبيق
+                لا توجد صورة — ارفع صورة الغلاف
               </div>
             )}
             <p className="mt-3 text-center text-xs font-bold text-gray-700 dark:text-gray-200">
               {hall.hallName || "اسم الصالة"}
             </p>
             <p className="mt-1 text-center text-[11px] text-gray-500">{hall.city}</p>
-            <p className="mt-2 text-center text-[10px] text-gray-400">
-              تُحفظ في Laravel وتظهر كغلاف في صفحة تفاصيل الصالة (Flutter).
-            </p>
           </section>
         </div>
       </div>
@@ -332,6 +305,6 @@ export default function LoungeManagementPage() {
       <div className="mt-4">
         <HallServicesManagerPicker />
       </div>
-    </ManagerLayout>
+    </>
   );
 }

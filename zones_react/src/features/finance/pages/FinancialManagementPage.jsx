@@ -11,7 +11,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import DownloadReportModal from "../components/DownloadReportModal";
 import PackageUsageChart from "../components/PackageUsageChart";
 import { FINANCE_DATA_EVENT } from "../data/financeApiCache";
@@ -139,8 +138,7 @@ export default function FinancialManagementPage() {
     totals.netDelta > 0.4 ? "finance-card__delta--up" : totals.netDelta < -0.4 ? "finance-card__delta--down" : "finance-card__delta--flat";
 
   return (
-    <ManagerLayout title="الإدارة المالية">
-      <div className="finance-page" dir="rtl">
+    <div className="finance-page" dir="rtl">
         <div className="finance-kpi-grid">
           <button
             type="button"
@@ -298,6 +296,5 @@ export default function FinancialManagementPage() {
         </section>
       </div>
       <DownloadReportModal open={reportModalOpen} onClose={() => setReportModalOpen(false)} />
-    </ManagerLayout>
   );
 }

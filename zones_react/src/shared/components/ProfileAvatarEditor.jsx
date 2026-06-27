@@ -23,6 +23,7 @@ export default function ProfileAvatarEditor({
   onAvatarChange,
   useApi = true,
   onLocalAvatar,
+  readOnly = false,
 }) {
   const fileRef = useRef(null);
   const [uploading, setUploading] = useState(false);
@@ -119,24 +120,29 @@ export default function ProfileAvatarEditor({
       <div className="flex flex-col items-center gap-3">
         <div className={`relative ${dimension}`}>
           <UserAvatar src={displayUrl} name={fullName} size={size} />
-          <button
-            type="button"
-            disabled={uploading}
-            onClick={() => fileRef.current?.click()}
-            className="absolute bottom-0 left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#6B5478] text-white shadow disabled:opacity-60 dark:border-gray-900"
-            aria-label="تغيير الصورة"
-          >
-            <Camera size={13} />
-          </button>
-          <input
-            ref={fileRef}
-            type="file"
-            accept={AVATAR_ACCEPT}
-            onChange={handleFileSelected}
-            className="hidden"
-          />
+          {!readOnly ? (
+            <button
+              type="button"
+              disabled={uploading}
+              onClick={() => fileRef.current?.click()}
+              className="absolute bottom-0 left-0 flex h-7 w-7 items-center justify-center rounded-full border-2 border-white bg-[#6B5478] text-white shadow disabled:opacity-60 dark:border-gray-900"
+              aria-label="تغيير الصورة"
+            >
+              <Camera size={13} />
+            </button>
+          ) : null}
+          {!readOnly ? (
+            <input
+              ref={fileRef}
+              type="file"
+              accept={AVATAR_ACCEPT}
+              onChange={handleFileSelected}
+              className="hidden"
+            />
+          ) : null}
         </div>
 
+        {!readOnly ? (
         <div className="flex flex-wrap items-center justify-center gap-2">
           <button
             type="button"
@@ -157,6 +163,7 @@ export default function ProfileAvatarEditor({
             </button>
           ) : null}
         </div>
+        ) : null}
       </div>
 
       <AvatarCropModal

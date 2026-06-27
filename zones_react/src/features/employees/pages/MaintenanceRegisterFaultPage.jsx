@@ -61,7 +61,7 @@ export default function MaintenanceRegisterFaultPage() {
 
   return (
     <div className="space-y-4" dir="rtl">
-      <PageHeader title="إضافة عطل" description="إضافة سجل عطل جديد لجهاز في الصالة." />
+      <PageHeader title="إضافة عطل" />
 
       <section className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <form onSubmit={submit} className="space-y-4">

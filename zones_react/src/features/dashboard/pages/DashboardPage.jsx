@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { Gamepad2, Users, Wallet } from "lucide-react";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
 import { getAuthSession } from "../../auth/data/mockUsersStorage";
@@ -40,7 +39,7 @@ export default function DashboardPage() {
       : "أكمل إعداد صالتك من إدارة الصالة";
 
   return (
-    <ManagerLayout>
+    <>
       <PageHeader
         title="لوحة التحكم"
         description={`مرحباً ${session?.fullName || "مدير الصالة"} — ${hallLabel}`}
@@ -74,6 +73,6 @@ export default function DashboardPage() {
       <div className="mt-6">
         <HallServicesManagerPicker compact />
       </div>
-    </ManagerLayout>
+    </>
   );
 }

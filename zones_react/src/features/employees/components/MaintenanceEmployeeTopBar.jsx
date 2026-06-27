@@ -1,33 +1,21 @@
-import { Menu } from "lucide-react";
 import DashboardProfileChip from "../../../shared/components/DashboardProfileChip";
 import DashboardTopBarActions from "../../../shared/components/DashboardTopBarActions";
-import { DASHBOARD_ICON_BTN_CLS } from "../../../shared/components/dashboardTopBarUi";
 import { useDashboardProfile } from "../../../shared/hooks/useDashboardProfile";
 import { useMaintenanceEmployeeRoutes } from "../data/maintenanceEmployeeRoutes";
 import HallNotificationsBell from "./HallNotificationsBell";
 
-export default function MaintenanceEmployeeTopBar({ onMenuClick }) {
+export default function MaintenanceEmployeeTopBar() {
   const profile = useDashboardProfile();
   const { routes } = useMaintenanceEmployeeRoutes();
 
   return (
     <header
-      className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-gray-200 bg-white px-4 py-2.5 dark:border-gray-800 dark:bg-gray-900"
+      className="sticky top-0 z-30 flex items-center justify-between gap-3 border-b border-gray-200 bg-white/95 px-4 py-2.5 backdrop-blur supports-[backdrop-filter]:bg-white/80 dark:border-gray-800 dark:bg-gray-900/95 dark:supports-[backdrop-filter]:bg-gray-900/80"
       dir="rtl"
     >
-      <div className="flex items-center gap-3">
-        <button
-          type="button"
-          className={`${DASHBOARD_ICON_BTN_CLS} lg:hidden`}
-          onClick={onMenuClick}
-          aria-label="فتح القائمة"
-        >
-          <Menu size={18} />
-        </button>
-        <p className="hidden text-xs font-bold text-gray-500 sm:block dark:text-gray-400">
-          مرحباً، {profile.fullName || "موظف الصيانة"}
-        </p>
-      </div>
+      <p className="hidden text-xs font-bold text-gray-500 sm:block dark:text-gray-400">
+        مرحباً، {profile.fullName || "موظف الصيانة"}
+      </p>
 
       <DashboardTopBarActions
         profile={<DashboardProfileChip roleLabel="صيانة" profileTo={routes.profile} />}

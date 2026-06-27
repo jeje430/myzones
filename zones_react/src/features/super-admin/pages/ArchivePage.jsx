@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { RotateCcw } from "lucide-react";
 import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -10,8 +10,9 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import PageHeader from "../components/ui/PageHeader";
 import { getSuperAdminState, restoreHall } from "../data/superAdminStorage";
 import { fetchArchivedStaff, restoreStaffMember } from "../data/staffManagementApi";
@@ -76,7 +77,8 @@ export default function ArchivePage({ type = "halls" }) {
   }, [state, isHalls, archivedUsers]);
 
   const pageIds = useMemo(() => items.map((item) => item.id), [items]);
-  const selection = useTableSelection({ items, pageIds });
+  const allIds = pageIds;
+  const selection = useTableSelectionMode({ items, pageIds, allIds });
 
   const runRestore = async (targetIds) => {
     const targets = filterItemsByIds(items, targetIds);
@@ -106,7 +108,7 @@ export default function ArchivePage({ type = "halls" }) {
       await loadArchivedUsers();
     }
 
-    selection.clearSelection();
+    selection.exitSelectionMode();
     zonesToastSuccess(isBulk ? `تم استرجاع ${targets.length} عناصر` : "تمت الاستعادة");
   };
 
@@ -132,7 +134,7 @@ export default function ArchivePage({ type = "halls" }) {
   );
 
   const showEmployeeRole = type === "employees";
-  const colCount = isHalls ? 8 : showEmployeeRole ? 10 : 9;
+  const baseColCount = isHalls ? 7 : showEmployeeRole ? 9 : 8;
 
   return (
     <div>
@@ -145,8 +147,12 @@ export default function ArchivePage({ type = "halls" }) {
       ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <TableBulkActionBar
+        <TableSelectionModeBar
+          selectionMode={selection.selectionMode}
+          onEnter={selection.enterSelectionMode}
+          onExit={selection.exitSelectionMode}
           count={selection.count}
+          totalCount={items.length}
           onClear={selection.clearSelection}
           actions={[{ label: "استرجاع المحدد", icon: RotateCcw, onClick: handleBulkRestore }]}
         />
@@ -184,14 +190,14 @@ export default function ArchivePage({ type = "halls" }) {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {!isHalls && loadingUsers ? (
                 <tr>
-                  <td colSpan={colCount} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={tableSelectColSpan(baseColCount, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                     جاري تحميل الأرشيف...
                   </td>
                 </tr>
               ) : null}
               {isHalls
                 ? items.map((h) => (
-                    <tr key={h.id} className={selectableRowClass(selection.isSelected(h.id))}>
+                    <tr key={h.id} className={selection.selectionMode ? selectableRowClass(selection.isSelected(h.id)) : undefined}>
                       <TableSelectRowCell id={h.id} ariaLabel={`تحديد ${h.name}`} {...selection} />
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{h.name}</td>
                       <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{h.address}</td>
@@ -214,7 +220,7 @@ export default function ArchivePage({ type = "halls" }) {
                     </tr>
                   ))
                 : items.map((u) => (
-                    <tr key={u.id} className={selectableRowClass(selection.isSelected(u.id))}>
+                    <tr key={u.id} className={selection.selectionMode ? selectableRowClass(selection.isSelected(u.id)) : undefined}>
                       <TableSelectRowCell id={u.id} ariaLabel={`تحديد ${u.fullName}`} {...selection} />
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
@@ -255,7 +261,7 @@ export default function ArchivePage({ type = "halls" }) {
                   ))}
               {!loadingUsers && items.length === 0 ? (
                 <tr>
-                  <td colSpan={colCount} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={tableSelectColSpan(baseColCount, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                     لا توجد عناصر مؤرشفة.
                   </td>
                 </tr>

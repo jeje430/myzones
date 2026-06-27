@@ -1,12 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import TournamentsListTable from "../../tournaments/components/TournamentsListTable";
-import {
-  loadActiveTournamentRows,
-  TOURNAMENTS_LIST_EVENT,
-} from "../../tournaments/tournamentsListStorage";
-
+import { fetchManagerTournaments } from "../../tournaments/data/managerTournamentsApi";
 import { useReceptionEmployeeRoutes } from "../data/receptionEmployeeRoutes";
 
 const PAGE_SIZE = 5;
@@ -14,19 +10,35 @@ const PAGE_SIZE = 5;
 export default function ReceptionTournamentsPage() {
   const navigate = useNavigate();
   const { routes } = useReceptionEmployeeRoutes();
-  const [rows, setRows] = useState(() => loadActiveTournamentRows());
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
 
-  useEffect(() => {
-    const sync = () => setRows(loadActiveTournamentRows());
-    window.addEventListener(TOURNAMENTS_LIST_EVENT, sync);
-    window.addEventListener("focus", sync);
-    return () => {
-      window.removeEventListener(TOURNAMENTS_LIST_EVENT, sync);
-      window.removeEventListener("focus", sync);
-    };
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    const result = await fetchManagerTournaments();
+    if (!result.ok) {
+      setLoadError(result.error || "تعذر تحميل البطولات.");
+      setRows([]);
+    } else {
+      setRows(result.tournaments);
+    }
+    setLoading(false);
   }, []);
+
+  useEffect(() => {
+    reload();
+    const poll = window.setInterval(reload, 8000);
+    const onFocus = () => reload();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, [reload]);
 
   const filtered = useMemo(() => {
     const q = search.trim();
@@ -59,24 +71,31 @@ export default function ReceptionTournamentsPage() {
 
   return (
     <div>
-      <PageHeader
-        title="عرض البطولات"
-        description="عرض فقط — إدارة البطولات من لوحة المدير."
-      />
+      <PageHeader title="عرض البطولات" />
 
-      <TournamentsListTable
-        rows={paged}
-        allRows={filtered}
-        search={search}
-        onSearchChange={setSearch}
-        page={page}
-        totalPages={totalPages}
-        totalItems={filtered.length}
-        pageSize={PAGE_SIZE}
-        onPageChange={setPage}
-        onParticipants={openParticipants}
-        actionsMode="viewOnly"
-      />
+      {loadError ? (
+        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+          {loadError}
+        </p>
+      ) : null}
+
+      {loading && rows.length === 0 ? (
+        <p className="py-10 text-center text-sm text-gray-500">جاري تحميل البطولات...</p>
+      ) : (
+        <TournamentsListTable
+          rows={paged}
+          allRows={filtered}
+          search={search}
+          onSearchChange={setSearch}
+          page={page}
+          totalPages={totalPages}
+          totalItems={filtered.length}
+          pageSize={PAGE_SIZE}
+          onPageChange={setPage}
+          onParticipants={openParticipants}
+          actionsMode="viewOnly"
+        />
+      )}
     </div>
   );
 }

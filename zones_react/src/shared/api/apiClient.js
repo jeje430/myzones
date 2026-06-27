@@ -118,7 +118,7 @@ export function mapApiErrorMessage(error) {
   }
 
   if (!response) {
-    return "تعذر الاتصال بالخادم. تأكد أن Laravel يعمل وأن عنوان API صحيح.";
+    return "تعذر الاتصال بالخادم. شغّل XAMPP (Apache + MySQL) ثم أعد تشغيل Apache مرة واحدة.";
   }
 
   const requestUrl = String(error?.config?.url || "");

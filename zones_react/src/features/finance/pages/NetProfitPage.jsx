@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { useSearchParams } from "react-router-dom";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import DownloadReportModal from "../components/DownloadReportModal";
 import FinanceAnalysisHub from "../components/FinanceAnalysisHub";
 import FinanceExpensesAnalyticsPanel from "../components/FinanceExpensesAnalyticsPanel";
@@ -29,8 +28,8 @@ function AnalysisPageHeader({ title, description, onBack }) {
         <button
           type="button"
           onClick={onBack}
-          aria-label="رجوع للتحليل"
-          title="رجوع للتحليل"
+          aria-label="رجوع لتحليل مالي"
+          title="رجوع لتحليل مالي"
           className="shrink-0 p-0 text-[#6B5478] transition hover:text-[#5a4668] dark:hover:text-[#c4b5d0]"
         >
           <ArrowRight size={20} strokeWidth={2.5} />
@@ -63,13 +62,13 @@ export default function NetProfitPage() {
     }
   };
 
-  const title = view ? VIEW_TITLES[view] : "التحليل";
+  const title = view ? VIEW_TITLES[view] : "تحليل مالي";
   const description = view
     ? "عرض تفصيلي ضمن واجهة التحليل المالي."
     : "نظرة شاملة على الأداء المالي مع إمكانية الانتقال لكل نوع عرض.";
 
   return (
-    <ManagerLayout>
+    <>
       <AnalysisPageHeader
         title={title}
         description={description}
@@ -84,6 +83,6 @@ export default function NetProfitPage() {
       {view === "profits" ? <FinanceProfitsPanel /> : null}
 
       <DownloadReportModal open={reportOpen} onClose={() => setReportOpen(false)} />
-    </ManagerLayout>
+    </>
   );
 }

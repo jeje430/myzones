@@ -7,17 +7,7 @@ import TablePagination from "../../../shared/components/TablePagination";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
-import {
-  TableBulkActionBar,
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import {
-  filterItemsByIds,
-  resolveBulkActionIds,
-  useTableSelection,
-} from "../../../shared/hooks/useTableSelection";
+import { filterItemsByIds } from "../../../shared/hooks/useTableSelection";
 import { useDevicesStorageSync } from "../../devices-packages/hooks/useDevicesStorageSync";
 import {
   DEVICES_STORAGE_EVENT,
@@ -119,10 +109,7 @@ export default function MaintenanceFaultsTableSection({
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: faults, pageIds });
   const colSpan =
-    1 +
     (isArchived ? 6 : 7) +
     (showEmployeeColumn ? 1 : 0) +
     (!readOnly && !isArchived ? 1 : 0);
@@ -141,18 +128,8 @@ export default function MaintenanceFaultsTableSection({
 
   const openCompleteRepair = (row, e) => {
     e?.stopPropagation?.();
-    const targetIds = resolveBulkActionIds(row.id, selection.selectedIds);
-    const targets = filterItemsByIds(faults, targetIds);
-    setRepairTargetIds(targetIds);
-    setRepairRow(targets[0] || row);
-    setRepairModalOpen(true);
-  };
-
-  const handleBulkCompleteRepair = () => {
-    const targets = filterItemsByIds(faults, selection.selectedIds);
-    if (!targets.length) return;
-    setRepairTargetIds(selection.selectedIds);
-    setRepairRow(targets[0]);
+    setRepairTargetIds([row.id]);
+    setRepairRow(row);
     setRepairModalOpen(true);
   };
 
@@ -169,7 +146,6 @@ export default function MaintenanceFaultsTableSection({
     setRepairModalOpen(false);
     setRepairRow(null);
     setRepairTargetIds([]);
-    selection.clearSelection();
     refreshAll();
     const isBulk = targets.length > 1;
     zonesToastSuccess(
@@ -212,19 +188,10 @@ export default function MaintenanceFaultsTableSection({
           ) : null}
         </div>
 
-        {!readOnly && !isArchived ? (
-          <TableBulkActionBar
-            count={selection.count}
-            onClear={selection.clearSelection}
-            actions={[{ label: "تم الإصلاح للمحدد", icon: CheckCircle2, onClick: handleBulkCompleteRepair }]}
-          />
-        ) : null}
-
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1000px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">الجهاز</th>
                 <th className="px-3 py-2.5 font-bold">نوع العطل</th>
                 {showEmployeeColumn ? (
@@ -256,12 +223,7 @@ export default function MaintenanceFaultsTableSection({
                 paged.map((row) => {
                   const device = loadDevices().find((d) => d.id === row.deviceId);
                   return (
-                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                      <TableSelectRowCell
-                        id={row.id}
-                        ariaLabel={`تحديد عطل ${row.deviceName}`}
-                        {...selection}
-                      />
+                    <tr key={row.id}>
                       <td className="px-3 py-3">
                         <DeviceNameCell
                           deviceName={row.deviceName}
@@ -304,11 +266,7 @@ export default function MaintenanceFaultsTableSection({
                           <TableActionsGroup>
                             <IconButton
                               icon={CheckCircle2}
-                              label={
-                                selection.isSelected(row.id) && selection.count > 1
-                                  ? `تم الإصلاح (${selection.count})`
-                                  : "تم الإصلاح"
-                              }
+                              label="تم الإصلاح"
                               tone="success"
                               onClick={(e) => openCompleteRepair(row, e)}
                             />

@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { BellOff, Eye, Loader2, Plus } from "lucide-react";
 import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
@@ -10,7 +9,7 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -18,8 +17,9 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import {
   alertTargetLabel,
   formatAlertRecordCode,
@@ -42,6 +42,7 @@ import ManagerAlertDetailsModal from "../components/ManagerAlertDetailsModal";
 import ManagerAlertFormModal from "../components/ManagerAlertFormModal";
 
 const PAGE_SIZE = 8;
+const TABLE_DATA_COLS = 7;
 const ROW_FADE_MS = 280;
 
 export default function ManagerAlertsLogPage() {
@@ -95,7 +96,8 @@ export default function ManagerAlertsLogPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: alerts, pageIds });
+  const allIds = useMemo(() => filtered.map((row) => row.id), [filtered]);
+  const selection = useTableSelectionMode({ items: filtered, pageIds, allIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -156,7 +158,7 @@ export default function ManagerAlertsLogPage() {
 
     if (!archivedIds.length) return;
 
-    selection.clearSelection();
+    selection.exitSelectionMode();
     animateRemoveRows(archivedIds);
 
     zonesToastSuccess(
@@ -177,18 +179,16 @@ export default function ManagerAlertsLogPage() {
   const handleSave = async (payload) => {
     const result = await createManagerAlert(payload);
     if (!result?.alert) return;
-    selection.clearSelection();
+    selection.exitSelectionMode();
     await refresh();
     setFormOpen(false);
     setPage(1);
   };
 
   return (
-    <ManagerLayout>
-      <div className="space-y-4" dir="rtl">
+    <div className="space-y-4" dir="rtl">
         <PageHeader
           title="سجل التنبيهات"
-          description="التنبيهات النشطة فقط — عند الإيقاف تُنقل إلى الأرشيف."
         />
 
         <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
@@ -212,8 +212,12 @@ export default function ManagerAlertsLogPage() {
             </Button>
           </div>
 
-          <TableBulkActionBar
+          <TableSelectionModeBar
+            selectionMode={selection.selectionMode}
+            onEnter={selection.enterSelectionMode}
+            onExit={selection.exitSelectionMode}
             count={selection.count}
+            totalCount={filtered.length}
             onClear={selection.clearSelection}
             actions={[{ label: "إيقاف المحدد", icon: BellOff, onClick: handleBulkArchive }]}
           />
@@ -235,7 +239,7 @@ export default function ManagerAlertsLogPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {paged.length === 0 ? (
                   <tr>
-                    <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                       لا توجد تنبيهات نشطة.
                     </td>
                   </tr>
@@ -247,7 +251,11 @@ export default function ManagerAlertsLogPage() {
                     return (
                       <tr
                         key={row.id}
-                        className={`${selectableRowClass(selection.isSelected(row.id))} transition-all duration-300 ease-out ${
+                        className={`${
+                          selection.selectionMode
+                            ? selectableRowClass(selection.isSelected(row.id))
+                            : ""
+                        } transition-all duration-300 ease-out ${
                           isFading ? "pointer-events-none scale-[0.98] opacity-0" : "scale-100 opacity-100"
                         }`}
                       >
@@ -318,6 +326,5 @@ export default function ManagerAlertsLogPage() {
 
         <ManagerAlertFormModal open={formOpen} onClose={() => setFormOpen(false)} onSave={handleSave} />
       </div>
-    </ManagerLayout>
   );
 }

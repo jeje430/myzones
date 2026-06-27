@@ -7,7 +7,7 @@ import TournamentRowActions from "./TournamentRowActions";
 import TournamentStatusBadge from "./TournamentStatusBadge";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -15,8 +15,11 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
+
+const TABLE_DATA_COLS = 6;
 
 export default function TournamentsListTable({
   rows,
@@ -44,7 +47,8 @@ export default function TournamentsListTable({
 
   const selectionScope = allRows ?? rows;
   const pageIds = useMemo(() => rows.map((r) => r.id), [rows]);
-  const selection = useTableSelection({ items: selectionScope, pageIds });
+  const allIds = useMemo(() => selectionScope.map((r) => r.id), [selectionScope]);
+  const selection = useTableSelectionMode({ items: selectionScope, pageIds, allIds });
 
   const handleRowCancel = (row) => {
     const targetIds = resolveBulkActionIds(row.id, selection.selectedIds);
@@ -69,13 +73,13 @@ export default function TournamentsListTable({
 
     if (onBulkCancel) {
       onBulkCancel(targets);
-      selection.clearSelection();
+      selection.exitSelectionMode();
       return;
     }
 
     if (onCancel && targets.length === 1) {
       onCancel(targets[0]);
-      selection.clearSelection();
+      selection.exitSelectionMode();
     }
   };
 
@@ -102,10 +106,15 @@ export default function TournamentsListTable({
         ) : null}
       </div>
 
-      <TableBulkActionBar
+      <TableSelectionModeBar
+        selectionMode={selection.selectionMode}
+        onEnter={selection.enterSelectionMode}
+        onExit={selection.exitSelectionMode}
         count={selection.count}
+        totalCount={selectionScope.length}
         onClear={selection.clearSelection}
         actions={bulkActions}
+        disabled={!manager || !(onBulkCancel || onCancel)}
       />
 
       <div className="overflow-x-auto">
@@ -123,7 +132,7 @@ export default function TournamentsListTable({
           </thead>
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {rows.map((row) => (
-              <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+              <tr key={row.id} className={selection.selectionMode ? selectableRowClass(selection.isSelected(row.id)) : undefined}>
                 <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
                 <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
                 <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
@@ -157,7 +166,7 @@ export default function TournamentsListTable({
             ))}
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                   لا توجد بطولات مطابقة.
                 </td>
               </tr>

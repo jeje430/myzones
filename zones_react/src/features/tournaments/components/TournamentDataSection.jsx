@@ -76,10 +76,7 @@ export default function TournamentDataSection({
 
   return (
     <>
-      <PageHeader
-        title="بيانات البطولة"
-        description="إنشاء وإدارة البطولات — متزامنة مع تطبيق الزبون."
-      />
+      <PageHeader title="بيانات البطولة" />
 
       {loadError ? (
         <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600 dark:border-red-900/40 dark:bg-red-950/20">

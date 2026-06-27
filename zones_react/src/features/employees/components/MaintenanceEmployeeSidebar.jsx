@@ -9,7 +9,7 @@ import {
   User,
 } from "lucide-react";
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
-import PlatformLogo from "../../../shared/components/PlatformLogo";
+import SidebarBrandHeader from "../../../shared/components/SidebarBrandHeader";
 import { clearAuthSession, getAuthSession } from "../../auth/data/mockUsersStorage";
 import { EMPLOYEE_LOGIN_PATH } from "../../auth/data/authRoutes";
 import { getActiveAccountIdFromUrl } from "../../auth/data/accountSessionStorage";
@@ -30,7 +30,11 @@ function groupContainsActive(group, pathname) {
   return group.children.some((c) => c.path && pathMatches(pathname, c.path));
 }
 
-export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigate }) {
+export default function MaintenanceEmployeeSidebar({
+  pendingCount = 0,
+  onNavigate,
+  onMenuToggle,
+}) {
   const { routes, employeeId } = useMaintenanceEmployeeRoutes();
   const location = useLocation();
   const navigate = useNavigate();
@@ -65,18 +69,10 @@ export default function MaintenanceEmployeeSidebar({ pendingCount = 0, onNavigat
 
   return (
     <aside
-      className="flex h-full w-64 shrink-0 flex-col border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+      className="relative flex h-full w-64 shrink-0 flex-col overflow-visible border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
       dir="rtl"
     >
-      <div className="flex items-center gap-3 bg-gradient-to-l from-[#6B5478] to-[#836a90] px-5 py-5">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
-          <PlatformLogo variant="avatar" />
-        </span>
-        <div className="text-white">
-          <p className="text-sm font-extrabold leading-tight">منصة إدارة الصالات</p>
-          <p className="text-[11px] font-semibold text-white/75">لوحة تحكم موظف الصيانة</p>
-        </div>
-      </div>
+      <SidebarBrandHeader subtitle="لوحة الصيانة" onMenuToggle={onMenuToggle} />
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         <NavLink

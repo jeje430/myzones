@@ -3,12 +3,6 @@ import { GitBranch, Users } from "lucide-react";
 import { Link, useNavigate, useParams, useLocation } from "react-router-dom";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import Button from "../../super-admin/components/ui/Button";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import { TournamentBreadcrumb } from "./TournamentDetailUi";
 import {
   fetchManagerTournament,
@@ -79,16 +73,6 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
       participant: sorted[i] ?? null,
     }));
   }, [registered, capacity]);
-
-  const selectableParticipants = useMemo(
-    () =>
-      slots
-        .filter((s) => s.participant?.id != null)
-        .map((s) => ({ ...s.participant, id: s.participant.id })),
-    [slots],
-  );
-  const pageIds = useMemo(() => selectableParticipants.map((p) => p.id), [selectableParticipants]);
-  const selection = useTableSelection({ items: selectableParticipants, pageIds });
 
   const openBracket = () => {
     if (!tournament || !isFull) return;
@@ -186,9 +170,7 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
               />
             </div>
             <p className="mt-2 text-[11px] text-gray-500">
-              {readOnly
-                ? "عرض فقط — التسجيل يتم من تطبيق الزبون."
-                : "كل طلب من التطبيق يملأ خانة بالترتيب. عند الاكتمال تُفعَّل شجرة البطولة."}
+              {readOnly ? null : "عند اكتمال العدد تُفعَّل شجرة البطولة."}
             </p>
           </div>
 
@@ -199,7 +181,6 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
               <table className="w-full min-w-[720px] text-right text-xs">
                 <thead>
                   <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                    <TableSelectHeaderCell {...selection} />
                     <th className="px-3 py-2.5 font-bold">#</th>
                     <th className="px-3 py-2.5 font-bold">اسم المشترك</th>
                     <th className="px-3 py-2.5 font-bold">البريد</th>
@@ -212,22 +193,11 @@ export default function TournamentPerParticipantsSection({ routes, readOnly = fa
                     <tr
                       key={slotIndex}
                       className={
-                        participant?.id
-                          ? selectableRowClass(selection.isSelected(participant.id))
-                          : participant
-                            ? "transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
-                            : "bg-gray-50/50 dark:bg-gray-800/20"
+                        participant
+                          ? "transition hover:bg-gray-50 dark:hover:bg-gray-800/50"
+                          : "bg-gray-50/50 dark:bg-gray-800/20"
                       }
                     >
-                      {participant?.id ? (
-                        <TableSelectRowCell
-                          id={participant.id}
-                          ariaLabel={`تحديد ${participant.name}`}
-                          {...selection}
-                        />
-                      ) : (
-                        <td className="w-[44px] px-3 py-3" />
-                      )}
                       <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
                         {slotIndex}
                       </td>

@@ -4,7 +4,7 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -12,10 +12,10 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
@@ -29,6 +29,7 @@ import { useDevicesSync } from "../hooks/useDevicesSync";
 import { usePackagesSync } from "../hooks/usePackagesSync";
 
 const PAGE_SIZE = 8;
+const TABLE_DATA_COLS = 5;
 
 function ArchiveRowActions({ onDetails, onRestore }) {
   return (
@@ -107,7 +108,8 @@ export default function HallArchivePage() {
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const selectionItems = useMemo(() => filtered.map((row) => ({ ...row, id: row.key })), [filtered]);
   const pageIds = useMemo(() => paged.map((row) => row.key), [paged]);
-  const selection = useTableSelection({ items: selectionItems, pageIds });
+  const allIds = useMemo(() => selectionItems.map((row) => row.id), [selectionItems]);
+  const selection = useTableSelectionMode({ items: selectionItems, pageIds, allIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -157,7 +159,7 @@ export default function HallArchivePage() {
     setDetailDevice(null);
     setPackageDetailOpen(false);
     setDetailPackage(null);
-    selection.clearSelection();
+    selection.exitSelectionMode();
     zonesToastSuccess(isBulk ? `تمت استعادة ${targets.length} عناصر` : "تمت الاستعادة");
   };
 
@@ -170,11 +172,8 @@ export default function HallArchivePage() {
   };
 
   return (
-    <ManagerLayout>
-      <PageHeader
-        title="أرشيف الصالة"
-        description="الأجهزة والباقات المؤرشفة — يمكن استعادتها أو عرض تفاصيلها."
-      />
+    <>
+    <PageHeader title="أرشيف الصالة" />
 
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
@@ -188,8 +187,12 @@ export default function HallArchivePage() {
           <SearchBar value={search} onChange={setSearch} placeholder="بحث في الأرشيف..." />
         </div>
 
-        <TableBulkActionBar
+        <TableSelectionModeBar
+          selectionMode={selection.selectionMode}
+          onEnter={selection.enterSelectionMode}
+          onExit={selection.exitSelectionMode}
           count={selection.count}
+          totalCount={filtered.length}
           onClear={selection.clearSelection}
           actions={[{ label: "استعادة المحدد", icon: ArchiveRestore, onClick: handleBulkRestore }]}
         />
@@ -208,7 +211,7 @@ export default function HallArchivePage() {
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.map((row) => (
-                <tr key={row.key} className={selectableRowClass(selection.isSelected(row.key))}>
+                <tr key={row.key} className={selection.selectionMode ? selectableRowClass(selection.isSelected(row.key)) : undefined}>
                   <TableSelectRowCell id={row.key} ariaLabel={`تحديد ${row.name}`} {...selection} />
                   <td className="px-3 py-3">
                     <span
@@ -236,7 +239,7 @@ export default function HallArchivePage() {
               ))}
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                     لا توجد عناصر مؤرشفة حالياً.
                   </td>
                 </tr>
@@ -276,6 +279,6 @@ export default function HallArchivePage() {
           setDetailPackage(null);
         }}
       />
-    </ManagerLayout>
+    </>
   );
 }

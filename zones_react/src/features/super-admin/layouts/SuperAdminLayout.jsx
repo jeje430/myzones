@@ -2,14 +2,18 @@ import { useEffect, useState } from "react";
 import { Outlet, useLocation } from "react-router-dom";
 import SuperAdminSidebar from "../components/SuperAdminSidebar";
 import SuperAdminTopBar from "../components/SuperAdminTopBar";
+import SidebarEdgeToggle from "../../../shared/components/SidebarEdgeToggle";
 import MaintenanceModeBanner from "../components/MaintenanceModeBanner";
 import { getSuperAdminSession } from "../data/superAdminAuth";
 import { fetchPendingJoinRequestsSummary } from "../data/hallJoinRequestsApi";
+import useSidebarOpen from "../../../shared/hooks/useSidebarOpen";
+import { useSidebarMobileClose } from "../../../shared/hooks/useSidebarMobileClose";
 
 export default function SuperAdminLayout() {
   const location = useLocation();
   const session = getSuperAdminSession();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebarOpen("zones-super-admin-sidebar-open");
+  const closeSidebarOnMobile = useSidebarMobileClose(closeSidebar);
   const [pendingCount, setPendingCount] = useState(0);
 
   const refreshCounts = async () => {
@@ -36,27 +40,31 @@ export default function SuperAdminLayout() {
       style={{ fontFamily: "Cairo, 'Segoe UI', Tahoma, sans-serif" }}
       dir="rtl"
     >
-      <div
-        className={`fixed inset-y-0 end-0 z-50 transform transition lg:static lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
-        }`}
-      >
-        <SuperAdminSidebar pendingCount={pendingCount} onNavigate={() => setSidebarOpen(false)} />
-      </div>
       {sidebarOpen ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] lg:hidden"
+          onClick={closeSidebar}
           aria-label="إغلاق القائمة"
         />
       ) : null}
-      <div className="flex min-w-0 flex-1 flex-col">
-        <SuperAdminTopBar
-          session={session}
+
+      {!sidebarOpen ? <SidebarEdgeToggle onMenuToggle={toggleSidebar} /> : null}
+
+      <aside
+        className={`relative overflow-visible fixed inset-y-0 end-0 z-50 w-64 shrink-0 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "translate-x-full lg:hidden"
+        }`}
+      >
+        <SuperAdminSidebar
           pendingCount={pendingCount}
-          onMenuClick={() => setSidebarOpen(true)}
+          onNavigate={closeSidebarOnMobile}
+          onMenuToggle={toggleSidebar}
         />
+      </aside>
+
+      <div className="flex min-w-0 flex-1 flex-col">
+        <SuperAdminTopBar session={session} />
         <MaintenanceModeBanner />
         <main className="flex-1 p-4 md:p-6">
           <Outlet />

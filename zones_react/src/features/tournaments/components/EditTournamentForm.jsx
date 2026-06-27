@@ -21,6 +21,7 @@ export default function EditTournamentForm({
   onCancel,
   showCancel = true,
   submitLabel = "حفظ التغييرات",
+  readOnly = false,
 }) {
   const [form, setForm] = useState(null);
   const [coverBusy, setCoverBusy] = useState(false);
@@ -40,6 +41,7 @@ export default function EditTournamentForm({
   const set = (key, value) => setForm((f) => ({ ...f, [key]: value }));
 
   const handleCoverFile = async (e) => {
+    if (readOnly) return;
     const file = e.target.files?.[0];
     e.target.value = "";
     if (!file) return;
@@ -61,6 +63,7 @@ export default function EditTournamentForm({
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (readOnly) return;
     const deadlineError = validateRegistrationDeadline(form);
     if (deadlineError) {
       setError(deadlineError);
@@ -83,6 +86,7 @@ export default function EditTournamentForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-4" dir="rtl">
+      <fieldset disabled={readOnly} className="m-0 space-y-4 border-0 p-0">
       <div className={formGrid4}>
         <div className={fieldWrap}>
           <label className={labelCls}>اسم البطولة *</label>
@@ -133,9 +137,6 @@ export default function EditTournamentForm({
           value={form.registrationDeadline}
           onChange={(e) => set("registrationDeadline", e.target.value)}
         />
-        <p className="mt-1.5 text-[10px] text-gray-400">
-          بعد حفظ التغييرات، يستطيع الزبائن في تطبيق ZONEZ الاشتراك أو الانسحاب حتى هذا التاريخ والوقت بالضبط.
-        </p>
       </div>
 
       <div className={fieldWrap}>
@@ -147,36 +148,41 @@ export default function EditTournamentForm({
           onChange={(e) => set("rules", e.target.value)}
           placeholder="• اكتب كل قانون في سطر منفصل"
         />
-        <p className="mt-1.5 text-[10px] text-gray-400">
-          تظهر في صفحة تفاصيل البطولة بتطبيق الزبون
-        </p>
       </div>
 
       <div className={fieldWrap}>
         <label className={labelCls}>صورة الغلاف</label>
-        <p className="mb-3 text-[10px] text-gray-400">
-          نسبة {COVER_ASPECT === 16 / 9 ? "16:9" : COVER_ASPECT.toFixed(2)} — {COVER_OUTPUT_WIDTH}px عرض
-        </p>
-        <div className="flex flex-wrap gap-2">
-          <input id={`et-cover-${tournament.id}`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" disabled={coverBusy} onChange={handleCoverFile} />
-          <label htmlFor={`et-cover-${tournament.id}`} className="inline-flex cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800">
-            {coverBusy ? "جاري المعالجة…" : "تغيير الصورة"}
-          </label>
-          {form.coverDataUrl ? (
-            <button type="button" onClick={() => set("coverDataUrl", null)} className="rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-red-600">
-              إزالة الصورة
-            </button>
-          ) : null}
-        </div>
+        {!readOnly ? (
+          <>
+            <p className="mb-3 text-[10px] text-gray-400">
+              نسبة {COVER_ASPECT === 16 / 9 ? "16:9" : COVER_ASPECT.toFixed(2)} — {COVER_OUTPUT_WIDTH}px عرض
+            </p>
+            <div className="flex flex-wrap gap-2">
+              <input id={`et-cover-${tournament.id}`} type="file" accept="image/jpeg,image/png,image/webp,image/gif" className="hidden" disabled={coverBusy} onChange={handleCoverFile} />
+              <label htmlFor={`et-cover-${tournament.id}`} className="inline-flex cursor-pointer rounded-xl border border-gray-300 bg-white px-3 py-2 text-xs font-bold dark:border-gray-700 dark:bg-gray-800">
+                {coverBusy ? "جاري المعالجة…" : "تغيير الصورة"}
+              </label>
+              {form.coverDataUrl ? (
+                <button type="button" onClick={() => set("coverDataUrl", null)} className="rounded-xl border border-red-200 px-3 py-2 text-xs font-bold text-red-600">
+                  إزالة الصورة
+                </button>
+              ) : null}
+            </div>
+          </>
+        ) : null}
         {form.coverDataUrl ? (
-          <div className="mt-3 overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
+          <div className={`overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700 ${readOnly ? "" : "mt-3"}`}>
             <img src={form.coverDataUrl} alt="" className="aspect-[16/9] w-full max-w-2xl object-cover" />
           </div>
+        ) : readOnly ? (
+          <p className="text-xs text-gray-400">لا توجد صورة غلاف</p>
         ) : null}
       </div>
+      </fieldset>
 
       {error ? <p className="text-[11px] font-bold text-red-600">{error}</p> : null}
 
+      {!readOnly ? (
       <div className="flex justify-end gap-2 border-t border-gray-100 pt-4 dark:border-gray-800">
         {showCancel && onCancel ? (
           <Button type="button" variant="outline" size="sm" onClick={onCancel} disabled={saving}>
@@ -187,6 +193,7 @@ export default function EditTournamentForm({
           {saving ? "جاري الحفظ..." : submitLabel}
         </Button>
       </div>
+      ) : null}
     </form>
   );
 }

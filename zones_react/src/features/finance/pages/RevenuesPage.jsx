@@ -13,7 +13,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import {
   MONTHS_AR,
   buildCategoryBreakdown,
@@ -111,10 +110,7 @@ export default function RevenuesPage() {
   );
 
   return (
-    <ManagerLayout
-      title="إجمالي الإيرادات"
-    >
-      <div className="revenues-page" dir="rtl">
+    <div className="revenues-page" dir="rtl">
         <div className="finance-filters">
           <label>
             الشهر
@@ -263,6 +259,5 @@ export default function RevenuesPage() {
           يتم تحديث بيانات الإيرادات تلقائيًا بناءً على الحجوزات والمدفوعات المسجلة داخل النظام.
         </p>
       </div>
-    </ManagerLayout>
   );
 }

@@ -2,12 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import { formatDisplayDate } from "../../maintenance/data/faultMeta";
 
 import TablePagination from "../../../shared/components/TablePagination";
@@ -134,10 +128,6 @@ export default function ReceptionPackagesPage() {
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-
-  const selection = useTableSelection({ items: filtered, pageIds });
-
 
 
   useEffect(() => {
@@ -156,7 +146,6 @@ export default function ReceptionPackagesPage() {
 
         title="الباقات"
 
-        description="باقات الصالة المضافة من المدير — مرتبطة بأجهزة الحجز."
 
       />
 
@@ -194,8 +183,6 @@ export default function ReceptionPackagesPage() {
 
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
 
-                <TableSelectHeaderCell {...selection} />
-
                 <th className="px-3 py-2.5 font-bold">الباقات</th>
 
                 <th className="px-3 py-2.5 font-bold">السعر</th>
@@ -214,7 +201,7 @@ export default function ReceptionPackagesPage() {
 
                 <tr>
 
-                  <td colSpan={5} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={4} className="px-3 py-10 text-center text-gray-400">
 
                     لا توجد باقات مطابقة.
 
@@ -230,9 +217,7 @@ export default function ReceptionPackagesPage() {
 
                   return (
 
-                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-
-                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
+                    <tr key={row.id}>
 
                       <td className="px-3 py-3">
 

@@ -219,7 +219,6 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
               onChange={(e) => set("withdrawal", e.target.value)}
               placeholder="خسارة"
             />
-            <p className="mt-1.5 text-[10px] text-gray-400">منطق داخلي للمدير — لا يظهر للزبائن</p>
           </div>
         </div>
 
@@ -235,9 +234,6 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
             value={form.registrationDeadline}
             onChange={(e) => set("registrationDeadline", e.target.value)}
           />
-          <p className="mt-1.5 text-[10px] text-gray-400">
-            بعد الحفظ، يستطيع الزبائن في تطبيق ZONEZ الاشتراك أو الانسحاب حتى هذا التاريخ والوقت بالضبط.
-          </p>
         </div>
 
         <div className={fieldWrap}>
@@ -252,9 +248,7 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
             onChange={(e) => set("rules", e.target.value)}
             placeholder={"• يجب أن يكون لكل مباراة فائز.\n• لا يُسمح بالتعادل.\n• اللاعب المتأخر يُعتبر خاسراً بعد 10 دقائق."}
           />
-          <p className="mt-1.5 text-[10px] text-gray-400">
-            اكتب كل قانون في سطر منفصل — تظهر في صفحة تفاصيل البطولة بتطبيق الزبون
-          </p>
+          <p className="mt-1.5 text-[10px] text-gray-400">اكتب كل قانون في سطر منفصل.</p>
         </div>
 
         <div className={fieldWrap}>
@@ -262,8 +256,7 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
             صورة غلاف البطولة <span className="font-normal text-gray-400">(اختياري)</span>
           </label>
           <p className="mb-3 text-[10px] text-gray-400">
-            نسبة العرض {COVER_ASPECT === 16 / 9 ? "16:9" : COVER_ASPECT.toFixed(2)} — تُقصّ تلقائياً من
-            المنتصف لتطابق بطاقة Flutter وصفحة التفاصيل ({COVER_OUTPUT_WIDTH}px عرض).
+            نسبة العرض {COVER_ASPECT === 16 / 9 ? "16:9" : COVER_ASPECT.toFixed(2)} — يُفضّل صورة أفقية.
           </p>
           <div className="flex flex-wrap items-center gap-2">
             <input
@@ -294,7 +287,6 @@ export default function CreateTournamentModal({ open, onClose, onSaved }) {
           {form.coverDataUrl ? (
             <div className="mt-3 space-y-3">
               <div>
-                <p className="mb-1.5 text-[10px] font-bold text-gray-500">معاينة البطاقة (Flutter Home)</p>
                 <div className="overflow-hidden rounded-xl border border-gray-200 dark:border-gray-700">
                   <div className="relative aspect-[16/9] w-full max-w-md">
                     <img

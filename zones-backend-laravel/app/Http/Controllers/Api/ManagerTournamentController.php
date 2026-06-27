@@ -3,10 +3,12 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Api\Concerns\ResolvesManagerStation;
+use App\Http\Controllers\Api\Concerns\ResolvesStaffStation;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\TournamentParticipantResource;
 use App\Http\Resources\TournamentResource;
 use App\Models\Tournament;
+use App\Models\User;
 use App\Support\StationImageStorage;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -17,10 +19,20 @@ use Illuminate\Validation\ValidationException;
 class ManagerTournamentController extends Controller
 {
     use ResolvesManagerStation;
+    use ResolvesStaffStation;
+
+    protected function resolveTournamentStation(User $user): ?\App\Models\Station
+    {
+        if ($user->hasRole('manager')) {
+            return $this->resolveManagerStation($user);
+        }
+
+        return $this->resolveStaffStation($user);
+    }
 
     public function index(Request $request): JsonResponse
     {
-        $station = $this->resolveManagerStation($request->user());
+        $station = $this->resolveTournamentStation($request->user());
         if (! $station) {
             return $this->managerStationMissingResponse();
         }
@@ -88,7 +100,7 @@ class ManagerTournamentController extends Controller
 
     public function show(Request $request, Tournament $tournament): JsonResponse
     {
-        $station = $this->resolveManagerStation($request->user());
+        $station = $this->resolveTournamentStation($request->user());
         if (! $station || (int) $tournament->station_id !== (int) $station->id) {
             abort(403);
         }
@@ -189,7 +201,7 @@ class ManagerTournamentController extends Controller
 
     public function participants(Request $request, Tournament $tournament): JsonResponse
     {
-        $station = $this->resolveManagerStation($request->user());
+        $station = $this->resolveTournamentStation($request->user());
         if (! $station || (int) $tournament->station_id !== (int) $station->id) {
             abort(403);
         }

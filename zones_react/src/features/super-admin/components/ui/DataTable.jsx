@@ -1,9 +1,10 @@
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
 } from "../../../../shared/components/ui/TableSelection";
+import { tableSelectColSpan } from "../../../../shared/hooks/useTableSelection";
 
 export default function DataTable({
   columns,
@@ -12,14 +13,24 @@ export default function DataTable({
   empty,
   selection,
   bulkActions,
+  totalCount,
 }) {
   const hasRows = Array.isArray(children) ? children.length > 0 : Boolean(children);
-  const colSpan = columns.length + (selection ? 1 : 0);
+  const selectionMode = selection?.selectionMode ?? false;
+  const colSpan = tableSelectColSpan(columns.length, selectionMode);
 
   return (
     <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
       {selection && bulkActions?.length ? (
-        <TableBulkActionBar count={selection.count} onClear={selection.clearSelection} actions={bulkActions} />
+        <TableSelectionModeBar
+          selectionMode={selectionMode}
+          onEnter={selection.enterSelectionMode}
+          onExit={selection.exitSelectionMode}
+          count={selection.count}
+          totalCount={totalCount ?? selection.scopeCount ?? 0}
+          onClear={selection.clearSelection}
+          actions={bulkActions}
+        />
       ) : null}
       <div className="overflow-x-auto">
         <table className="w-full text-right text-xs" style={{ minWidth }}>
@@ -65,11 +76,12 @@ export function Td({ children, bold, ltr, className = "" }) {
 }
 
 export function Tr({ children, selection, rowId, className = "" }) {
-  const selected = selection && rowId != null ? selection.isSelected(rowId) : false;
+  const selectionMode = selection?.selectionMode ?? false;
+  const selected = selectionMode && selection && rowId != null ? selection.isSelected(rowId) : false;
   return (
     <tr
       className={
-        selection && rowId != null
+        selectionMode && selection && rowId != null
           ? selectableRowClass(selected, `transition hover:bg-[#6B5478]/5 dark:hover:bg-[#6B5478]/10 ${className}`)
           : `transition hover:bg-[#6B5478]/5 dark:hover:bg-[#6B5478]/10 ${className}`
       }

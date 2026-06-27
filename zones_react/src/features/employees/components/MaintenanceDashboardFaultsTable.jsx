@@ -1,13 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import TablePagination from "../../../shared/components/TablePagination";
 import {
-  TableBulkActionBar,
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
-import {
   faultRowDisplayStatus,
   faultStatusBadgeClass,
   formatDisplayDate,
@@ -47,8 +40,6 @@ export default function MaintenanceDashboardFaultsTable({ filter, rows = [] }) {
     () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
     [rows, page],
   );
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: rows, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -65,13 +56,10 @@ export default function MaintenanceDashboardFaultsTable({ filter, rows = [] }) {
         </span>
       </div>
 
-      <TableBulkActionBar count={selection.count} onClear={selection.clearSelection} actions={[]} />
-
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-right text-xs">
           <thead>
             <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-              <TableSelectHeaderCell {...selection} />
               <th className="px-5 py-2.5 font-bold">الجهاز</th>
               <th className="px-3 py-2.5 font-bold">نوع العطل</th>
               {isResolved ? (
@@ -91,14 +79,13 @@ export default function MaintenanceDashboardFaultsTable({ filter, rows = [] }) {
           <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
             {paged.length === 0 ? (
               <tr>
-                <td colSpan={isResolved ? 6 : 5} className="px-5 py-10 text-center text-gray-400">
+                <td colSpan={isResolved ? 5 : 4} className="px-5 py-10 text-center text-gray-400">
                   {meta.empty}
                 </td>
               </tr>
             ) : (
               paged.map((row) => (
-                <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                  <TableSelectRowCell id={row.id} ariaLabel={`تحديد عطل ${row.deviceName}`} {...selection} />
+                <tr key={row.id}>
                   <td className="px-5 py-3">
                     <DeviceNameCell
                       deviceName={row.deviceName}

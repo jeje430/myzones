@@ -178,21 +178,21 @@ Route::middleware('auth:sanctum')->group(function () {
         ->middleware('role:manager|reception|maintenance');
 
     Route::get('/manager/tournaments', [ManagerTournamentController::class, 'index'])
-        ->middleware('role:manager');
+        ->middleware('role:manager|reception');
     Route::post('/manager/tournaments', [ManagerTournamentController::class, 'store'])
         ->middleware('role:manager');
     Route::get('/manager/tournaments/{tournament}', [ManagerTournamentController::class, 'show'])
-        ->middleware('role:manager');
+        ->middleware('role:manager|reception');
     Route::put('/manager/tournaments/{tournament}', [ManagerTournamentController::class, 'update'])
         ->middleware('role:manager');
     Route::post('/manager/tournaments/{tournament}/cancel', [ManagerTournamentController::class, 'cancel'])
         ->middleware('role:manager');
     Route::get('/manager/tournaments/{tournament}/participants', [ManagerTournamentController::class, 'participants'])
-        ->middleware('role:manager');
+        ->middleware('role:manager|reception');
     Route::get('/manager/tournaments/{tournament}/bracket', [ManagerTournamentBracketController::class, 'show'])
-        ->middleware('role:manager');
+        ->middleware('role:manager|reception');
     Route::patch('/manager/tournaments/{tournament}/matches/{match}', [ManagerTournamentBracketController::class, 'updateMatch'])
-        ->middleware('role:manager');
+        ->middleware('role:manager|reception');
     Route::post('/manager/tournaments/{tournament}/notify-winner', [ManagerTournamentBracketController::class, 'notifyWinner'])
         ->middleware('role:manager');
 

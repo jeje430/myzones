@@ -93,7 +93,6 @@ function PlayerRow({ name, winnerName, score, completed }) {
 
 function MatchCard({ match, st, clickable, onOpen }) {
   const completed = st === MATCH_STATUS.FINISHED;
-  const scheduleLabel = formatMatchSchedule(match.scheduledAt);
   const cssKey = matchStatusCssKey(st);
 
   return (
@@ -114,11 +113,6 @@ function MatchCard({ match, st, clickable, onOpen }) {
         <span className="tb-match-card__label">مباراة</span>
         <MatchStatusBadge status={st} />
       </div>
-      {scheduleLabel ? (
-        <p className="tb-match-card__schedule" title={scheduleLabel}>
-          {scheduleLabel}
-        </p>
-      ) : null}
       <div className="tb-match-card__body">
         <PlayerRow name={match.playerA} winnerName={match.winner} score={match.scoreA} completed={completed} />
         <PlayerRow name={match.playerB} winnerName={match.winner} score={match.scoreB} completed={completed} />
@@ -135,6 +129,7 @@ export default function TournamentBracket({
   bracketState = null,
   onBracketChange = null,
   apiSync = false,
+  allowSchedule = true,
 }) {
   const [bracket, setBracket] = useState(null);
   const [selectedMatch, setSelectedMatch] = useState(null);
@@ -465,7 +460,7 @@ export default function TournamentBracket({
                     className="tb-grid-join-cell"
                     style={{ gridRow: `${2 + m * spanParent} / span ${spanParent}`, gridColumn: r * 2 + 2 }}
                   >
-                    <BracketJoin simple={simple} lit={isJoinLit(rounds, r, m)} />
+                    <BracketJoin simple lit={isJoinLit(rounds, r, m)} />
                   </div>
                 ));
               })}
@@ -492,10 +487,12 @@ export default function TournamentBracket({
             {formError && modalStep === "actions" ? <p className="tb-form-error">{formError}</p> : null}
 
             <div className="tb-action-options">
-              <button type="button" className="tb-action-btn tb-action-btn--schedule" onClick={() => setModalStep("schedule")}>
-                <span className="tb-action-btn__title">إدارة موعد المباراة</span>
-                <span className="tb-action-btn__hint">جدولة أو تعديل التاريخ والوقت</span>
-              </button>
+              {allowSchedule ? (
+                <button type="button" className="tb-action-btn tb-action-btn--schedule" onClick={() => setModalStep("schedule")}>
+                  <span className="tb-action-btn__title">إدارة موعد المباراة</span>
+                  <span className="tb-action-btn__hint">جدولة أو تعديل التاريخ والوقت</span>
+                </button>
+              ) : null}
               <button
                 type="button"
                 className={`tb-action-btn tb-action-btn--winner ${winnerEligible ? "" : "tb-action-btn--disabled"}`}

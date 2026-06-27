@@ -1,12 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import AdminModal from "../../devices-packages/components/AdminModal";
 import Button from "../../super-admin/components/ui/Button";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import { fetchTournamentParticipants } from "../data/managerTournamentsApi";
 
 export default function TournamentParticipantsModal({ open, tournament, onClose }) {
@@ -42,9 +36,6 @@ export default function TournamentParticipantsModal({ open, tournament, onClose 
     };
   }, [open, tournament?.id]);
 
-  const pageIds = useMemo(() => rows.map((row) => row.id), [rows]);
-  const selection = useTableSelection({ items: rows, pageIds });
-
   return (
     <AdminModal
       open={open}
@@ -64,7 +55,6 @@ export default function TournamentParticipantsModal({ open, tournament, onClose 
             <table className="w-full min-w-[640px] text-right text-xs">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/80 text-gray-500 dark:border-gray-800 dark:bg-gray-800/40">
-                  <TableSelectHeaderCell {...selection} />
                   <th className="px-3 py-2.5 font-bold">الاسم</th>
                   <th className="px-3 py-2.5 font-bold">البريد</th>
                   <th className="px-3 py-2.5 font-bold">وقت التسجيل</th>
@@ -73,8 +63,7 @@ export default function TournamentParticipantsModal({ open, tournament, onClose 
               </thead>
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {rows.map((row) => (
-                  <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                    <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
+                  <tr key={row.id}>
                     <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
                     <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
                       {row.email || "—"}

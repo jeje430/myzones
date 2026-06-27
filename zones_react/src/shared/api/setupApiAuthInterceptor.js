@@ -4,9 +4,14 @@ import {
   findScopedManagerSession,
   getScopedToken,
 } from "../../features/auth/data/accountSessionStorage";
+import { clearAuthSession } from "../../features/auth/data/mockUsersStorage";
+import { logoutSuperAdmin } from "../../features/super-admin/data/superAdminAuth";
+import { MANAGER_LOGIN_PATH, EMPLOYEE_LOGIN_PATH } from "../../features/auth/data/authRoutes";
 
 const MANAGER_TOKEN_KEY = "zones-manager-token";
 const SUPER_ADMIN_TOKEN_KEY = "zones-super-admin-token";
+
+let handlingUnauthorized = false;
 
 function pickStaffToken() {
   const urlId = getActiveAccountIdFromUrl();
@@ -26,6 +31,39 @@ function pickStaffToken() {
 
 function pickSuperAdminToken() {
   return localStorage.getItem(SUPER_ADMIN_TOKEN_KEY) || null;
+}
+
+function resolveLoginPath() {
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+  if (pathname.startsWith("/super-admin")) return "/super-admin/login";
+  if (pathname.startsWith("/employee")) return EMPLOYEE_LOGIN_PATH;
+  return MANAGER_LOGIN_PATH;
+}
+
+function clearSessionForCurrentArea() {
+  const pathname = typeof window !== "undefined" ? window.location.pathname : "";
+  if (pathname.startsWith("/super-admin")) {
+    logoutSuperAdmin();
+    return;
+  }
+
+  const accountId = getActiveAccountIdFromUrl();
+  if (accountId) {
+    clearAuthSession(accountId);
+    return;
+  }
+
+  const session = findScopedManagerSession();
+  if (session?.id) {
+    clearAuthSession(session.id);
+  }
+}
+
+function redirectToLogin() {
+  if (typeof window === "undefined") return;
+  const loginPath = resolveLoginPath();
+  if (window.location.pathname.startsWith(loginPath)) return;
+  window.location.replace(loginPath);
 }
 
 /**
@@ -59,4 +97,26 @@ export function setupApiAuthInterceptor() {
     config.headers = headers;
     return config;
   });
+
+  apiClient.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      const status = error?.response?.status;
+      if (status !== 401 || handlingUnauthorized) {
+        return Promise.reject(error);
+      }
+
+      handlingUnauthorized = true;
+      try {
+        clearSessionForCurrentArea();
+        redirectToLogin();
+      } finally {
+        setTimeout(() => {
+          handlingUnauthorized = false;
+        }, 1500);
+      }
+
+      return Promise.reject(error);
+    },
+  );
 }

@@ -16,8 +16,7 @@ import {
 import { zonesConfirm } from "../../../shared/utils/zonesAlerts";
 import { SUPER_ADMIN_ROUTES } from "../data/superAdminConstants";
 import { logoutSuperAdmin } from "../data/superAdminAuth";
-import PlatformLogo from "../../../shared/components/PlatformLogo";
-import { useBranding } from "../../../shared/context/BrandingContext";
+import SidebarBrandHeader from "../../../shared/components/SidebarBrandHeader";
 
 const SINGLE_ITEMS_TOP = [
   { label: "لوحة التحكم", path: SUPER_ADMIN_ROUTES.dashboard, icon: Home },
@@ -76,10 +75,13 @@ const linkClass = ({ isActive }) =>
       : "text-gray-600 hover:bg-[#6B5478]/8 dark:text-gray-300 dark:hover:bg-[#6B5478]/15"
   }`;
 
-export default function SuperAdminSidebar({ pendingCount = 0, onNavigate }) {
+export default function SuperAdminSidebar({
+  pendingCount = 0,
+  onNavigate,
+  onMenuToggle,
+}) {
   const location = useLocation();
   const navigate = useNavigate();
-  const { platformName } = useBranding();
   const groupContainsActive = (group) => group.children.some((c) => location.pathname === c.path);
   const [open, setOpen] = useState(() => {
     const initial = {};
@@ -163,18 +165,10 @@ export default function SuperAdminSidebar({ pendingCount = 0, onNavigate }) {
 
   return (
     <aside
-      className="flex h-full w-64 shrink-0 flex-col border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+      className="relative flex h-full w-64 shrink-0 flex-col overflow-visible border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
       dir="rtl"
     >
-      <div className="flex items-center gap-3 bg-gradient-to-l from-[#6B5478] to-[#836a90] px-5 py-5">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
-          <PlatformLogo variant="avatar" />
-        </span>
-        <div className="text-white">
-          <p className="text-sm font-extrabold leading-tight">{platformName}</p>
-          <p className="text-[11px] font-semibold text-white/75">لوحة تحكم الأدمن</p>
-        </div>
-      </div>
+      <SidebarBrandHeader subtitle="لوحة الأدمن" onMenuToggle={onMenuToggle} />
 
       <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
         {SINGLE_ITEMS_TOP.map((item) => {

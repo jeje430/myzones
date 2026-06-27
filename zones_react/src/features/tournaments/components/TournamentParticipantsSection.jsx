@@ -1,22 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, SlidersHorizontal } from "lucide-react";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import { formatParticipantDate, winnerLabel } from "../data/participantMeta";
-import {
-  TOURNAMENT_PARTICIPANTS_EVENT,
-  getTournamentFilterOptions,
-  loadTournamentParticipants,
-  saveTournamentParticipants,
-} from "../data/tournamentParticipantsStorage";
-import { TOURNAMENTS_LIST_EVENT } from "../tournamentsListStorage";
+import { getTournamentFilterOptions } from "../data/tournamentParticipantsStorage";
+import { fetchAllTournamentParticipantsRows } from "../data/managerTournamentsApi";
 
 const PAGE_SIZE = 5;
 
@@ -38,36 +27,36 @@ function WinnerBadge({ isWinner }) {
 }
 
 export default function TournamentParticipantsSection() {
-  const [rows, setRows] = useState(() => loadTournamentParticipants());
+  const [rows, setRows] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState("");
   const [search, setSearch] = useState("");
   const [tournamentFilter, setTournamentFilter] = useState("all");
   const [page, setPage] = useState(1);
-  const skipNextSave = useRef(true);
 
-  useEffect(() => {
-    if (skipNextSave.current) {
-      skipNextSave.current = false;
-      return;
+  const reload = useCallback(async () => {
+    setLoading(true);
+    setLoadError("");
+    const result = await fetchAllTournamentParticipantsRows();
+    if (!result.ok) {
+      setLoadError(result.error || "تعذر تحميل المشاركين.");
+      setRows([]);
+    } else {
+      setRows(result.rows);
     }
-    saveTournamentParticipants(rows);
-  }, [rows]);
+    setLoading(false);
+  }, []);
 
   useEffect(() => {
-    const sync = () => {
-      setRows((prev) => {
-        const next = loadTournamentParticipants();
-        return JSON.stringify(prev) === JSON.stringify(next) ? prev : next;
-      });
-    };
-    window.addEventListener(TOURNAMENT_PARTICIPANTS_EVENT, sync);
-    window.addEventListener(TOURNAMENTS_LIST_EVENT, sync);
-    window.addEventListener("focus", sync);
+    reload();
+    const poll = window.setInterval(reload, 8000);
+    const onFocus = () => reload();
+    window.addEventListener("focus", onFocus);
     return () => {
-      window.removeEventListener(TOURNAMENT_PARTICIPANTS_EVENT, sync);
-      window.removeEventListener(TOURNAMENTS_LIST_EVENT, sync);
-      window.removeEventListener("focus", sync);
+      window.clearInterval(poll);
+      window.removeEventListener("focus", onFocus);
     };
-  }, []);
+  }, [reload]);
 
   const tournamentOptions = useMemo(() => getTournamentFilterOptions(rows), [rows]);
 
@@ -89,8 +78,6 @@ export default function TournamentParticipantsSection() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: filtered, pageIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -102,16 +89,19 @@ export default function TournamentParticipantsSection() {
 
   return (
     <>
-      <PageHeader
-        title="قائمة المشاركين"
-        description="جميع المشتركين في البطولات — فلترة حسب البطولة."
-      />
+      <PageHeader title="قائمة المشاركين" />
+
+      {loadError ? (
+        <p className="mb-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-semibold text-red-700 dark:border-red-900/50 dark:bg-red-950/40 dark:text-red-300">
+          {loadError}
+        </p>
+      ) : null}
 
       <section className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-100 px-5 py-4 dark:border-gray-800">
           <h2 className="text-sm font-extrabold text-gray-900 dark:text-white">المشتركون</h2>
           <span className="rounded-full bg-[#6B5478]/12 px-2.5 py-0.5 text-[11px] font-bold text-[#6B5478]">
-            {filtered.length} مشترك
+            {loading ? "…" : `${filtered.length} مشترك`}
           </span>
         </div>
 
@@ -150,7 +140,6 @@ export default function TournamentParticipantsSection() {
           <table className="w-full min-w-[960px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">#</th>
                 <th className="px-3 py-2.5 font-bold">اسم المشترك</th>
                 <th className="px-3 py-2.5 font-bold">البريد الإلكتروني</th>
@@ -161,31 +150,38 @@ export default function TournamentParticipantsSection() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
-              {paged.map((row) => (
-                <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                  <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
-                  <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
-                    {row.slotIndex || "—"}
-                  </td>
-                  <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.fullName}</td>
-                  <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
-                    {row.email}
-                  </td>
-                  <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
-                    {row.phone}
-                  </td>
-                  <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{row.tournamentName}</td>
-                  <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
-                    {formatParticipantDate(row.registeredAt)}
-                  </td>
-                  <td className="px-3 py-3">
-                    <WinnerBadge isWinner={row.isWinner} />
+              {loading ? (
+                <tr>
+                  <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                    جاري التحميل...
                   </td>
                 </tr>
-              ))}
-              {paged.length === 0 ? (
+              ) : (
+                paged.map((row) => (
+                  <tr key={row.id}>
+                    <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
+                      {row.slotIndex || "—"}
+                    </td>
+                    <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.fullName}</td>
+                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
+                      {row.email}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300" dir="ltr">
+                      {row.phone}
+                    </td>
+                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300">{row.tournamentName}</td>
+                    <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
+                      {formatParticipantDate(row.registeredAt)}
+                    </td>
+                    <td className="px-3 py-3">
+                      <WinnerBadge isWinner={row.isWinner} />
+                    </td>
+                  </tr>
+                ))
+              )}
+              {!loading && paged.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
                     لا يوجد مشتركون مطابقون.
                   </td>
                 </tr>
@@ -205,4 +201,3 @@ export default function TournamentParticipantsSection() {
     </>
   );
 }
-

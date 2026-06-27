@@ -5,7 +5,7 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -13,8 +13,9 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import SearchBar from "./ui/SearchBar";
 import WorkingHoursBadge from "./WorkingHoursBadge";
 
@@ -32,8 +33,14 @@ export default function UsersTable({
   loading = false,
   onToggleActive,
   onArchive,
+  search: controlledSearch,
+  onSearchChange,
+  hideSearch = false,
+  toolbar = null,
 }) {
-  const [search, setSearch] = useState("");
+  const [internalSearch, setInternalSearch] = useState("");
+  const search = controlledSearch !== undefined ? controlledSearch : internalSearch;
+  const setSearch = onSearchChange || setInternalSearch;
   const [actionLoading, setActionLoading] = useState(false);
 
   const filtered = useMemo(() => {
@@ -50,7 +57,8 @@ export default function UsersTable({
   }, [users, search]);
 
   const pageIds = useMemo(() => filtered.map((u) => u.id), [filtered]);
-  const selection = useTableSelection({ items: users, pageIds });
+  const allIds = pageIds;
+  const selection = useTableSelectionMode({ items: filtered, pageIds, allIds });
 
   const onToggle = async (user) => {
     if (!onToggleActive || actionLoading) return;
@@ -82,7 +90,7 @@ export default function UsersTable({
     for (const target of targets) {
       const result = await onToggleActive(target);
       if (!result.ok) {
-        zonesToastError(result.error || "تعذّر تحديث حالة الحساب.");
+        zonesToastError(result.error || "تعذر تحديث حالة الحساب.");
         setActionLoading(false);
         return;
       }
@@ -110,7 +118,7 @@ export default function UsersTable({
       zonesToastSuccess("تم تفعيل حساب الموظف.");
     }
 
-    selection.clearSelection();
+    selection.exitSelectionMode();
   };
 
   const onArchiveUser = async (user) => {
@@ -143,7 +151,7 @@ export default function UsersTable({
     }
 
     setActionLoading(false);
-    selection.clearSelection();
+    selection.exitSelectionMode();
     zonesToastSuccess(isBulk ? `تمت أرشفة ${targets.length} حسابات` : "تمت الأرشفة");
   };
 
@@ -159,17 +167,24 @@ export default function UsersTable({
     onArchiveUser(targets[0]);
   };
 
-  const colSpan = isManager ? 8 : showWorkingHours ? 10 : 9;
+  const baseColSpan = isManager ? 7 : showWorkingHours ? 9 : 8;
 
   return (
     <div>
-      <div className="mb-4">
-        <SearchBar value={search} onChange={setSearch} placeholder={searchPlaceholder} />
-      </div>
+      {!hideSearch ? (
+        <div className="mb-4">
+          <SearchBar value={search} onChange={setSearch} placeholder={searchPlaceholder} />
+        </div>
+      ) : null}
 
       <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm dark:border-gray-800 dark:bg-gray-900">
-        <TableBulkActionBar
+        {toolbar}
+        <TableSelectionModeBar
+          selectionMode={selection.selectionMode}
+          onEnter={selection.enterSelectionMode}
+          onExit={selection.exitSelectionMode}
           count={selection.count}
+          totalCount={filtered.length}
           onClear={selection.clearSelection}
           actions={[
             { label: "تعطيل/تفعيل المحدد", icon: Power, onClick: handleBulkToggle, variant: "outline" },
@@ -196,13 +211,13 @@ export default function UsersTable({
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {loading ? (
                 <tr>
-                  <td colSpan={colSpan} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={tableSelectColSpan(baseColSpan, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                     جاري تحميل البيانات...
                   </td>
                 </tr>
               ) : (
                 filtered.map((u) => (
-                  <tr key={u.id} className={selectableRowClass(selection.isSelected(u.id))}>
+                  <tr key={u.id} className={selection.selectionMode ? selectableRowClass(selection.isSelected(u.id)) : undefined}>
                     <TableSelectRowCell id={u.id} ariaLabel={`تحديد ${u.fullName}`} {...selection} />
                     <td className="px-3 py-3">
                       <div className="flex items-center gap-2">
@@ -283,7 +298,7 @@ export default function UsersTable({
               )}
               {!loading && filtered.length === 0 ? (
                 <tr>
-                  <td colSpan={colSpan} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={tableSelectColSpan(baseColSpan, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                     لا توجد نتائج مطابقة.
                   </td>
                 </tr>

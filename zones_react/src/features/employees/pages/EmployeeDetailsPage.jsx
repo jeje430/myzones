@@ -1,7 +1,6 @@
 import { useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { ArrowRight } from "lucide-react";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import {
   ROLE_PERMISSIONS,
   formatSalary,
@@ -23,12 +22,12 @@ export default function EmployeeDetailsPage() {
 
   if (!employee) {
     return (
-      <ManagerLayout title="الموظف غير موجود">
+      <>
         <p className="emp-empty">لم يتم العثور على هذا الموظف.</p>
         <button type="button" className="emp-btn-ghost" onClick={() => navigate("/employees")}>
           العودة للقائمة
         </button>
-      </ManagerLayout>
+      </>
     );
   }
 
@@ -36,8 +35,7 @@ export default function EmployeeDetailsPage() {
   const status = normalizeStatus(employee.status);
 
   return (
-    <ManagerLayout title="تفاصيل الموظف">
-      <div className="emp-page" dir="rtl">
+    <div className="emp-page" dir="rtl">
         <div className="emp-detail-header">
           <div className="emp-detail-profile">
             <div className="emp-detail-meta">
@@ -106,6 +104,5 @@ export default function EmployeeDetailsPage() {
           </div>
         </div>
       </div>
-    </ManagerLayout>
   );
 }

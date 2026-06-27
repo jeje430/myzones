@@ -1,4 +1,4 @@
-import { apiClient, mapApiErrorMessage } from "../../../shared/api/apiClient";
+import { apiClient, mapApiErrorMessage, postMultipart } from "../../../shared/api/apiClient";
 import { createDefaultServicesAvailability } from "../../super-admin/data/hallServicesData";
 import { resolveStationMediaUrl } from "../../../shared/utils/resolveStationMediaUrl";
 
@@ -143,9 +143,7 @@ export async function updateManagerStation(patch) {
 
     if (wantsMultipart) {
       const formData = buildStationFormData(patch);
-      const { data } = await apiClient.post("/manager/station", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      const { data } = await postMultipart("/manager/station", formData);
       const hall = mapStationToHall(data.station);
       return {
         ok: true,

@@ -22,7 +22,6 @@ import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../share
 
 import { useManagerPaths } from "../../../shared/tenant/ManagerWorkspaceProvider";
 
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 
@@ -317,12 +316,8 @@ export default function LoungeEditPage() {
 
 
   return (
-
-    <ManagerLayout>
-
-      <PageHeader title="تعديل بيانات الصالة" description="حدّث معلومات صالتك — تُعرض في تطبيق الزبون والخرائط." />
-
-
+    <>
+    <PageHeader title="تعديل بيانات الصالة" />
 
       <form onSubmit={saveChanges} className="mx-auto max-w-3xl space-y-4">
 
@@ -703,11 +698,8 @@ export default function LoungeEditPage() {
         </div>
 
       </form>
-
-    </ManagerLayout>
-
+    </>
   );
-
 }
 
 

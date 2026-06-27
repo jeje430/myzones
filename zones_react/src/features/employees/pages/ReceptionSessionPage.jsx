@@ -4,17 +4,7 @@ import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAler
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
-import {
-  TableBulkActionBar,
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import {
-  filterItemsByIds,
-  resolveBulkActionIds,
-  useTableSelection,
-} from "../../../shared/hooks/useTableSelection";
+import { filterItemsByIds } from "../../../shared/hooks/useTableSelection";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import {
   cancelCalendarBooking,
@@ -88,8 +78,6 @@ export default function ReceptionSessionPage() {
   );
 
   const sessions = useMemo(() => getSessionBookings(slots), [slots]);
-  const pageIds = useMemo(() => sessions.map((row) => row.id), [sessions]);
-  const selection = useTableSelection({ items: sessions, pageIds });
 
   const hasActiveSession = useMemo(
     () => sessions.some((s) => s.status === SLOT_STATUS.busy),
@@ -122,25 +110,13 @@ export default function ReceptionSessionPage() {
 
     if (success === 0) return;
 
-    selection.clearSelection();
     reloadView();
     zonesToastSuccess(
       isBulk ? `بدأت ${success} من ${targets.length} جلسات` : "بدأت الجلسة — الجهاز مشغول الآن.",
     );
   };
 
-  const startSession = (slot) => runStartSession(resolveBulkActionIds(slot.id, selection.selectedIds), slot);
-
-  const handleBulkStartSession = () => {
-    const targets = filterItemsByIds(sessions, selection.selectedIds).filter(
-      (s) => s.status !== SLOT_STATUS.busy,
-    );
-    if (!targets.length) return;
-    runStartSession(
-      targets.map((s) => s.id),
-      targets[0],
-    );
-  };
+  const startSession = (slot) => runStartSession([slot.id], slot);
 
   const runEndSession = async (targetIds, rowForMessage) => {
     const isBulk = targetIds.length > 1;
@@ -168,7 +144,6 @@ export default function ReceptionSessionPage() {
 
     if (success === 0) return;
 
-    selection.clearSelection();
     reloadView();
     if (!isBulk && lastResult?.pointsResult?.ok) {
       zonesToastSuccess(
@@ -189,18 +164,7 @@ export default function ReceptionSessionPage() {
     );
   };
 
-  const endSession = (slot) => runEndSession(resolveBulkActionIds(slot.id, selection.selectedIds), slot);
-
-  const handleBulkEndSession = () => {
-    const targets = filterItemsByIds(sessions, selection.selectedIds).filter(
-      (s) => s.status === SLOT_STATUS.busy,
-    );
-    if (!targets.length) return;
-    runEndSession(
-      targets.map((s) => s.id),
-      targets[0],
-    );
-  };
+  const endSession = (slot) => runEndSession([slot.id], slot);
 
   const runCancelSession = async (targetIds, rowForMessage) => {
     const isBulk = targetIds.length > 1;
@@ -221,23 +185,11 @@ export default function ReceptionSessionPage() {
       await cancelCalendarBooking(slot.id);
     }
 
-    selection.clearSelection();
     reloadView();
     zonesToastSuccess(isBulk ? `تم إلغاء ${targets.length} حجوزات` : "تم إلغاء الحجز.");
   };
 
-  const cancelSession = (slot) => runCancelSession(resolveBulkActionIds(slot.id, selection.selectedIds), slot);
-
-  const handleBulkCancelSession = () => {
-    const targets = filterItemsByIds(sessions, selection.selectedIds).filter(
-      (s) => s.status !== SLOT_STATUS.busy,
-    );
-    if (!targets.length) return;
-    runCancelSession(
-      targets.map((s) => s.id),
-      targets[0],
-    );
-  };
+  const cancelSession = (slot) => runCancelSession([slot.id], slot);
 
   return (
     <div dir="rtl">
@@ -249,21 +201,10 @@ export default function ReceptionSessionPage() {
           <span className="rsess-count">{sessions.length} جلسة</span>
         </div>
 
-        <TableBulkActionBar
-          count={selection.count}
-          onClear={selection.clearSelection}
-          actions={[
-            { label: "بدء المحدد", icon: Play, onClick: handleBulkStartSession },
-            { label: "إنهاء المحدد", icon: Square, onClick: handleBulkEndSession },
-            { label: "إلغاء المحدد", icon: Ban, onClick: handleBulkCancelSession, variant: "danger" },
-          ]}
-        />
-
         <div className="overflow-x-auto">
           <table className="rsess-table">
             <thead>
               <tr>
-                <TableSelectHeaderCell {...selection} />
                 <th>اسم الزبون</th>
                 <th>الجهاز</th>
                 <th>الباقة</th>
@@ -276,7 +217,7 @@ export default function ReceptionSessionPage() {
             <tbody>
               {sessions.length === 0 ? (
                 <tr>
-                  <td colSpan={8} className="rsess-empty">
+                  <td colSpan={7} className="rsess-empty">
                     لا توجد جلسات — سجّل الحضور من جدول الحجوزات.
                   </td>
                 </tr>
@@ -291,13 +232,8 @@ export default function ReceptionSessionPage() {
                   return (
                     <tr
                       key={slot.id}
-                      className={`${isActive ? "rsess-row--active" : ""} ${selectableRowClass(selection.isSelected(slot.id), "")}`}
+                      className={isActive ? "rsess-row--active" : ""}
                     >
-                      <TableSelectRowCell
-                        id={slot.id}
-                        ariaLabel={`تحديد جلسة ${slot.visitorName}`}
-                        {...selection}
-                      />
                       <td className="rsess-guest">{slot.visitorName || "—"}</td>
                       <td className="rsess-device">{device?.name || "—"}</td>
                       <td>{slot.packageName || "—"}</td>

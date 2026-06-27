@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { zonesConfirm, zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import { useManagerPaths } from "../../../shared/tenant/ManagerWorkspaceProvider";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import TournamentsListTable from "../components/TournamentsListTable";
@@ -131,11 +130,8 @@ export default function TournamentsPage() {
   const canCancel = (row) => row.status !== "cancelled" && row.status !== "finished";
 
   return (
-    <ManagerLayout>
-      <PageHeader
-        title="البطولات"
-        description="إنشاء وإدارة البطولات — متزامنة مع تطبيق الزبون."
-      />
+    <>
+    <PageHeader title="البطولات" />
 
       {loadError ? (
         <p className="mb-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-xs font-bold text-red-600 dark:border-red-900/40 dark:bg-red-950/20">
@@ -181,7 +177,6 @@ export default function TournamentsPage() {
         onClose={() => setCreateOpen(false)}
         onSaved={() => reload()}
       />
-
-    </ManagerLayout>
+    </>
   );
 }

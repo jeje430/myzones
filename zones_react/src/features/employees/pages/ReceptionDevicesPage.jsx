@@ -4,13 +4,6 @@ import { useLocation } from "react-router-dom";
 
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
-
 import TablePagination from "../../../shared/components/TablePagination";
 
 import {
@@ -59,8 +52,6 @@ const VIEW_META = {
 
     title: "جميع الأجهزة",
 
-    description: "أجهزة الصالة المضافة من المدير — مرتبطة بالباقات وحالة الصيانة.",
-
     empty: "لا توجد أجهزة مطابقة.",
 
   },
@@ -68,8 +59,6 @@ const VIEW_META = {
   broken: {
 
     title: "الأجهزة المعطلة",
-
-    description: "الأجهزة التي بها عطل مسجّل — مرتبطة بنفس بيانات موظف الصيانة.",
 
     empty: "لا توجد أجهزة معطلة حالياً.",
 
@@ -221,10 +210,6 @@ export default function ReceptionDevicesPage() {
 
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
 
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-
-  const selection = useTableSelection({ items: filtered, pageIds });
-
 
 
   useEffect(() => {
@@ -239,7 +224,7 @@ export default function ReceptionDevicesPage() {
 
     <div className="space-y-4" dir="rtl">
 
-      <PageHeader title={meta.title} description={meta.description} />
+      <PageHeader title={meta.title} />
 
 
 
@@ -277,8 +262,6 @@ export default function ReceptionDevicesPage() {
 
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
 
-                  <TableSelectHeaderCell {...selection} />
-
                   <th className="px-3 py-2.5 font-bold">اسم الجهاز</th>
 
                   <th className="px-3 py-2.5 font-bold">نوع الجهاز</th>
@@ -301,7 +284,7 @@ export default function ReceptionDevicesPage() {
 
                   <tr>
 
-                    <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
 
                       {meta.empty}
 
@@ -317,15 +300,9 @@ export default function ReceptionDevicesPage() {
 
                       key={row.id}
 
-                      className={`${selectableRowClass(selection.isSelected(row.id))} ${
-
-                        isDeviceBroken(row) ? "bg-red-50/20 dark:bg-red-950/10" : ""
-
-                      }`}
+                      className={isDeviceBroken(row) ? "bg-red-50/20 dark:bg-red-950/10" : ""}
 
                     >
-
-                      <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
 
                       <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
 
@@ -373,8 +350,6 @@ export default function ReceptionDevicesPage() {
 
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
 
-                  <TableSelectHeaderCell {...selection} />
-
                   <th className="px-3 py-2.5 font-bold">اسم الجهاز</th>
 
                   <th className="px-3 py-2.5 font-bold">نوع الجهاز</th>
@@ -399,7 +374,7 @@ export default function ReceptionDevicesPage() {
 
                   <tr>
 
-                    <td colSpan={8} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={7} className="px-3 py-10 text-center text-gray-400">
 
                       {meta.empty}
 
@@ -421,11 +396,9 @@ export default function ReceptionDevicesPage() {
 
                         key={row.id}
 
-                        className={`${selectableRowClass(selection.isSelected(row.id))} bg-red-50/30 dark:bg-red-950/10`}
+                        className="bg-red-50/30 dark:bg-red-950/10"
 
                       >
-
-                        <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
 
                         <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
 

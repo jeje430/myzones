@@ -19,8 +19,7 @@ import { getManagerMenu } from "../config/managerNavigation";
 import { clearAuthSession } from "../../features/auth/data/mockUsersStorage";
 import { useManagerPaths } from "../tenant/ManagerWorkspaceProvider";
 
-import PlatformLogo from "./PlatformLogo";
-import { useBranding } from "../context/BrandingContext";
+import SidebarBrandHeader from "./SidebarBrandHeader";
 
 function buildExactPaths(routes) {
   return [
@@ -30,6 +29,7 @@ function buildExactPaths(routes) {
     routes.offers,
     routes.interaction,
     routes.tournaments,
+    routes.tournamentsParticipants,
     routes.finance,
     routes.expenses,
     routes.payments,
@@ -79,17 +79,17 @@ function collectOpenIds(nodes, pathname, acc = {}, search = "", exactPaths = [])
 }
 
 const topLinkClass = ({ isActive }) =>
-  `flex items-center justify-between gap-2 rounded-xl px-3 py-2.5 text-[13px] font-bold transition ${
+  `flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition ${
     isActive
-      ? "bg-[#6B5478] text-white shadow-sm shadow-[#6B5478]/30"
-      : "text-gray-600 hover:bg-[#6B5478]/8 dark:text-gray-300 dark:hover:bg-[#6B5478]/15"
+      ? "bg-[#6B5478] text-white shadow-sm"
+      : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
   }`;
 
 function sidebarMainItemClass(active) {
-  return `flex w-full items-center gap-2.5 rounded-xl px-3 py-2.5 text-[13px] font-bold transition ${
+  return `flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2.5 text-[13px] font-semibold transition ${
     active
-      ? "text-[#6B5478]"
-      : "text-gray-600 hover:bg-[#6B5478]/8 dark:text-gray-300 dark:hover:bg-[#6B5478]/15"
+      ? "bg-[#6B5478]/10 text-[#6B5478] dark:bg-[#6B5478]/20"
+      : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-gray-800"
   }`;
 }
 
@@ -97,15 +97,17 @@ function StandaloneMenuLink({ to, icon: Icon, label, pathname, onNavigate }) {
   const active = pathname === to || pathname.startsWith(`${to}/`);
   return (
     <NavLink to={to} end onClick={onNavigate} className={sidebarMainItemClass(active)}>
-      <Icon size={17} />
-      {label}
+      <span className="flex items-center gap-2.5">
+        <Icon size={18} strokeWidth={2} />
+        {label}
+      </span>
     </NavLink>
   );
 }
 
 function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search }) {
   return (
-    <div className={`space-y-1 ${depth > 0 ? "mt-1 pe-3" : ""}`}>
+    <div className={`space-y-0.5 ${depth > 0 ? "mt-0.5 pe-2" : ""}`}>
       {items.map((item) => {
         const key = item.id || item.path || item.label;
 
@@ -115,10 +117,10 @@ function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search 
               key={key}
               type="button"
               onClick={onNavigate.logout}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold text-red-600 transition hover:bg-red-50 dark:text-red-400 dark:hover:bg-red-950/30"
               style={{ paddingInlineStart: `${12 + depth * 10}px` }}
             >
-              <LogOut size={14} />
+              <LogOut size={15} />
               {item.label}
             </button>
           );
@@ -137,10 +139,10 @@ function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search 
                     end
                     onClick={onNavigate.close}
                     className={({ isActive }) =>
-                      `flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
+                      `flex flex-1 items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                         isActive || active
-                          ? "bg-[#6B5478]/12 text-[#6B5478]"
-                          : "text-gray-500 hover:bg-[#6B5478]/8 dark:text-gray-400"
+                          ? "bg-[#6B5478]/10 text-[#6B5478]"
+                          : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                       }`
                     }
                     style={{ paddingInlineStart: `${12 + depth * 10}px` }}
@@ -152,8 +154,10 @@ function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search 
                   <button
                     type="button"
                     onClick={() => toggle(id)}
-                    className={`flex flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
-                      active ? "text-[#6B5478]" : "text-gray-500 hover:bg-[#6B5478]/8 dark:text-gray-400"
+                    className={`flex flex-1 items-center justify-between gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
+                      active
+                        ? "text-[#6B5478]"
+                        : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
                     }`}
                     style={{ paddingInlineStart: `${12 + depth * 10}px` }}
                   >
@@ -161,7 +165,7 @@ function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search 
                       <span className="h-1.5 w-1.5 rounded-full bg-current opacity-60" />
                       {item.label}
                     </span>
-                    <ChevronDown size={13} className={`transition ${isOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown size={14} className={`transition ${isOpen ? "rotate-180" : ""}`} />
                   </button>
                 )}
                 {item.path ? (
@@ -171,7 +175,7 @@ function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search 
                     className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
                     aria-label="توسيع"
                   >
-                    <ChevronDown size={13} className={`transition ${isOpen ? "rotate-180" : ""}`} />
+                    <ChevronDown size={14} className={`transition ${isOpen ? "rotate-180" : ""}`} />
                   </button>
                 ) : null}
               </div>
@@ -197,10 +201,10 @@ function NestedItems({ items, depth, open, toggle, onNavigate, pathname, search 
             end
             onClick={onNavigate.close}
             className={({ isActive }) =>
-              `flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition ${
+              `flex items-center gap-2 rounded-lg px-3 py-2 text-xs font-semibold transition ${
                 isActive
-                  ? "bg-[#6B5478]/12 text-[#6B5478]"
-                  : "text-gray-500 hover:bg-[#6B5478]/8 dark:text-gray-400"
+                  ? "bg-[#6B5478]/10 text-[#6B5478]"
+                  : "text-gray-500 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800"
               }`
             }
             style={{ paddingInlineStart: `${12 + depth * 10}px` }}
@@ -220,16 +224,12 @@ function MenuGroup({ group, icon: Icon, open, toggle, onNavigate, pathname, sear
   const active = nodeActive(group, pathname, search);
   return (
     <div>
-      <button
-        type="button"
-        onClick={() => toggle(id)}
-        className={`${sidebarMainItemClass(active)} justify-between`}
-      >
+      <button type="button" onClick={() => toggle(id)} className={sidebarMainItemClass(active)}>
         <span className="flex items-center gap-2.5">
-          <Icon size={17} />
+          <Icon size={18} strokeWidth={2} />
           {group.label}
         </span>
-        <ChevronDown size={15} className={`transition ${isOpen ? "rotate-180" : ""}`} />
+        <ChevronDown size={15} className={`shrink-0 transition ${isOpen ? "rotate-180" : ""}`} />
       </button>
       {isOpen ? (
         <NestedItems
@@ -246,8 +246,7 @@ function MenuGroup({ group, icon: Icon, open, toggle, onNavigate, pathname, sear
   );
 }
 
-export default function ManagerSidebar({ onNavigate }) {
-  const { platformName } = useBranding();
+export default function ManagerSidebar({ onNavigate, onMenuToggle }) {
   const location = useLocation();
   const navigate = useNavigate();
   const pathname = location.pathname;
@@ -262,6 +261,7 @@ export default function ManagerSidebar({ onNavigate }) {
       MANAGER_MENU.staff,
       MANAGER_MENU.faults,
       MANAGER_MENU.alerts,
+      MANAGER_MENU.tournaments,
       MANAGER_MENU.finance,
     ],
     [MANAGER_MENU],
@@ -307,26 +307,16 @@ export default function ManagerSidebar({ onNavigate }) {
   const navHandlers = { close: onNavigate, logout: handleLogout };
 
   return (
-    <aside
-      className="flex h-full w-64 shrink-0 flex-col border-s border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
+    <div
+      className="relative flex h-full w-full flex-col overflow-visible border-s border-gray-200 bg-white shadow-xl dark:border-gray-800 dark:bg-gray-900 lg:shadow-none"
       dir="rtl"
     >
-      <div className="flex items-center gap-3 bg-gradient-to-l from-[#6B5478] to-[#836a90] px-5 py-5">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-white shadow-sm ring-1 ring-white/40">
-          <PlatformLogo variant="avatar" />
-        </span>
-        <div className="text-white">
-          <p className="text-sm font-extrabold leading-tight">{platformName}</p>
-          <p className="text-[11px] font-semibold text-white/75">لوحة تحكم المدير</p>
-        </div>
-      </div>
+      <SidebarBrandHeader subtitle="لوحة المدير" onMenuToggle={onMenuToggle} />
 
-      <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-4">
+      <nav className="flex-1 space-y-0.5 overflow-y-auto px-3 py-3">
         <NavLink to={MANAGER_MENU.dashboard.path} onClick={onNavigate} className={topLinkClass}>
-          <span className="flex items-center gap-2.5">
-            <Home size={17} />
-            {MANAGER_MENU.dashboard.label}
-          </span>
+          <Home size={18} strokeWidth={2} />
+          {MANAGER_MENU.dashboard.label}
         </NavLink>
 
         <MenuGroup
@@ -385,12 +375,14 @@ export default function ManagerSidebar({ onNavigate }) {
           onNavigate={onNavigate}
         />
 
-        <StandaloneMenuLink
-          to={MANAGER_MENU.tournaments.path}
+        <MenuGroup
+          group={MANAGER_MENU.tournaments}
           icon={Trophy}
-          label={MANAGER_MENU.tournaments.label}
+          open={open}
+          toggle={toggle}
+          onNavigate={navHandlers}
           pathname={pathname}
-          onNavigate={onNavigate}
+          search={search}
         />
 
         <MenuGroup
@@ -417,6 +409,6 @@ export default function ManagerSidebar({ onNavigate }) {
       <div className="border-t border-gray-100 px-3 py-3 dark:border-gray-800">
         <p className="text-center text-[10px] text-gray-400">GameZones © 2026</p>
       </div>
-    </aside>
+    </div>
   );
 }

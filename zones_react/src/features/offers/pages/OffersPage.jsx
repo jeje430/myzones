@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { CircleCheck, Power, Tag, Trash2 } from "lucide-react";
 import { zonesConfirm, zonesToastSuccess, zonesToastWarning } from "../../../shared/utils/zonesAlerts";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
@@ -11,7 +10,7 @@ import OfferDetailsModal from "../components/OfferDetailsModal";
 import OfferRowActions from "../components/OfferRowActions";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -19,8 +18,9 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import { refreshHallCatalogFromApi } from "../../devices-packages/data/hallCatalogSync";
 import { loadActivePackages, PACKAGES_STORAGE_EVENT } from "../../devices-packages/data/packagesStorage";
 import {
@@ -43,6 +43,7 @@ import {
 } from "../data/offersStorage";
 
 const PAGE_SIZE = 5;
+const TABLE_DATA_COLS = 9;
 
 function StatusBadge({ active }) {
   return (
@@ -114,7 +115,8 @@ export default function OffersPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: offersList, pageIds });
+  const allIds = useMemo(() => filtered.map((row) => row.id), [filtered]);
+  const selection = useTableSelectionMode({ items: filtered, pageIds, allIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -156,7 +158,7 @@ export default function OffersPage() {
         : await updateManagerOffer(detailOffer.id, patch);
 
     if (!result.ok) {
-      zonesToastWarning(result.error || "تعذّر حفظ العرض");
+      zonesToastWarning(result.error || "تعذر حفظ العرض");
       return;
     }
 
@@ -186,6 +188,7 @@ export default function OffersPage() {
     if (!confirmed) return;
 
     let success = 0;
+    let lastError = "";
     for (const row of targets) {
       const result = await updateManagerOffer(row.id, {
         name: row.name,
@@ -197,14 +200,15 @@ export default function OffersPage() {
         isActive,
       });
       if (result.ok) success += 1;
+      else if (result.error) lastError = result.error;
     }
 
     if (success === 0) {
-      zonesToastWarning("تعذّر تحديث الحالة");
+      zonesToastWarning(lastError || "تعذر تحديث الحالة — تحقق أن XAMPP (Apache + MySQL) شغّال");
       return;
     }
 
-    selection.clearSelection();
+    selection.exitSelectionMode();
     await reloadOffers();
     zonesToastSuccess(
       isBulk ? `تم ${isActive ? "تفعيل" : "تعطيل"} ${success} من ${targets.length} عروض` : "تم تحديث الحالة",
@@ -246,11 +250,11 @@ export default function OffersPage() {
     }
 
     if (success === 0) {
-      zonesToastWarning("تعذّر حذف العرض");
+      zonesToastWarning("تعذر حذف العرض");
       return;
     }
 
-    selection.clearSelection();
+    selection.exitSelectionMode();
     await reloadOffers();
     zonesToastSuccess(isBulk ? `تم حذف ${success} من ${targets.length} عروض` : "تم الحذف");
   };
@@ -264,11 +268,8 @@ export default function OffersPage() {
   };
 
   return (
-    <ManagerLayout>
-      <PageHeader
-        title="إدارة العروض"
-        description="ربط كل عرض بباقة مع نسبة خصم — يُحسب سعر العرض تلقائياً ويظهر في تطبيق الزبون."
-      />
+    <>
+    <PageHeader title="إدارة العروض" />
 
       <div className="space-y-5">
         <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -291,8 +292,12 @@ export default function OffersPage() {
             </Button>
           </div>
 
-          <TableBulkActionBar
+          <TableSelectionModeBar
+            selectionMode={selection.selectionMode}
+            onEnter={selection.enterSelectionMode}
+            onExit={selection.exitSelectionMode}
             count={selection.count}
+            totalCount={filtered.length}
             onClear={selection.clearSelection}
             actions={[
               { label: "تفعيل المحدد", icon: Power, onClick: () => handleBulkToggleActive(true) },
@@ -320,7 +325,7 @@ export default function OffersPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {loading ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                       جاري تحميل العروض...
                     </td>
                   </tr>
@@ -330,7 +335,7 @@ export default function OffersPage() {
                     const pkgPrice = getOfferPackagePrice(row.packageId, packages);
                     const offerPrice = calcOfferPrice(pkgPrice, row.discountPercent);
                     return (
-                      <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
+                      <tr key={row.id} className={selection.selectionMode ? selectableRowClass(selection.isSelected(row.id)) : undefined}>
                         <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.name}`} {...selection} />
                         <td className="px-3 py-3 font-bold text-gray-800 dark:text-gray-100">{row.name}</td>
                         <td className="px-3 py-3 text-gray-600 dark:text-gray-300">
@@ -363,7 +368,7 @@ export default function OffersPage() {
                   })}
                 {!loading && paged.length === 0 ? (
                   <tr>
-                    <td colSpan={10} className="px-3 py-10 text-center text-gray-400">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
                       لا توجد عروض مطابقة.
                     </td>
                   </tr>
@@ -389,6 +394,6 @@ export default function OffersPage() {
         onClose={closeModal}
         onSave={handleSave}
       />
-    </ManagerLayout>
+    </>
   );
 }

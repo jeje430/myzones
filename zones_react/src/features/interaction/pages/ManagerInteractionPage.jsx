@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { MessageCircle, MessageSquare, MessagesSquare } from "lucide-react";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
@@ -127,12 +126,9 @@ export default function ManagerInteractionPage() {
   };
 
   return (
-    <ManagerLayout>
-      <div className="space-y-4" dir="rtl">
-        <PageHeader
-          title="تفاعل"
-          description="تعليقات الزبائن من التطبيق — ردّ باحتراف أو احذف ما لا يناسب صالةك."
-        />
+    <>
+    <div className="space-y-4" dir="rtl">
+        <PageHeader title="تفاعل" />
 
         <div className="grid gap-4 sm:grid-cols-3">
           <KpiCard
@@ -140,21 +136,18 @@ export default function ManagerInteractionPage() {
             value={String(stats.total)}
             icon={MessagesSquare}
             tone="primary"
-            hint="كل ما وصل من تطبيق الزبون"
           />
           <KpiCard
             label="بانتظار الرد"
             value={String(stats.pending)}
             icon={MessageCircle}
             tone="amber"
-            hint="تحتاج ردك الآن"
           />
           <KpiCard
             label="تم الرد"
             value={String(stats.replied)}
             icon={MessageSquare}
             tone="green"
-            hint="ردود منشورة في التطبيق"
           />
         </div>
 
@@ -243,6 +236,6 @@ export default function ManagerInteractionPage() {
         onClose={closeReply}
         onSave={handleSaveReply}
       />
-    </ManagerLayout>
+    </>
   );
 }

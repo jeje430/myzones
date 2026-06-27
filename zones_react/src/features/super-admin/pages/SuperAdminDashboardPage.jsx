@@ -1,16 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { Building2, Eye, UserPlus } from "lucide-react";
 import IconGlyph from "../../../shared/components/ui/IconGlyph";
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
-import {
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import { useTableSelection } from "../../../shared/hooks/useTableSelection";
 import PlatformSummaryPanel from "../components/PlatformSummaryPanel";
 import { getSuperAdminSession } from "../data/superAdminAuth";
 import { fetchDashboardView, getLocalDashboardData } from "../data/superAdminDashboardData";
@@ -68,8 +62,6 @@ export default function SuperAdminDashboardPage() {
   }, []);
 
   const recentRequests = view?.recentRequests ?? [];
-  const pageIds = useMemo(() => recentRequests.map((r) => r.id), [recentRequests]);
-  const selection = useTableSelection({ items: recentRequests, pageIds });
 
   if (loading || !view) {
     return (
@@ -121,7 +113,6 @@ export default function SuperAdminDashboardPage() {
             <table className="w-full min-w-[440px] text-right text-xs">
               <thead>
                 <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                  <TableSelectHeaderCell {...selection} />
                   <th className="px-4 py-2.5 font-bold">اسم الصالة</th>
                   <th className="px-4 py-2.5 font-bold">المدينة</th>
                   <th className="px-4 py-2.5 font-bold">الهاتف التجاري</th>
@@ -132,14 +123,13 @@ export default function SuperAdminDashboardPage() {
               <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
                 {recentRequests.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-gray-400">
+                    <td colSpan={5} className="px-4 py-8 text-center text-gray-400">
                       لا توجد طلبات معلقة حالياً.
                     </td>
                   </tr>
                 ) : null}
                 {recentRequests.map((r) => (
-                  <tr key={r.id} className={selectableRowClass(selection.isSelected(r.id))}>
-                    <TableSelectRowCell id={r.id} ariaLabel={`تحديد ${r.hallName}`} {...selection} />
+                  <tr key={r.id}>
                     <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">{r.hallName}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300">{r.city}</td>
                     <td className="px-4 py-3 text-gray-600 dark:text-gray-300" dir="ltr">

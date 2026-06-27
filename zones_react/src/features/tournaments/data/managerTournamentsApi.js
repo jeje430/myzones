@@ -144,6 +144,38 @@ export async function cancelManagerTournament(tournamentId) {
   }
 }
 
+export async function fetchAllTournamentParticipantsRows() {
+  try {
+    const tournamentsResult = await fetchManagerTournaments();
+    if (!tournamentsResult.ok) {
+      return { ok: false, error: tournamentsResult.error, rows: [] };
+    }
+
+    const rows = [];
+    for (const tournament of tournamentsResult.tournaments) {
+      const result = await fetchTournamentParticipants(tournament.id);
+      if (!result.ok) continue;
+
+      result.participants.forEach((participant, index) => {
+        rows.push({
+          id: `${tournament.id}-${participant.id ?? index}`,
+          slotIndex: index + 1,
+          fullName: participant.name || "—",
+          email: participant.email || "—",
+          phone: participant.phone || "—",
+          tournamentName: tournament.name,
+          registeredAt: participant.registered_at || participant.registeredAt,
+          isWinner: Boolean(participant.is_winner ?? participant.isWinner),
+        });
+      });
+    }
+
+    return { ok: true, rows };
+  } catch (error) {
+    return { ok: false, error: mapApiErrorMessage(error), rows: [] };
+  }
+}
+
 export async function fetchTournamentParticipants(tournamentId) {
   try {
     const { data } = await apiClient.get(`/manager/tournaments/${tournamentId}/participants`);

@@ -4,17 +4,7 @@ import { zonesConfirm, zonesToastSuccess } from "../../../shared/utils/zonesAler
 import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
-import {
-  TableBulkActionBar,
-  TableSelectHeaderCell,
-  TableSelectRowCell,
-  selectableRowClass,
-} from "../../../shared/components/ui/TableSelection";
-import {
-  filterItemsByIds,
-  resolveBulkActionIds,
-  useTableSelection,
-} from "../../../shared/hooks/useTableSelection";
+import { filterItemsByIds } from "../../../shared/hooks/useTableSelection";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import SearchBar from "../../super-admin/components/ui/SearchBar";
 import TablePagination from "../../../shared/components/TablePagination";
@@ -106,8 +96,6 @@ export default function ReceptionBookingsPage() {
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-  const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: bookings, pageIds });
 
   useEffect(() => {
     setPage(1);
@@ -152,7 +140,6 @@ export default function ReceptionBookingsPage() {
 
     if (success === 0) return;
 
-    selection.clearSelection();
     reloadView();
     zonesToastSuccess(
       isBulk ? `تم تسجيل حضور ${success} من ${targets.length} حجوزات` : "انتقل الحجز إلى صفحة الجلسات.",
@@ -160,13 +147,7 @@ export default function ReceptionBookingsPage() {
     );
   };
 
-  const handleCheckIn = (row) => runCheckIn(resolveBulkActionIds(row.id, selection.selectedIds), row);
-
-  const handleBulkCheckIn = () => {
-    const targets = filterItemsByIds(bookings, selection.selectedIds);
-    if (!targets.length) return;
-    runCheckIn(selection.selectedIds, targets[0]);
-  };
+  const handleCheckIn = (row) => runCheckIn([row.id], row);
 
   const openVoucher = (row) => {
     const device = deviceMap.get(row.deviceId);
@@ -225,17 +206,10 @@ export default function ReceptionBookingsPage() {
           />
         </div>
 
-        <TableBulkActionBar
-          count={selection.count}
-          onClear={selection.clearSelection}
-          actions={[{ label: "تسجيل حضور المحدد", icon: UserCheck, onClick: handleBulkCheckIn }]}
-        />
-
         <div className="overflow-x-auto">
           <table className="w-full min-w-[1180px] text-right text-xs">
             <thead>
               <tr className="border-b border-gray-100 text-gray-500 dark:border-gray-800 dark:text-gray-400">
-                <TableSelectHeaderCell {...selection} />
                 <th className="px-3 py-2.5 font-bold">رقم الحجز</th>
                 <th className="px-3 py-2.5 font-bold">نوع الحجز</th>
                 <th className="px-3 py-2.5 font-bold">الزبون</th>
@@ -252,7 +226,7 @@ export default function ReceptionBookingsPage() {
             <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
               {paged.length === 0 ? (
                 <tr>
-                  <td colSpan={12} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={11} className="px-3 py-10 text-center text-gray-400">
                     لا توجد حجوزات في هذا اليوم.
                   </td>
                 </tr>
@@ -260,12 +234,7 @@ export default function ReceptionBookingsPage() {
                 paged.map((row) => {
                   const device = deviceMap.get(String(row.deviceId));
                   return (
-                    <tr key={row.id} className={selectableRowClass(selection.isSelected(row.id))}>
-                      <TableSelectRowCell
-                        id={row.id}
-                        ariaLabel={`تحديد حجز ${row.bookingCode}`}
-                        {...selection}
-                      />
+                    <tr key={row.id}>
                       <td className="px-3 py-3 font-extrabold text-[#6B5478]" dir="ltr">
                         {row.bookingCode}
                       </td>

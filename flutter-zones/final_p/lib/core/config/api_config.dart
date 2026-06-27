@@ -10,7 +10,7 @@ class ApiConfig {
   static const String herdHost = 'zones-backend-laravel.test';
 
   /// PC LAN IP — same Wi‑Fi as the phone. Update when your network changes.
-  static const String localDevIp = '192.168.1.116';
+  static const String localDevIp = '192.168.1.44';
 
   /// Resolved public API root (no trailing slash, no `/api` suffix).
   static String? get _publicRoot {

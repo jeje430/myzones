@@ -7,7 +7,7 @@ export const inputClassName = cn(
   "border-gray-300 bg-white text-gray-800",
   "focus:border-[#6B5478] focus:ring-2 focus:ring-[#6B5478]/20",
   "disabled:cursor-not-allowed disabled:opacity-50",
-  "dark:border-gray-700 dark:bg-gray-800 dark:text-gray-100",
+  "dark:border-[rgba(167,139,189,0.45)] dark:bg-gray-800 dark:text-gray-100",
   "placeholder:text-gray-400/75 dark:placeholder:text-gray-500/65",
 );
 

@@ -41,7 +41,7 @@ import IconButton from "../../../shared/components/ui/IconButton";
 import TableActionsGroup from "../../../shared/components/ui/TableActionsGroup";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -49,13 +49,15 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import { cn } from "../../../lib/utils";
 
 
 
 const PAGE_SIZE = 4;
+const TABLE_DATA_COLS = 5;
 
 const REQUEST_FILTERS = {
   pending: {
@@ -201,7 +203,8 @@ export default function PendingRequestsPage() {
   );
 
   const pageIds = useMemo(() => pageRequests.map((r) => r.id), [pageRequests]);
-  const selection = useTableSelection({ items: filteredRequests, pageIds });
+  const allIds = useMemo(() => filteredRequests.map((r) => r.id), [filteredRequests]);
+  const selection = useTableSelectionMode({ items: filteredRequests, pageIds, allIds });
 
   const rangeFrom = filteredRequests.length === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
 
@@ -257,7 +260,7 @@ export default function PendingRequestsPage() {
     );
 
     setAcceptReq(null);
-    selection.clearSelection();
+    selection.exitSelectionMode();
 
     if (result.mailError) {
       zonesToastError(`تعذر إرسال البريد: ${result.mailError.slice(0, 120)}`);
@@ -289,7 +292,7 @@ export default function PendingRequestsPage() {
     );
 
     setRejectReq(null);
-    selection.clearSelection();
+    selection.exitSelectionMode();
 
     zonesToastSuccess(`تم رفض الطلب وإرسال إشعار إلى ${result.request.managerEmail}`);
     showRejectEmailPreview();
@@ -322,7 +325,7 @@ export default function PendingRequestsPage() {
       }
     }
 
-    selection.clearSelection();
+    selection.exitSelectionMode();
     if (success) zonesToastSuccess(`تم رفض ${success} من ${targets.length} طلبات`);
   };
 
@@ -426,8 +429,12 @@ export default function PendingRequestsPage() {
 
         </div>
 
-        <TableBulkActionBar
+        <TableSelectionModeBar
+          selectionMode={selection.selectionMode}
+          onEnter={selection.enterSelectionMode}
+          onExit={selection.exitSelectionMode}
           count={selection.count}
+          totalCount={filteredRequests.length}
           onClear={selection.clearSelection}
           actions={bulkActions}
         />
@@ -464,7 +471,7 @@ export default function PendingRequestsPage() {
 
                 return (
 
-                  <tr key={r.id} className={selectableRowClass(selection.isSelected(r.id))}>
+                  <tr key={r.id} className={selection.selectionMode ? selectableRowClass(selection.isSelected(r.id)) : undefined}>
 
                     <TableSelectRowCell id={r.id} ariaLabel={`تحديد ${r.hallName}`} {...selection} />
 
@@ -546,7 +553,7 @@ export default function PendingRequestsPage() {
 
                 <tr>
 
-                  <td colSpan={6} className="px-3 py-10 text-center text-gray-400">
+                  <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-3 py-10 text-center text-gray-400">
 
                     لا توجد طلبات في هذه الفئة.
 

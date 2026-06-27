@@ -15,6 +15,7 @@ export function getManagerRoutes(managerId) {
     employeesArchive: `${base}/employees/archive`,
     offers: `${base}/offers`,
     tournaments: `${base}/tournaments`,
+    tournamentsParticipants: `${base}/tournaments/participants`,
     finance: `${base}/finance`,
     expenses: `${base}/finance/expenses`,
     payments: `${base}/finance/payments`,
@@ -88,14 +89,21 @@ export function getManagerMenu(managerId) {
     },
     offers: { label: "عروض", path: R.offers },
     interaction: { label: "تفاعل", path: R.interaction },
-    tournaments: { label: "بطولات", path: R.tournaments },
+    tournaments: {
+      id: "tournaments",
+      label: "البطولات",
+      children: [
+        { label: "عرض البطولات", path: R.tournaments },
+        { label: "قائمة المشاركين", path: R.tournamentsParticipants },
+      ],
+    },
     finance: {
       id: "finance",
       label: "إدارة مالية",
       children: [
         { label: "بيانات المصروف", path: R.expenses },
         { label: "المدفوعات", path: R.payments },
-        { label: "التحليل", path: R.analysis },
+        { label: "تحليل مالي", path: R.analysis },
       ],
     },
   };

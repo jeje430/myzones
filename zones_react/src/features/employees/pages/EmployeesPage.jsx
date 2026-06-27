@@ -1,13 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Archive, Users, XCircle } from "lucide-react";
-import ManagerLayout from "../../../shared/layouts/ManagerLayout";
 import TablePagination from "../../../shared/components/TablePagination";
 import PageHeader from "../../super-admin/components/ui/PageHeader";
 import KpiCard from "../../super-admin/components/ui/KpiCard";
 import { TABLE_ACTIONS_TD, TABLE_ACTIONS_TH } from "../../../shared/components/ui/tableActionStyles";
 import {
-  TableBulkActionBar,
+  TableSelectionModeBar,
   TableSelectHeaderCell,
   TableSelectRowCell,
   selectableRowClass,
@@ -15,13 +14,15 @@ import {
 import {
   filterItemsByIds,
   resolveBulkActionIds,
-  useTableSelection,
+  tableSelectColSpan,
 } from "../../../shared/hooks/useTableSelection";
+import { useTableSelectionMode } from "../../../shared/hooks/useTableSelectionMode";
 import {
   StaffRowActions,
-  StaffSearchToolbar,
+  StaffAddButton,
   StaffStatusBadge,
 } from "../components/EmployeeStaffTableHelpers";
+import StaffFilterSearchToolbar from "../../../shared/components/StaffFilterSearchToolbar";
 import ReceptionStaffDetailsModal from "../components/ReceptionStaffDetailsModal";
 import ReceptionStaffEditModal from "../components/ReceptionStaffEditModal";
 import SendEmployeeInviteModal from "../components/SendEmployeeInviteModal";
@@ -46,6 +47,7 @@ import { confirmAction, toastSuccess } from "../utils/employeeConfirm";
 import { zonesToastError, zonesToastSuccess } from "../../../shared/utils/zonesAlerts";
 
 const PAGE_SIZE = 8;
+const TABLE_DATA_COLS = 8;
 const ROLE_TABS = [
   { key: "all", label: "الكل" },
   { key: "reception", label: "استقبال" },
@@ -113,7 +115,8 @@ export default function EmployeesPage() {
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const paged = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const pageIds = useMemo(() => paged.map((row) => row.id), [paged]);
-  const selection = useTableSelection({ items: activeStaff, pageIds });
+  const allIds = useMemo(() => filtered.map((row) => row.id), [filtered]);
+  const selection = useTableSelectionMode({ items: filtered, pageIds, allIds });
 
   useEffect(() => {
     if (page > totalPages) setPage(totalPages);
@@ -165,6 +168,7 @@ export default function EmployeesPage() {
     }
 
     selection.clearSelection();
+    selection.exitSelectionMode();
     await toastSuccess(
       "تمت الأرشفة",
       isBulk ? `تم أرشفة ${targets.length} موظفين.` : "تم تحديث حالة الموظف.",
@@ -203,6 +207,7 @@ export default function EmployeesPage() {
 
     setRows(loadEmployees());
     selection.clearSelection();
+    selection.exitSelectionMode();
     zonesToastSuccess(isBulk ? `تم إلغاء ${targets.length} دعوات` : "تم إلغاء الدعوة");
   };
 
@@ -223,9 +228,9 @@ export default function EmployeesPage() {
   };
 
   return (
-    <ManagerLayout title="الموظفين">
-      <div className="space-y-4" dir="rtl">
-        <PageHeader title="الموظفين" description="إدارة موظفي الصالة — استقبال وصيانة" />
+    <>
+    <div className="space-y-4" dir="rtl">
+        <PageHeader title="الموظفين" />
 
         <div className="grid gap-3 sm:grid-cols-3">
           <KpiCard label="إجمالي الموظفين" value={activeStaff.length} icon={Users} />
@@ -241,35 +246,27 @@ export default function EmployeesPage() {
           />
         </div>
 
-        <div className="flex flex-wrap gap-2">
-          {ROLE_TABS.map((tab) => (
-            <button
-              key={tab.key}
-              type="button"
-              onClick={() => setRoleTab(tab.key)}
-              className={`rounded-xl px-4 py-2 text-xs font-bold transition ${
-                roleTab === tab.key
-                  ? "bg-[#6B5478] text-white"
-                  : "border border-gray-200 text-gray-600 dark:border-gray-700 dark:text-gray-300"
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-
-        <StaffSearchToolbar
-          search={search}
-          onSearchChange={(v) => {
-            setSearch(v);
-            setPage(1);
-          }}
-          onAddClick={() => setAddModalOpen(true)}
-        />
-
         <div className="overflow-hidden rounded-2xl border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
-          <TableBulkActionBar
+          <StaffFilterSearchToolbar
+            filters={ROLE_TABS}
+            activeFilter={roleTab}
+            onFilterChange={setRoleTab}
+            search={search}
+            onSearchChange={(v) => {
+              setSearch(v);
+              setPage(1);
+            }}
+            searchPlaceholder="بحث بالاسم أو البريد أو الهاتف..."
+            filterAriaLabel="تصفية الموظفين"
+            actions={<StaffAddButton onClick={() => setAddModalOpen(true)} />}
+            embedded
+          />
+          <TableSelectionModeBar
+            selectionMode={selection.selectionMode}
+            onEnter={selection.enterSelectionMode}
+            onExit={selection.exitSelectionMode}
             count={selection.count}
+            totalCount={filtered.length}
             onClear={selection.clearSelection}
             actions={[
               { label: "أرشفة المحدد", icon: Archive, onClick: handleBulkArchive, variant: "dangerOutline" },
@@ -294,13 +291,13 @@ export default function EmployeesPage() {
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-gray-400">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-4 py-10 text-center text-gray-400">
                       جاري تحميل الموظفين...
                     </td>
                   </tr>
                 ) : paged.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-10 text-center text-gray-500">
+                    <td colSpan={tableSelectColSpan(TABLE_DATA_COLS, selection.selectionMode)} className="px-4 py-10 text-center text-gray-500">
                       لا يوجد موظفين مطابقون.
                     </td>
                   </tr>
@@ -308,10 +305,14 @@ export default function EmployeesPage() {
                   paged.map((row) => (
                     <tr
                       key={row.id}
-                      className={selectableRowClass(
-                        selection.isSelected(row.id),
-                        "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80",
-                      )}
+                      className={
+                        selection.selectionMode
+                          ? selectableRowClass(
+                              selection.isSelected(row.id),
+                              "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80",
+                            )
+                          : "border-b border-gray-50 transition hover:bg-[#6B5478]/5 dark:border-gray-800/80"
+                      }
                     >
                       <TableSelectRowCell id={row.id} ariaLabel={`تحديد ${row.fullName}`} {...selection} />
                       <td className="px-4 py-3 font-bold text-gray-800 dark:text-gray-100">
@@ -394,6 +395,6 @@ export default function EmployeesPage() {
         onClose={() => setAddModalOpen(false)}
         onSent={onInviteSent}
       />
-    </ManagerLayout>
+    </>
   );
 }

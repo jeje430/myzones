@@ -5,9 +5,8 @@ export default function ReceptionTournamentDetailsPage() {
   const { routes } = useReceptionEmployeeRoutes();
   const tournamentRoutes = {
     tournaments: routes.tournaments,
-    tournamentsData: routes.tournamentsData,
     participants: (id) => routes.tournamentParticipants(id),
     bracket: (id) => routes.tournamentBracket(id),
   };
-  return <TournamentDetailsSection routes={tournamentRoutes} />;
+  return <TournamentDetailsSection routes={tournamentRoutes} readOnly />;
 }

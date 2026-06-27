@@ -1,11 +1,15 @@
-import { useState } from "react";
+import { Outlet } from "react-router-dom";
 import ManagerSidebar from "../components/ManagerSidebar";
 import ManagerTopBar from "../components/ManagerTopBar";
+import SidebarEdgeToggle from "../components/SidebarEdgeToggle";
 import useActiveSessionGuard from "../hooks/useActiveSessionGuard";
+import useSidebarOpen from "../hooks/useSidebarOpen";
+import { useSidebarMobileClose } from "../hooks/useSidebarMobileClose";
 
-export default function ManagerLayout({ children, title, description }) {
+export default function ManagerLayout() {
   useActiveSessionGuard();
-  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const { sidebarOpen, toggleSidebar, closeSidebar } = useSidebarOpen("zones-manager-sidebar-open");
+  const closeSidebarOnMobile = useSidebarMobileClose(closeSidebar);
 
   return (
     <div
@@ -13,33 +17,29 @@ export default function ManagerLayout({ children, title, description }) {
       style={{ fontFamily: "Cairo, 'Segoe UI', Tahoma, sans-serif" }}
       dir="rtl"
     >
-      <div
-        className={`fixed inset-y-0 end-0 z-50 transform transition lg:static lg:translate-x-0 ${
-          sidebarOpen ? "translate-x-0" : "translate-x-full lg:translate-x-0"
-        }`}
-      >
-        <ManagerSidebar onNavigate={() => setSidebarOpen(false)} />
-      </div>
       {sidebarOpen ? (
         <button
           type="button"
-          className="fixed inset-0 z-40 bg-black/40 lg:hidden"
-          onClick={() => setSidebarOpen(false)}
+          className="fixed inset-0 z-40 bg-black/50 backdrop-blur-[1px] lg:hidden"
+          onClick={closeSidebar}
           aria-label="إغلاق القائمة"
         />
       ) : null}
+
+      {!sidebarOpen ? <SidebarEdgeToggle onMenuToggle={toggleSidebar} /> : null}
+
+      <aside
+        className={`relative overflow-visible fixed inset-y-0 end-0 z-50 w-64 shrink-0 transform transition-transform duration-300 ease-in-out lg:static lg:translate-x-0 ${
+          sidebarOpen ? "translate-x-0" : "translate-x-full lg:hidden"
+        }`}
+      >
+        <ManagerSidebar onNavigate={closeSidebarOnMobile} onMenuToggle={toggleSidebar} />
+      </aside>
+
       <div className="flex min-w-0 flex-1 flex-col">
-        <ManagerTopBar onMenuClick={() => setSidebarOpen(true)} />
+        <ManagerTopBar />
         <main className="flex-1 p-4 md:p-6">
-          {title ? (
-            <div className="mb-5">
-              <h1 className="text-lg font-extrabold text-gray-900 dark:text-white">{title}</h1>
-              {description ? (
-                <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">{description}</p>
-              ) : null}
-            </div>
-          ) : null}
-          {children}
+          <Outlet />
         </main>
       </div>
     </div>

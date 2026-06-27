@@ -225,9 +225,6 @@ class _TournamentHomeDetailsScreenState extends State<TournamentHomeDetailsScree
   Widget _buildContent(Tournament tournament, Color muted) {
     final rules = tournament.matchRules.split('\n').where((l) => l.trim().isNotEmpty);
     final deadline = tournament.registrationDeadline;
-    final withdrawalNote = tournament.isRegistrationOpen
-        ? 'يمكنك الاشتراك أو إلغاء الاشتراك حتى ${_formatDate(deadline)}'
-        : 'انتهت مهلة الاشتراك والانسحاب';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 120),
@@ -286,15 +283,7 @@ class _TournamentHomeDetailsScreenState extends State<TournamentHomeDetailsScree
             'تاريخ انتهاء مهلة المشاركة',
             _formatDate(deadline),
           ),
-          Padding(
-            padding: const EdgeInsets.only(bottom: 10, top: 2),
-            child: Text(
-              'آخر موعد يسمح فيه بالاشتراك أو إلغاء الاشتراك',
-              style: GoogleFonts.cairo(fontSize: 11, color: muted, height: 1.4),
-            ),
-          ),
           _infoRow('مدة التأخير المسموحة', '${tournament.delayMinutes} دقيقة'),
-          _infoRow('الانسحاب', withdrawalNote, multiline: true),
           const SizedBox(height: 16),
           Text(
             'قواعد البطولة',

@@ -8,5 +8,5 @@ export default function ReceptionTournamentBracketPage() {
     details: (id) => routes.tournamentDetails(id),
     participants: (id) => routes.tournamentParticipants(id),
   };
-  return <TournamentBracketSection routes={tournamentRoutes} readOnly />;
+  return <TournamentBracketSection routes={tournamentRoutes} receptionMode />;
 }
