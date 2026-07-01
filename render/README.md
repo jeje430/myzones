@@ -71,12 +71,17 @@ cd zones-backend-laravel
 php artisan key:generate --show
 ```
 
-### شهادة Aiven SSL على Render
+### شهادة Aiven SSL على Render (مجاني — بدون رفع ملف)
 
-1. Render → Service → **Secret Files**
-2. Mount path: `/var/www/html/storage/aiven-ca.pem`
-3. ارفع ملف `ca.pem` من Aiven
-4. `MYSQL_ATTR_SSL_CA=/var/www/html/storage/aiven-ca.pem`
+Render Free **ما يدعم** Secret Files (مدفوع). استخدم متغيّر نص:
+
+1. Aiven → **Connection information** → **CA certificate** → Copy أو Download `ca.pem`
+2. Render → **Environment** → **Add variable**
+3. **Key:** `AIVEN_CA_PEM`
+4. **Value:** الصق **كل** محتوى الملف (من `-----BEGIN CERTIFICATE-----` إلى `-----END CERTIFICATE-----`)
+5. **احذف** `MYSQL_ATTR_SSL_CA` إذا كان يشير لملف غير موجود
+
+الـ entrypoint يكتب الشهادة تلقائياً عند التشغيل.
 
 ---
 
